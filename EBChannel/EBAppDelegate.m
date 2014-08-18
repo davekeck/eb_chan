@@ -15,9 +15,7 @@
     eb_chan_op_t sendop = eb_chan_send(_chan, "hello");
     eb_chan_op_t *const ops[] = {&sendop};
     for (NSUInteger i = 0; i < NTRIALS; i++) {
-        @autoreleasepool {
-            assert(eb_chan_do(ops, 1));
-        }
+        assert(eb_chan_do(ops, 1));
     }
 }
 
@@ -27,9 +25,7 @@
     eb_chan_op_t recvop = eb_chan_recv(_chan);
     eb_chan_op_t *const ops[] = {&recvop};
     for (NSUInteger i = 0; i < NTRIALS; i++) {
-        @autoreleasepool {
-            assert(eb_chan_do(ops, 1));
-        }
+        assert(eb_chan_do(ops, 1));
     }
     
     NSLog(@"elapsed: %f", EBTimeElapsedSecondsSince(startTime));
