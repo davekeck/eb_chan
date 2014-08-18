@@ -3,32 +3,28 @@ package main
 import (
     "fmt"
     "time"
-    "os"
+//    "os"
 )
 
 const NTRIALS = 1000000
 
-func threadSend(c chan string) {
-    for i := 0; i < NTRIALS; i++ {
-        c <- "hello"
-    }
-}
-
-func threadRecv(c chan string) {
+func thread(c chan string) {
     start := time.Now()
     for i := 0; i < NTRIALS; i++ {
-        <-c
+        select {
+        case <-c:
+        case c<-"hello":
+        }
     }
     fmt.Printf("elapsed (%v): %f\n", NTRIALS, time.Since(start).Seconds())
-    os.Exit(0)
+    // os.Exit(0)
 }
 
 func main() {
-    
     c := make(chan string, 1)
     
-    go threadSend(c)
-    go threadRecv(c)
+    go thread(c)
+    go thread(c)
     
     time.Sleep(100 * time.Second)
     
