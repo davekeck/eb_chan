@@ -545,7 +545,7 @@ eb_chan_op_t *eb_chan_do(eb_chan_op_t *const ops[], size_t nops) {
     /* ## Fast path: loop randomly over our operations to see if one of them was able to send/receive.
        If not, we'll enter the slow path where we put our thread to sleep until we're signalled. */
     if (nops) {
-        static const size_t k_attempt_multiplier = 100000000;
+        static const size_t k_attempt_multiplier = 1000;
         for (size_t i = 0; i < k_attempt_multiplier * nops; i++) {
             result = try_op((uintptr_t)&result, port, false, ops[(random() % nops)]);
             /* If the op completed, we need to exit! */
