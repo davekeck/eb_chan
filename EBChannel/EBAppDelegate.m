@@ -1,29 +1,22 @@
 #import "EBAppDelegate.h"
 #import <EBFoundation/EBFoundation.h>
 #import "EBChannel.h"
+#import "eb_chan.h"
 
-#define NTRIALS 100000
+#define NTRIALS 1000000
 
 @implementation EBAppDelegate
 {
-    EBChannel *_chan;
+    eb_chan_t _chan;
 }
 
 - (void)threadSend
 {
-    EBChannelOp *send = [_chan send: @"hello"];
-    NSArray *ops = @[send];
+    eb_chan_op_t sendop = eb_chan_send(_chan, "hello");
+    eb_chan_op_t *const ops[] = {&sendop};
     for (NSUInteger i = 0; i < NTRIALS; i++) {
         @autoreleasepool {
-            assert([EBChannel do: ops]);
-//            
-//            if (r == read) {
-////                NSLog(@"read");
-//            } else if (r == write) {
-////                NSLog(@"write");
-//            } else {
-//                abort();
-//            }
+            assert(eb_chan_do(ops, 1));
         }
     }
 }
@@ -31,19 +24,11 @@
 - (void)threadRecv
 {
     EBTime startTime = EBTimeCurrentTime();
-    EBChannelOp *recv = [_chan recv];
-    NSArray *ops = @[recv];
+    eb_chan_op_t recvop = eb_chan_recv(_chan);
+    eb_chan_op_t *const ops[] = {&recvop};
     for (NSUInteger i = 0; i < NTRIALS; i++) {
         @autoreleasepool {
-            assert([EBChannel do: ops]);
-//            
-//            if (r == read) {
-////                NSLog(@"read");
-//            } else if (r == write) {
-////                NSLog(@"write");
-//            } else {
-//                abort();
-//            }
+            assert(eb_chan_do(ops, 1));
         }
     }
     
@@ -52,23 +37,11 @@
 
 - (void)applicationDidFinishLaunching: (NSNotification *)aNotification
 {
-    _chan = [[EBChannel alloc] initWithBufferSize: 0];
+    _chan = eb_chan_alloc(0);
     [NSTimer scheduledTimerWithTimeInterval: 1 repeats: NO block:^(NSTimer *timer) {
         [NSThread detachNewThreadSelector: @selector(threadSend) toTarget: self withObject: nil];
         [NSThread detachNewThreadSelector: @selector(threadRecv) toTarget: self withObject: nil];
     }];
-    
-    
-//    EBTime startTime = EBTimeCurrentTime();
-//    [EBChannel do: @[[_doneChan recv]]];
-//    NSLog(@"elapsed: %f", EBTimeElapsedSecondsSince(startTime));
-//    
-//    [NSThread detachNewThreadSelector: @selector(thread) toTarget: self withObject: nil];
-//    [NSThread detachNewThreadSelector: @selector(thread) toTarget: self withObject: nil];
-//    [NSThread detachNewThreadSelector: @selector(thread) toTarget: self withObject: nil];
-//    [NSThread detachNewThreadSelector: @selector(thread) toTarget: self withObject: nil];
-//    [NSThread detachNewThreadSelector: @selector(thread) toTarget: self withObject: nil];
-//    [NSThread detachNewThreadSelector: @selector(thread) toTarget: self withObject: nil];
 }
 
 @end

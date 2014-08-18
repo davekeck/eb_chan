@@ -12,10 +12,10 @@ typedef struct {
     eb_port_t *ports;
 } *eb_port_list_t;
 
-void port_list_free(eb_port_list_t l);
+static inline void port_list_free(eb_port_list_t l);
 
 /* Creates a new empty list */
-eb_port_list_t port_list_alloc(size_t cap) {
+static inline eb_port_list_t port_list_alloc(size_t cap) {
     assert(cap > 0);
     
     eb_port_list_t result = malloc(sizeof(*result));
@@ -35,7 +35,7 @@ eb_port_list_t port_list_alloc(size_t cap) {
 
 /* Creates a new list, and copies every port into the new list by retaining each one */
 // TODO: if profiling shows that this method is taking too long, we should copy the port_lists via the stack instead of the heap.
-eb_port_list_t port_list_copy(const eb_port_list_t l) {
+static inline eb_port_list_t port_list_copy(const eb_port_list_t l) {
     assert(l);
     
     eb_port_list_t r = port_list_alloc(l->cap);
@@ -50,7 +50,7 @@ eb_port_list_t port_list_copy(const eb_port_list_t l) {
 }
 
 /* Releases every port in the list, and frees the list itself */
-void port_list_free(eb_port_list_t l) {
+static inline void port_list_free(eb_port_list_t l) {
     /* Intentionally allowing l==NULL */
     if (!l) {
         return;
@@ -69,7 +69,7 @@ void port_list_free(eb_port_list_t l) {
 }
 
 /* Add a port to the end of the list, expanding the buffer as necessary */
-void port_list_add(eb_port_list_t l, const eb_port_t p) {
+static inline void port_list_add(eb_port_list_t l, const eb_port_t p) {
     assert(l);
     assert(p);
     /* Sanity-check that the list's length is less than its capacity */
@@ -88,7 +88,7 @@ void port_list_add(eb_port_list_t l, const eb_port_t p) {
 }
 
 /* Remove the first occurence of 'p' in the list. Returns whether a port was actually removed. */
-bool port_list_rm(eb_port_list_t l, eb_port_t p) {
+static inline bool port_list_rm(eb_port_list_t l, eb_port_t p) {
     assert(l);
     assert(p);
     /* Sanity-check that the list's length is less than its capacity */
@@ -110,7 +110,7 @@ bool port_list_rm(eb_port_list_t l, eb_port_t p) {
 }
 
 /* Signal every port in the list */
-void port_list_signal(const eb_port_list_t l, const eb_port_t ignore) {
+static inline void port_list_signal(const eb_port_list_t l, const eb_port_t ignore) {
     assert(l);
     for (size_t i = 0; i < l->len; i++) {
         if (l->ports[i] != ignore) {
@@ -120,7 +120,7 @@ void port_list_signal(const eb_port_list_t l, const eb_port_t ignore) {
 }
 
 /* Return whether the list is empty, ignoring the existence of a specified port */
-bool port_list_empty(const eb_port_list_t l, const eb_port_t ignore) {
+static inline bool port_list_empty(const eb_port_list_t l, const eb_port_t ignore) {
     assert(l);
     for (size_t i = 0; i < l->len; i++) {
         if (l->ports[i] != ignore) {
@@ -608,6 +608,11 @@ eb_chan_op_t *eb_chan_do(eb_chan_op_t *const ops[], size_t nops) {
     cleanup: {
         for (size_t i = 0; i < nops; i++) {
             cleanup_after_op(port, ops[i]);
+        }
+        
+        if (port) {
+            eb_port_release(port);
+            port = NULL;
         }
     }
     
