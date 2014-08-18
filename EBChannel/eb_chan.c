@@ -304,7 +304,6 @@ static inline bool send_buf(eb_port_t port, bool reg_port, const eb_chan_op_t *o
     
     /* Signal every port in wakeup_ports */
     if (wakeup_ports) {
-        // TODO: should we exclude 'port' here?
         port_list_signal(wakeup_ports, port);
         port_list_stack_free(wakeup_ports);
         wakeup_ports = NULL;
@@ -346,7 +345,6 @@ static inline bool send_unbuf(eb_port_t port, bool reg_port, const eb_chan_op_t 
     
     /* Signal every port in wakeup_ports */
     if (wakeup_ports) {
-        // TODO: should we exclude 'port' here?
         port_list_signal(wakeup_ports, port);
         port_list_stack_free(wakeup_ports);
         wakeup_ports = NULL;
@@ -372,6 +370,7 @@ static inline bool recv_buf(eb_port_t port, bool reg_port, eb_chan_op_t *op) {
             /* Update chan's buffer */
             chan->buf_len--;
             memmove(&chan->buf[0], &chan->buf[1], chan->buf_len * sizeof(*(chan->buf)));
+            // TODO: can we get away with only notifying if our buffer went from full to non-full? would save some system calls...
             /* Copy the channel's sends so that we can signal them after we relinquish the lock, to notify
                them that we've removed from the buffer. */
             wakeup_ports = port_list_stack_copy(chan->sends);
@@ -394,7 +393,6 @@ static inline bool recv_buf(eb_port_t port, bool reg_port, eb_chan_op_t *op) {
     
     /* Signal every port in wakeup_ports */
     if (wakeup_ports) {
-        // TODO: should we exclude 'port' here?
         port_list_signal(wakeup_ports, port);
         port_list_stack_free(wakeup_ports);
         wakeup_ports = NULL;
@@ -417,8 +415,6 @@ static inline bool recv_unbuf(eb_port_t port, bool reg_port, eb_chan_op_t *op) {
             /* ## Receiving, unbuffered, value is available */
             /* Set our channel's state signifying that we received a value */
             chan->unbuf_state = unbuf_state_recv;
-            /* Set our op's value */
-            op->val = chan->unbuf_send_op->val;
             /* Copy the channel's sends so that we can signal them after we relinquish the lock, to notify
                them that there's a receiver. */
             wakeup_ports = port_list_stack_copy(chan->sends);
@@ -434,7 +430,6 @@ static inline bool recv_unbuf(eb_port_t port, bool reg_port, eb_chan_op_t *op) {
     
     /* Signal every port in wakeup_ports */
     if (wakeup_ports) {
-        // TODO: should we exclude 'port' here?
         port_list_signal(wakeup_ports, port);
         port_list_stack_free(wakeup_ports);
         wakeup_ports = NULL;
@@ -452,7 +447,14 @@ static inline bool recv_unbuf(eb_port_t port, bool reg_port, eb_chan_op_t *op) {
                 OSSpinLockLock(&chan->lock);
                     if (chan->unbuf_state == unbuf_state_done || chan->unbuf_state == unbuf_state_canceled) {
                         done = true;
-                        result = (chan->unbuf_state == unbuf_state_done);
+                        if (chan->unbuf_state == unbuf_state_done) {
+                            /* We successfully received a value, so set our op's state signifying as such. */
+                            op->open = true;
+                            op->val = chan->unbuf_send_op->val;
+                            /* Set our flag signifying that we completed this op */
+                            result = true;
+                        }
+                        /* Reset our channel's unbuf_state so others can send again. */
                         chan->unbuf_state = unbuf_state_idle;
                         /* Copy the channel's sends so we can wake them up (after we relinquish the lock), so that one of them can send. */
                         wakeup_ports = port_list_stack_copy(chan->sends);
@@ -464,7 +466,6 @@ static inline bool recv_unbuf(eb_port_t port, bool reg_port, eb_chan_op_t *op) {
     
     /* Signal every port in wakeup_ports */
     if (wakeup_ports) {
-        // TODO: should we exclude 'port' here?
         port_list_signal(wakeup_ports, port);
         port_list_stack_free(wakeup_ports);
         wakeup_ports = NULL;
@@ -508,7 +509,6 @@ static inline void cleanup_after_op(eb_port_t port, eb_chan_op_t *op) {
     
     /* Signal every port in wakeup_ports */
     if (wakeup_ports) {
-        // TODO: should we exclude 'port' here?
         port_list_signal(wakeup_ports, port);
         port_list_stack_free(wakeup_ports);
         wakeup_ports = NULL;
@@ -577,7 +577,6 @@ eb_chan_op_t *eb_chan_do(eb_chan_op_t *const ops[], size_t nops) {
         
         // TODO: randomize iteration!
         for (size_t i = 0; i < nops; i++) {
-            // TODO: we still want to supply port here so that we don't notify our own port, right? we still want to prevent adding that port to channels' sets though.
             result = try_op(port, false, ops[i]);
             /* If the op completed, we need to exit! */
             if (result) {
