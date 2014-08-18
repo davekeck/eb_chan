@@ -119,17 +119,6 @@ static inline void port_list_signal(const eb_port_list_t l, const eb_port_t igno
     }
 }
 
-///* Return whether the list is empty, ignoring the existence of a specified port */
-//static inline bool port_list_empty(const eb_port_list_t l, const eb_port_t ignore) {
-//    assert(l);
-//    for (size_t i = 0; i < l->len; i++) {
-//        if (l->ports[i] != ignore) {
-//            return false;
-//        }
-//    }
-//    return true;
-//}
-
 enum {
     unbuf_state_idle,
     unbuf_state_send,
@@ -351,56 +340,6 @@ static inline bool send_unbuf(eb_port_t port, const eb_chan_op_t *op) {
         port_list_free(wakeup_ports);
         wakeup_ports = NULL;
     }
-    
-    return result;
-    
-    
-    
-//    /* If we're actually sending a value, wait until a receiver notifies the channel's _unbufPort */
-//    bool result = false;
-//    if (sending) {
-//        bool doneSending = false;
-//        while (!doneSending) {
-//            /* Wait until a receiver signals us. */
-//            eb_port_wait(chan->unbuf_port);
-//            
-//            /* When we're signaled, it's either because a receiver has received the value, or the channel's recvs
-//               changed so we need to make sure that we should still be blocking and trying to send. */
-//            OSSpinLockLock(&chan->lock);
-//                eb_assert_or_bail(chan->open, "Can't send on closed channel.");
-//                bool recv = chan->unbuf_recv;
-//                bool has_recvs = !port_list_empty(chan->recvs, port);
-//                if (recv || !has_recvs) {
-//                    /* Someone received our value, or there are no more receivers */
-//                    if (recv) {
-//                        /* We completed an op so set our result, which will cause us to exit from our outer loop. */
-//                        result = true;
-//                    } else if (!has_recvs) {
-//                        if (port) {
-//                            /* No receiver got our value and now there are no more receivers, so add our port to the
-//                               channel's sends, so that we get notified when a receiver arrives. */
-//                            port_list_add(chan->sends, port);
-//                        }
-//                    }
-//                    
-//                    /* Reset our channel's unbuf_send so others can send */
-//                    chan->unbuf_send = false;
-//                    /* Copy the channel's sends so we can wake them up (after we relinquish the lock), so that one of them can send. */
-//                    wakeup_ports = port_list_copy(chan->sends);
-//                    /* Set our flag so that we exit our inner loop that's waiting for someone to receive our value */
-//                    doneSending = true;
-//                }
-//            OSSpinLockUnlock(&chan->lock);
-//        }
-//    }
-//    
-//    /* Signal every port in wakeup_ports */
-//    if (wakeup_ports) {
-//        // TODO: should we exclude 'port' here?
-//        port_list_signal(wakeup_ports, port);
-//        port_list_free(wakeup_ports);
-//        wakeup_ports = NULL;
-//    }
     
     return result;
 }
