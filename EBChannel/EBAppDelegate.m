@@ -31,12 +31,12 @@ const char *const mystr = "hello";
     }
     
     NSLog(@"elapsed: %f (%ju iterations)", EBTimeElapsedSecondsSince(startTime), (uintmax_t)NTRIALS);
-    alarm(1);
+    exit(0);
 }
 
 - (void)applicationDidFinishLaunching: (NSNotification *)aNotification
 {
-    _chan = eb_chan_alloc(0);
+    _chan = eb_chan_alloc(1);
     [NSTimer scheduledTimerWithTimeInterval: 1 repeats: NO block:^(NSTimer *timer) {
         [NSThread detachNewThreadSelector: @selector(threadSend) toTarget: self withObject: nil];
         [NSThread detachNewThreadSelector: @selector(threadRecv) toTarget: self withObject: nil];
