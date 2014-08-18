@@ -35,18 +35,28 @@ static inline eb_port_list_t port_list_alloc(size_t cap) {
 
 /* Creates a new list, and copies every port into the new list by retaining each one */
 // TODO: if profiling shows that this method is taking too long, we should copy the port_lists via the stack instead of the heap.
-static inline eb_port_list_t port_list_copy(const eb_port_list_t l) {
+#define port_list_stack_copy(l) ({                        \
+    assert(l);                                            \
+                                                          \
+    eb_port_list_t r = alloca(sizeof(*(r)));              \
+    r->cap = l->len;                                      \
+    r->len = l->len;                                      \
+    r->ports = alloca(r->len * sizeof(*(r->ports)));      \
+                                                          \
+    for (size_t i = 0; i < r->len; i++) {                 \
+        r->ports[i] = eb_port_retain(l->ports[i]);        \
+    }                                                     \
+                                                          \
+    r;                                                    \
+})
+
+static inline void port_list_stack_free(eb_port_list_t l) {
     assert(l);
-    
-    eb_port_list_t r = port_list_alloc(l->cap);
-        eb_assert_or_recover(r, return NULL);
-    
-    r->len = l->len;
-    for (size_t i = 0; i < r->len; i++) {
-        r->ports[i] = eb_port_retain(l->ports[i]);
+    /* Release each port in our list */
+    for (size_t i = 0; i < l->len; i++) {
+        eb_port_release(l->ports[i]);
     }
-    
-    return r;
+    l->ports = NULL;
 }
 
 /* Releases every port in the list, and frees the list itself */
@@ -220,17 +230,17 @@ void eb_chan_close(eb_chan_t c) {
     OSSpinLockLock(&c->lock);
         eb_assert_or_bail(c->open, "Can't close a channel that's already closed.");
         c->open = false;
-        sends = port_list_copy(c->sends);
-        recvs = port_list_copy(c->recvs);
+        sends = port_list_stack_copy(c->sends);
+        recvs = port_list_stack_copy(c->recvs);
     OSSpinLockUnlock(&c->lock);
     
     /* Wake up our senders/receivers so they notice our new closed state. */
     port_list_signal(sends, NULL);
-    port_list_free(sends);
+    port_list_stack_free(sends);
     sends = NULL;
     
     port_list_signal(recvs, NULL);
-    port_list_free(recvs);
+    port_list_stack_free(recvs);
     recvs = NULL;
 }
 
@@ -281,7 +291,7 @@ static inline bool send_buf(eb_port_t port, const eb_chan_op_t *op) {
             chan->buf_len++;
             /* Copy the channel's recvs so that we can signal them after we relinquish the lock, to notify
                them that we've added to the buffer. */
-            wakeup_ports = port_list_copy(chan->recvs);
+            wakeup_ports = port_list_stack_copy(chan->recvs);
             /* Set our flag signifying that we completed this op. */
             result = true;
         }
@@ -296,7 +306,7 @@ static inline bool send_buf(eb_port_t port, const eb_chan_op_t *op) {
     if (wakeup_ports) {
         // TODO: should we exclude 'port' here?
         port_list_signal(wakeup_ports, port);
-        port_list_free(wakeup_ports);
+        port_list_stack_free(wakeup_ports);
         wakeup_ports = NULL;
     }
     
@@ -319,7 +329,7 @@ static inline bool send_unbuf(eb_port_t port, const eb_chan_op_t *op) {
             chan->unbuf_send_op = op;
             /* Copy the channel's recvs so that we can signal them after we relinquish the lock, to notify
                them that there's a sender. */
-            wakeup_ports = port_list_copy(chan->recvs);
+            wakeup_ports = port_list_stack_copy(chan->recvs);
         } else if (chan->unbuf_state == unbuf_state_recv && chan->unbuf_send_op == op) {
             /* ## Sending, unbuffered, channel open, receiver is awaiting acknowledgment via unbuf_state==_done. */
             /* A receiver is currently polling for chan's unbuf_state to change, so update it to signal that we're done sending! */
@@ -337,7 +347,7 @@ static inline bool send_unbuf(eb_port_t port, const eb_chan_op_t *op) {
     if (wakeup_ports) {
         // TODO: should we exclude 'port' here?
         port_list_signal(wakeup_ports, port);
-        port_list_free(wakeup_ports);
+        port_list_stack_free(wakeup_ports);
         wakeup_ports = NULL;
     }
     
@@ -362,7 +372,7 @@ static inline bool recv_buf(eb_port_t port, eb_chan_op_t *op) {
             memmove(&chan->buf[0], &chan->buf[1], chan->buf_len * sizeof(*(chan->buf)));
             /* Copy the channel's sends so that we can signal them after we relinquish the lock, to notify
                them that we've removed from the buffer. */
-            wakeup_ports = port_list_copy(chan->sends);
+            wakeup_ports = port_list_stack_copy(chan->sends);
             /* Set our flag signifying that we completed this op. */
             result = true;
         } else if (!chan->open) {
@@ -384,7 +394,7 @@ static inline bool recv_buf(eb_port_t port, eb_chan_op_t *op) {
     if (wakeup_ports) {
         // TODO: should we exclude 'port' here?
         port_list_signal(wakeup_ports, port);
-        port_list_free(wakeup_ports);
+        port_list_stack_free(wakeup_ports);
         wakeup_ports = NULL;
     }
     
@@ -408,7 +418,7 @@ static inline bool recv_unbuf(eb_port_t port, eb_chan_op_t *op) {
             op->val = chan->unbuf_send_op->val;
             /* Copy the channel's sends so that we can signal them after we relinquish the lock, to notify
                them that there's a receiver. */
-            wakeup_ports = port_list_copy(chan->sends);
+            wakeup_ports = port_list_stack_copy(chan->sends);
             /* Set our flag so that we know to poll for a state change after exiting this block. */
             recv = true;
         }
@@ -423,7 +433,7 @@ static inline bool recv_unbuf(eb_port_t port, eb_chan_op_t *op) {
     if (wakeup_ports) {
         // TODO: should we exclude 'port' here?
         port_list_signal(wakeup_ports, port);
-        port_list_free(wakeup_ports);
+        port_list_stack_free(wakeup_ports);
         wakeup_ports = NULL;
     }
     
@@ -438,7 +448,7 @@ static inline bool recv_unbuf(eb_port_t port, eb_chan_op_t *op) {
                     result = (chan->unbuf_state == unbuf_state_done);
                     chan->unbuf_state = unbuf_state_idle;
                     /* Copy the channel's sends so we can wake them up (after we relinquish the lock), so that one of them can send. */
-                    wakeup_ports = port_list_copy(chan->sends);
+                    wakeup_ports = port_list_stack_copy(chan->sends);
                 }
             OSSpinLockUnlock(&chan->lock);
         }
@@ -448,7 +458,7 @@ static inline bool recv_unbuf(eb_port_t port, eb_chan_op_t *op) {
     if (wakeup_ports) {
         // TODO: should we exclude 'port' here?
         port_list_signal(wakeup_ports, port);
-        port_list_free(wakeup_ports);
+        port_list_stack_free(wakeup_ports);
         wakeup_ports = NULL;
     }
     
@@ -473,7 +483,7 @@ static inline void cleanup_after_op(eb_port_t port, eb_chan_op_t *op) {
                        yet, so reset unbuf_state to _idle. */
                     chan->unbuf_state = unbuf_state_idle;
                     /* Copy the channel's sends so we can wake them up (after we relinquish the lock), so that one of them can send. */
-                    wakeup_ports = port_list_copy(chan->sends);
+                    wakeup_ports = port_list_stack_copy(chan->sends);
                 } else if (chan->unbuf_state == unbuf_state_recv && chan->unbuf_send_op == op) {
                     /* 'op' was in the process of an unbuffered send on the channel, and a receiver is waiting on
                        the send, so set unbuf_state to _canceled so that the receiver notices and stops waiting
@@ -492,7 +502,7 @@ static inline void cleanup_after_op(eb_port_t port, eb_chan_op_t *op) {
     if (wakeup_ports) {
         // TODO: should we exclude 'port' here?
         port_list_signal(wakeup_ports, port);
-        port_list_free(wakeup_ports);
+        port_list_stack_free(wakeup_ports);
         wakeup_ports = NULL;
     }
 }
@@ -525,7 +535,8 @@ eb_chan_op_t *eb_chan_do(eb_chan_op_t *const ops[], size_t nops) {
        If not, we'll enter the slow path where we put our thread to sleep until we're signalled. */
     if (nops) {
         static const size_t k_attempt_multiplier = 500;
-        for (size_t i = 0; i < k_attempt_multiplier * nops; i++) {
+        for (;;) {
+//        for (size_t i = 0; i < k_attempt_multiplier * nops; i++) {
             result = try_op(NULL, ops[(random() % nops)]);
             /* If the op completed, we need to exit! */
             if (result) {

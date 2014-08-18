@@ -3,7 +3,9 @@
 #import "EBChannel.h"
 #import "eb_chan.h"
 
-#define NTRIALS 1000000
+#define NTRIALS 100000
+
+const char *const mystr = "hello";
 
 @implementation EBAppDelegate
 {
@@ -12,7 +14,7 @@
 
 - (void)threadSend
 {
-    eb_chan_op_t sendop = eb_chan_send(_chan, "hello");
+    eb_chan_op_t sendop = eb_chan_send(_chan, mystr);
     eb_chan_op_t *const ops[] = {&sendop};
     for (NSUInteger i = 0; i < NTRIALS; i++) {
         assert(eb_chan_do(ops, 1));
@@ -25,10 +27,13 @@
     eb_chan_op_t recvop = eb_chan_recv(_chan);
     eb_chan_op_t *const ops[] = {&recvop};
     for (NSUInteger i = 0; i < NTRIALS; i++) {
-        assert(eb_chan_do(ops, 1));
+        recvop.val = 0;
+        assert(eb_chan_do(ops, 1) == &recvop);
+        assert(recvop.val == mystr);
     }
     
-    NSLog(@"elapsed: %f", EBTimeElapsedSecondsSince(startTime));
+    NSLog(@"elapsed: %f (%ju iterations)", EBTimeElapsedSecondsSince(startTime), (uintmax_t)NTRIALS);
+    exit(0);
 }
 
 - (void)applicationDidFinishLaunching: (NSNotification *)aNotification
