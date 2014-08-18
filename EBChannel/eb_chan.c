@@ -33,7 +33,7 @@ static inline eb_port_list_t port_list_alloc(size_t cap) {
     }
 }
 
-/* Creates a new list on the stack, and copies every port into the new list by retaining each one */
+/* Creates a new list on the stack by copying every port into the new list, and retaining each port in the process */
 #define port_list_stack_copy(l) ({                        \
     assert(l);                                            \
                                                           \
@@ -289,9 +289,12 @@ static inline bool send_buf(eb_port_t port, bool reg_port, const eb_chan_op_t *o
             /* Add the value to the buffer */
             chan->buf[chan->buf_len] = op->val;
             chan->buf_len++;
-            /* Copy the channel's recvs so that we can signal them after we relinquish the lock, to notify
-               them that we've added to the buffer. */
-            wakeup_ports = port_list_stack_copy(chan->recvs);
+            /* Notify the channel's recvs if our buffer went from empty to non-empty */
+            if (chan->buf_len == 1) {
+                /* Copy the channel's recvs so that we can signal them after we relinquish the lock, to notify
+                   them that we've added to the buffer. */
+                wakeup_ports = port_list_stack_copy(chan->recvs);
+            }
             /* Set our flag signifying that we completed this op. */
             result = true;
         }
@@ -370,10 +373,12 @@ static inline bool recv_buf(eb_port_t port, bool reg_port, eb_chan_op_t *op) {
             /* Update chan's buffer */
             chan->buf_len--;
             memmove(&chan->buf[0], &chan->buf[1], chan->buf_len * sizeof(*(chan->buf)));
-            // TODO: can we get away with only notifying if our buffer went from full to non-full? would save some system calls...
-            /* Copy the channel's sends so that we can signal them after we relinquish the lock, to notify
-               them that we've removed from the buffer. */
-            wakeup_ports = port_list_stack_copy(chan->sends);
+            /* Notify the channel's sends if our buffer went from full to not-full */
+            if (chan->buf_len == chan->buf_cap-1) {
+                /* Copy the channel's sends so that we can signal them after we relinquish the lock, to notify
+                   them that we've removed from the buffer. */
+                wakeup_ports = port_list_stack_copy(chan->sends);
+            }
             /* Set our flag signifying that we completed this op. */
             result = true;
         } else if (!chan->open) {
@@ -543,7 +548,7 @@ eb_chan_op_t *eb_chan_do(eb_chan_op_t *const ops[], size_t nops) {
     /* ## Fast path: loop randomly over our operations to see if one of them was able to send/receive.
        If not, we'll enter the slow path where we put our thread to sleep until we're signalled. */
     if (nops) {
-        static const size_t k_attempt_multiplier = 500;
+        static const size_t k_attempt_multiplier = 1000;
         for (size_t i = 0; i < k_attempt_multiplier * nops; i++) {
             result = try_op(port, false, ops[(random() % nops)]);
             /* If the op completed, we need to exit! */
