@@ -3,7 +3,7 @@
 #import "EBChannel.h"
 #import "eb_chan.h"
 
-#define NTRIALS 100000
+#define NTRIALS 1000000
 
 const char *const mystr = "hello";
 
@@ -27,13 +27,11 @@ const char *const mystr = "hello";
     eb_chan_op_t recvop = eb_chan_recv(_chan);
     eb_chan_op_t *const ops[] = {&recvop};
     for (NSUInteger i = 0; i < NTRIALS; i++) {
-        recvop.val = 0;
         assert(eb_chan_do(ops, 1) == &recvop);
-        assert(recvop.val == mystr);
     }
     
     NSLog(@"elapsed: %f (%ju iterations)", EBTimeElapsedSecondsSince(startTime), (uintmax_t)NTRIALS);
-    exit(0);
+    alarm(1);
 }
 
 - (void)applicationDidFinishLaunching: (NSNotification *)aNotification

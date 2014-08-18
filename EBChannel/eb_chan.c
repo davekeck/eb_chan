@@ -33,8 +33,7 @@ static inline eb_port_list_t port_list_alloc(size_t cap) {
     }
 }
 
-/* Creates a new list, and copies every port into the new list by retaining each one */
-// TODO: if profiling shows that this method is taking too long, we should copy the port_lists via the stack instead of the heap.
+/* Creates a new list on the stack, and copies every port into the new list by retaining each one */
 #define port_list_stack_copy(l) ({                        \
     assert(l);                                            \
                                                           \
@@ -442,15 +441,20 @@ static inline bool recv_unbuf(eb_port_t port, eb_chan_op_t *op) {
     if (recv) {
         bool done = false;
         while (!done) {
-            OSSpinLockLock(&chan->lock);
-                if (chan->unbuf_state == unbuf_state_done || chan->unbuf_state == unbuf_state_canceled) {
-                    done = true;
-                    result = (chan->unbuf_state == unbuf_state_done);
-                    chan->unbuf_state = unbuf_state_idle;
-                    /* Copy the channel's sends so we can wake them up (after we relinquish the lock), so that one of them can send. */
-                    wakeup_ports = port_list_stack_copy(chan->sends);
-                }
-            OSSpinLockUnlock(&chan->lock);
+            unbuf_state_t state = chan->unbuf_state;
+            /* Don't acquire the lock until it looks like the state is what we're looking for, otherwise we'll compete
+               with the sending thread, which can really slow us down. */
+            if (state == unbuf_state_done || state == unbuf_state_canceled) {
+                OSSpinLockLock(&chan->lock);
+                    if (chan->unbuf_state == unbuf_state_done || chan->unbuf_state == unbuf_state_canceled) {
+                        done = true;
+                        result = (chan->unbuf_state == unbuf_state_done);
+                        chan->unbuf_state = unbuf_state_idle;
+                        /* Copy the channel's sends so we can wake them up (after we relinquish the lock), so that one of them can send. */
+                        wakeup_ports = port_list_stack_copy(chan->sends);
+                    }
+                OSSpinLockUnlock(&chan->lock);
+            }
         }
     }
     
@@ -535,8 +539,7 @@ eb_chan_op_t *eb_chan_do(eb_chan_op_t *const ops[], size_t nops) {
        If not, we'll enter the slow path where we put our thread to sleep until we're signalled. */
     if (nops) {
         static const size_t k_attempt_multiplier = 500;
-        for (;;) {
-//        for (size_t i = 0; i < k_attempt_multiplier * nops; i++) {
+        for (size_t i = 0; i < k_attempt_multiplier * nops; i++) {
             result = try_op(NULL, ops[(random() % nops)]);
             /* If the op completed, we need to exit! */
             if (result) {
