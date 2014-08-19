@@ -116,9 +116,8 @@ static inline bool port_list_rm(eb_port_list_t l, eb_port_t p) {
         if (l->ports[i] == p) {
             /* Release the port */
             eb_port_release(l->ports[i]);
-            /* Shift the subsequent ports up one spot */
-            // TODO: is it possible not to do memmove?
-            memmove(&l->ports[i], &l->ports[i+1], (l->len - i - 1) * sizeof(*(l->ports)));
+            /* Move the last element in the port list into the now-vacant spot */
+            l->ports[i] = l->ports[l->len-1];
             /* Decrement the buffer length */
             l->len--;
             return true;
