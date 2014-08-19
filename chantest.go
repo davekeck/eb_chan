@@ -3,30 +3,49 @@ package main
 import (
     "fmt"
     "time"
-//    "os"
+    "os"
 )
 
 const NTRIALS = 1000000
 
-func thread(c chan string) {
-    start := time.Now()
+// func thread(c chan string) {
+//     start := time.Now()
+//     for i := 0; i < NTRIALS; i++ {
+//         select {
+//         case <-c:
+//         case c<-"hello":
+//         }
+//     }
+//     fmt.Printf("elapsed (%v): %f\n", NTRIALS, time.Since(start).Seconds())
+//     // os.Exit(0)
+// }
+
+func threadSend(c chan string) {
     for i := 0; i < NTRIALS; i++ {
-        select {
-        case <-c:
-        case c<-"hello":
-        }
+        c<-"hello"
+    }
+}
+
+func threadRecv(c chan string) {
+    <-c
+    start := time.Now()
+    for i := 1; i < NTRIALS; i++ {
+        <-c
     }
     fmt.Printf("elapsed (%v): %f\n", NTRIALS, time.Since(start).Seconds())
-    // os.Exit(0)
+    os.Exit(0)
 }
 
 func main() {
     c := make(chan string, 0)
     
-    go thread(c)
-    go thread(c)
+    // go thread(c)
+    // go thread(c)
     
-    time.Sleep(100 * time.Second)
+    go threadSend(c)
+    go threadRecv(c)
+    
+    time.Sleep(2 * time.Second)
     
     // a := make(chan string, 1)
     //

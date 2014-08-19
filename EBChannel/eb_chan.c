@@ -12,6 +12,14 @@ typedef struct {
     eb_port_t *ports;
 } *eb_port_list_t;
 
+#define OSSpinLockLock(l) ({                                \
+    while (!OSAtomicCompareAndSwap32(false, true, l));      \
+})
+
+#define OSSpinLockUnlock(l) ({                                  \
+    assert(OSAtomicCompareAndSwap32Barrier(true, false, l));    \
+})
+
 static inline void port_list_free(eb_port_list_t l);
 
 /* Creates a new empty list */
@@ -138,7 +146,7 @@ enum {
 }; typedef uint8_t unbuf_state_t;
 
 struct eb_chan {
-    OSSpinLock lock;
+    int32_t lock;
     bool open;
     size_t buf_cap;
     
@@ -276,6 +284,7 @@ static inline bool send_buf(uintptr_t id, const eb_chan_op_t *op, eb_port_t port
     eb_chan_t chan = op->chan;
     eb_port_list_t wakeup_ports = NULL;
     bool result = false;
+    
     OSSpinLockLock(&chan->lock);
         eb_assert_or_bail(chan->open, "Can't send on closed channel.");
         if (chan->buf_len < chan->buf_cap) {
@@ -479,36 +488,39 @@ static inline bool recv_unbuf(uintptr_t id, eb_chan_op_t *op, eb_port_t port, bo
 
 static inline void cleanup_after_op(eb_port_t port, eb_chan_op_t *op) {
         assert(op);
-    
     eb_chan_t chan = op->chan;
     eb_port_list_t wakeup_ports = NULL;
-    OSSpinLockLock(&chan->lock);
-        if (op->send) {
-            if (port) {
-                port_list_rm(chan->sends, port);
-            }
-            
-            if (!chan->buf_cap) {
-                /* ## Unbuffered channel */
-                if (chan->unbuf_state == unbuf_state_send && chan->unbuf_send_op == op) {
-                    /* 'op' was in the process of an unbuffered send on the channel, but no receiver had arrived
-                       yet, so reset unbuf_state to _idle. */
-                    chan->unbuf_state = unbuf_state_idle;
-                    /* Copy the channel's sends so we can wake them up (after we relinquish the lock), so that one of them can send. */
-                    wakeup_ports = port_list_stack_copy(chan->sends);
-                } else if (chan->unbuf_state == unbuf_state_recv && chan->unbuf_send_op == op) {
-                    /* 'op' was in the process of an unbuffered send on the channel, and a receiver is waiting on
-                       the send, so set unbuf_state to _canceled so that the receiver notices and stops waiting
-                       on the sender. */
-                    chan->unbuf_state = unbuf_state_canceled;
+    if (op->send) {
+        if (port || !chan->buf_cap) {
+            OSSpinLockLock(&chan->lock);
+                if (port) {
+                    port_list_rm(chan->sends, port);
                 }
-            }
-        } else {
-            if (port) {
-                port_list_rm(chan->recvs, port);
-            }
+                
+                if (!chan->buf_cap) {
+                    /* ## Unbuffered channel */
+                    if (chan->unbuf_state == unbuf_state_send && chan->unbuf_send_op == op) {
+                        /* 'op' was in the process of an unbuffered send on the channel, but no receiver had arrived
+                           yet, so reset unbuf_state to _idle. */
+                        chan->unbuf_state = unbuf_state_idle;
+                        /* Copy the channel's sends so we can wake them up (after we relinquish the lock), so that one of them can send. */
+                        wakeup_ports = port_list_stack_copy(chan->sends);
+                    } else if (chan->unbuf_state == unbuf_state_recv && chan->unbuf_send_op == op) {
+                        /* 'op' was in the process of an unbuffered send on the channel, and a receiver is waiting on
+                           the send, so set unbuf_state to _canceled so that the receiver notices and stops waiting
+                           on the sender. */
+                        chan->unbuf_state = unbuf_state_canceled;
+                    }
+                }
+            OSSpinLockUnlock(&chan->lock);
         }
-    OSSpinLockUnlock(&chan->lock);
+    } else {
+        if (port) {
+            OSSpinLockLock(&chan->lock);
+                port_list_rm(chan->recvs, port);
+            OSSpinLockUnlock(&chan->lock);
+        }
+    }
     
     /* Signal every port in wakeup_ports */
     if (wakeup_ports) {
@@ -518,7 +530,7 @@ static inline void cleanup_after_op(eb_port_t port, eb_chan_op_t *op) {
     }
 }
 
-static inline eb_chan_op_t *try_op(uintptr_t id, eb_port_t port, bool reg_port, eb_chan_op_t *op) {
+static inline eb_chan_op_t *try_op(uintptr_t id, eb_chan_op_t *op, eb_port_t port, bool reg_port) {
         assert(!reg_port || port);
         assert(op);
     eb_chan_t chan = op->chan;
@@ -539,18 +551,17 @@ static inline eb_chan_op_t *try_op(uintptr_t id, eb_port_t port, bool reg_port, 
 }
 
 eb_chan_op_t *eb_chan_do(eb_chan_op_t *const ops[], size_t nops) {
-    assert(ops);
-    
+        assert(ops);
     eb_port_t port = NULL;
     eb_chan_op_t *result = NULL;
     /* ## Fast path: loop randomly over our operations to see if one of them was able to send/receive.
        If not, we'll enter the slow path where we put our thread to sleep until we're signalled. */
     if (nops) {
-        static const size_t k_attempt_multiplier = 100;
+        static const size_t k_attempt_multiplier = 500;
         for (size_t i = 0; i < k_attempt_multiplier * nops; i++) {
             // TODO: not using random() here speeds this up a lot, so we should generate random bits more efficiently
-            result = try_op((uintptr_t)&result, port, false, ops[(random() % nops)]);
-//            result = try_op((uintptr_t)&result, port, false, ops[(i % nops)]);
+//            result = try_op((uintptr_t)&result, port, false, ops[(random() % nops)]);
+            result = try_op((uintptr_t)&result, ops[(i % nops)], port, false);
             /* If the op completed, we need to exit! */
             if (result) {
                 goto cleanup;
@@ -569,7 +580,7 @@ eb_chan_op_t *eb_chan_do(eb_chan_op_t *const ops[], size_t nops) {
        up at the end of this function via cleanup_after_op(). */
     // TODO: randomize iteration!
     for (size_t i = 0; i < nops; i++) {
-        result = try_op((uintptr_t)&result, port, true, ops[i]);
+        result = try_op((uintptr_t)&result, ops[i], port, true);
         /* If this op completed, we need to exit! */
         if (result) {
             goto cleanup;
@@ -582,7 +593,7 @@ eb_chan_op_t *eb_chan_do(eb_chan_op_t *const ops[], size_t nops) {
         
         // TODO: randomize iteration!
         for (size_t i = 0; i < nops; i++) {
-            result = try_op((uintptr_t)&result, port, false, ops[i]);
+            result = try_op((uintptr_t)&result, ops[i], port, false);
             /* If the op completed, we need to exit! */
             if (result) {
                 goto cleanup;
@@ -608,7 +619,7 @@ eb_chan_op_t *eb_chan_try(eb_chan_op_t *const ops[], size_t nops) {
     // TODO: randomize iteration!
     eb_chan_op_t *result = NULL;
     for (size_t i = 0; i < nops; i++) {
-        result = try_op((uintptr_t)&result, NULL, false, ops[i]);
+        result = try_op((uintptr_t)&result, ops[i], NULL, false);
         /* If this op completed, we need to exit! */
         if (result) {
             break;
