@@ -488,9 +488,9 @@ static inline bool recv_unbuf(uintptr_t id, eb_chan_op_t *op, eb_port_t port, bo
 static inline void cleanup_after_op(eb_port_t port, eb_chan_op_t *op) {
         assert(op);
     eb_chan_t chan = op->chan;
-    eb_port_list_t wakeup_ports = NULL;
     if (op->send) {
         if (port || !chan->buf_cap) {
+            eb_port_list_t wakeup_ports = NULL;
             OSSpinLockLock(&chan->lock);
                 if (port) {
                     port_list_rm(chan->sends, port);
@@ -512,6 +512,13 @@ static inline void cleanup_after_op(eb_port_t port, eb_chan_op_t *op) {
                     }
                 }
             OSSpinLockUnlock(&chan->lock);
+            
+            /* Signal every port in wakeup_ports */
+            if (wakeup_ports) {
+                port_list_signal(wakeup_ports, port);
+                port_list_stack_free(wakeup_ports);
+                wakeup_ports = NULL;
+            }
         }
     } else {
         if (port) {
@@ -519,13 +526,6 @@ static inline void cleanup_after_op(eb_port_t port, eb_chan_op_t *op) {
                 port_list_rm(chan->recvs, port);
             OSSpinLockUnlock(&chan->lock);
         }
-    }
-    
-    /* Signal every port in wakeup_ports */
-    if (wakeup_ports) {
-        port_list_signal(wakeup_ports, port);
-        port_list_stack_free(wakeup_ports);
-        wakeup_ports = NULL;
     }
 }
 
