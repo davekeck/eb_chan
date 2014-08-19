@@ -109,6 +109,7 @@ static inline bool port_list_rm(eb_port_list_t l, eb_port_t p) {
             /* Release the port */
             eb_port_release(l->ports[i]);
             /* Shift the subsequent ports up one spot */
+            // TODO: is it possible not to do memmove?
             memmove(&l->ports[i], &l->ports[i+1], (l->len - i - 1) * sizeof(*(l->ports)));
             /* Decrement the buffer length */
             l->len--;
@@ -545,9 +546,11 @@ eb_chan_op_t *eb_chan_do(eb_chan_op_t *const ops[], size_t nops) {
     /* ## Fast path: loop randomly over our operations to see if one of them was able to send/receive.
        If not, we'll enter the slow path where we put our thread to sleep until we're signalled. */
     if (nops) {
-        static const size_t k_attempt_multiplier = 1000;
+        static const size_t k_attempt_multiplier = 10;
         for (size_t i = 0; i < k_attempt_multiplier * nops; i++) {
+            // TODO: not using random() here speeds this up a lot, so we should generate random bits more efficiently
             result = try_op((uintptr_t)&result, port, false, ops[(random() % nops)]);
+//            result = try_op((uintptr_t)&result, port, false, ops[(i % nops)]);
             /* If the op completed, we need to exit! */
             if (result) {
                 goto cleanup;

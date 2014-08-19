@@ -28,7 +28,7 @@
     }
     
     NSLog(@"elapsed: %f (%ju iterations)", EBTimeElapsedSecondsSince(startTime), (uintmax_t)NTRIALS);
-//    exit(0);
+    exit(0);
 }
 
 - (void)applicationDidFinishLaunching: (NSNotification *)aNotification

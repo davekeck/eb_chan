@@ -21,7 +21,7 @@ func thread(c chan string) {
 }
 
 func main() {
-    c := make(chan string, 1)
+    c := make(chan string, 0)
     
     go thread(c)
     go thread(c)
