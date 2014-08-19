@@ -561,7 +561,7 @@ eb_chan_op_t *eb_chan_do(eb_chan_op_t *const ops[], size_t nops) {
         for (size_t i = 0; i < k_attempt_multiplier * nops; i++) {
             // TODO: not using random() here speeds this up a lot, so we should generate random bits more efficiently
 //            result = try_op((uintptr_t)&result, port, false, ops[(random() % nops)]);
-            result = try_op((uintptr_t)&result, ops[(i % nops)], port, false);
+            result = try_op((uintptr_t)&result, ops[(i % nops)], NULL, false);
             /* If the op completed, we need to exit! */
             if (result) {
                 goto cleanup;
