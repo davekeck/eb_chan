@@ -19,7 +19,7 @@ static inline bool wait_on_port(eb_port_t p, bool block) {
     assert(p);
     /* Wait indefinitely for a message to come on our port */
     mach_msg_empty_rcv_t m;
-    mach_msg_return_t r = mach_msg(&m.header, MACH_RCV_MSG, (block ? 0 : MACH_RCV_TIMEOUT), sizeof(m), p->port, MACH_MSG_TIMEOUT_NONE, MACH_PORT_NULL);
+    mach_msg_return_t r = mach_msg(&m.header, (MACH_RCV_MSG | (block ? 0 : MACH_RCV_TIMEOUT)), 0, sizeof(m), p->port, MACH_MSG_TIMEOUT_NONE, MACH_PORT_NULL);
         eb_assert_or_recover(r == MACH_MSG_SUCCESS || r == MACH_RCV_TIMED_OUT, eb_no_op);
     return (r == MACH_MSG_SUCCESS);
 }
