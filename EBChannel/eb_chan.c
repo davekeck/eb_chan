@@ -340,7 +340,7 @@ static inline bool send_unbuf(uintptr_t id, const eb_chan_op_t *op, eb_port_t po
             /* ## Sending, unbuffered, channel open, receiver is awaiting acknowledgment via unbuf_state==_done. */
             /* Verify that the _send_id matches our 'id' parameter. If this assertion fails, it means
                there's likely some static eb_chan_op_t being shared by multiple threads, which isn't allowed. */
-            eb_assert_or_bail(id == chan->unbuf_send_id, "Send id invalid");
+            eb_assert_or_bail(chan->unbuf_send_id == id, "Send id invalid");
             /* A receiver is currently polling for chan's unbuf_state to change, so update it to signal that we're done sending! */
             chan->unbuf_state = unbuf_state_done;
             result = true;
