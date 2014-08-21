@@ -6,7 +6,7 @@ import (
     "os"
 )
 
-const NTRIALS = 1000000
+const NTRIALS = 10000000
 
 // func thread(c chan string) {
 //     start := time.Now()
@@ -45,7 +45,7 @@ func main() {
     go threadSend(c)
     go threadRecv(c)
     
-    time.Sleep(2 * time.Second)
+    time.Sleep(4 * time.Second)
     
     // a := make(chan string, 1)
     //

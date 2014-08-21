@@ -16,7 +16,7 @@ typedef struct {
 #define OS_SPINLOCK_INIT 0
 
 #define OSSpinLockTry(l) ({                                \
-    !OSAtomicCompareAndSwap32(false, true, l);              \
+    OSAtomicCompareAndSwap32(false, true, l);              \
 })
 
 #define OSSpinLockLock(l) ({                                \
@@ -300,11 +300,10 @@ static inline bool send_buf(uintptr_t id, const eb_chan_op_t *op, eb_port_t port
         assert(op->chan);
     
     eb_chan_t chan = op->chan;
-    eb_port_list_t wakeup_ports = NULL;
     bool result = false;
-    
-    OSSpinLockLock(&chan->lock);
+    if (port ? (OSSpinLockLock(&chan->lock), true) : OSSpinLockTry(&chan->lock)) {
         eb_assert_or_bail(chan->open, "Can't send on closed channel.");
+        eb_port_list_t wakeup_ports = NULL;
         if (chan->buf_len < chan->buf_cap) {
             /* ## Sending, buffered, channel open, buffer has space */
             /* Add the value to the buffer */
@@ -319,13 +318,14 @@ static inline bool send_buf(uintptr_t id, const eb_chan_op_t *op, eb_port_t port
             /* Set our flag signifying that we completed this op. */
             result = true;
         }
-    OSSpinLockUnlock(&chan->lock);
-    
-    /* Signal every port in wakeup_ports */
-    if (wakeup_ports) {
-        port_list_signal(wakeup_ports, port);
-        port_list_stack_free(wakeup_ports);
-        wakeup_ports = NULL;
+        OSSpinLockUnlock(&chan->lock);
+        
+        /* Signal every port in wakeup_ports */
+        if (wakeup_ports) {
+            port_list_signal(wakeup_ports, port);
+            port_list_stack_free(wakeup_ports);
+            wakeup_ports = NULL;
+        }
     }
     
     return result;
@@ -336,10 +336,10 @@ static inline bool send_unbuf(uintptr_t id, const eb_chan_op_t *op, eb_port_t po
         assert(op->chan);
     
     eb_chan_t chan = op->chan;
-    eb_port_list_t wakeup_ports = NULL;
     bool result = false;
-    OSSpinLockLock(&chan->lock);
+    if (port ? (OSSpinLockLock(&chan->lock), true) : OSSpinLockTry(&chan->lock)) {
         eb_assert_or_bail(chan->open, "Can't send on closed channel.");
+        eb_port_list_t wakeup_ports = NULL;
         if (chan->unbuf_state == unbuf_state_idle) {
             /* ## Sending, unbuffered, channel open, and there's no sender yet */
             /* Set our state, including the value being sent. */
@@ -358,13 +358,14 @@ static inline bool send_unbuf(uintptr_t id, const eb_chan_op_t *op, eb_port_t po
             chan->unbuf_state = unbuf_state_done;
             result = true;
         }
-    OSSpinLockUnlock(&chan->lock);
-    
-    /* Signal every port in wakeup_ports */
-    if (wakeup_ports) {
-        port_list_signal(wakeup_ports, port);
-        port_list_stack_free(wakeup_ports);
-        wakeup_ports = NULL;
+        OSSpinLockUnlock(&chan->lock);
+        
+        /* Signal every port in wakeup_ports */
+        if (wakeup_ports) {
+            port_list_signal(wakeup_ports, port);
+            port_list_stack_free(wakeup_ports);
+            wakeup_ports = NULL;
+        }
     }
     
     return result;
@@ -375,9 +376,9 @@ static inline bool recv_buf(uintptr_t id, eb_chan_op_t *op, eb_port_t port) {
         assert(op->chan);
     
     eb_chan_t chan = op->chan;
-    eb_port_list_t wakeup_ports = NULL;
     bool result = false;
-    OSSpinLockLock(&chan->lock);
+    if (port ? (OSSpinLockLock(&chan->lock), true) : OSSpinLockTry(&chan->lock)) {
+        eb_port_list_t wakeup_ports = NULL;
         if (chan->buf_len) {
             /* ## Receiving, buffered, buffer non-empty */
             /* Set our op's state signifying that we received a value */
@@ -402,13 +403,14 @@ static inline bool recv_buf(uintptr_t id, eb_chan_op_t *op, eb_port_t port) {
             /* Set our flag signifying that we completed this op. */
             result = true;
         }
-    OSSpinLockUnlock(&chan->lock);
-    
-    /* Signal every port in wakeup_ports */
-    if (wakeup_ports) {
-        port_list_signal(wakeup_ports, port);
-        port_list_stack_free(wakeup_ports);
-        wakeup_ports = NULL;
+        OSSpinLockUnlock(&chan->lock);
+        
+        /* Signal every port in wakeup_ports */
+        if (wakeup_ports) {
+            port_list_signal(wakeup_ports, port);
+            port_list_stack_free(wakeup_ports);
+            wakeup_ports = NULL;
+        }
     }
     
     return result;
@@ -419,10 +421,10 @@ static inline bool recv_unbuf(uintptr_t id, eb_chan_op_t *op, eb_port_t port) {
         assert(op->chan);
     
     eb_chan_t chan = op->chan;
-    eb_port_list_t wakeup_ports = NULL;
-    bool recv = false;
     bool result = false;
-    OSSpinLockLock(&chan->lock);
+    if (port ? (OSSpinLockLock(&chan->lock), true) : OSSpinLockTry(&chan->lock)) {
+        eb_port_list_t wakeup_ports = NULL;
+        bool recv = false;
         /* See if there's a value being sent, and that the sender isn't from the same eb_chan_do() call (as determined via unbuf_send_id.) */
         if (chan->unbuf_state == unbuf_state_send && chan->unbuf_send_id != id) {
             /* ## Receiving, unbuffered, value is available */
@@ -441,51 +443,52 @@ static inline bool recv_unbuf(uintptr_t id, eb_chan_op_t *op, eb_port_t port) {
             /* Set our flag signifying that we completed this op. */
             result = true;
         }
-    OSSpinLockUnlock(&chan->lock);
-    
-    /* Signal every port in wakeup_ports */
-    if (wakeup_ports) {
-        port_list_signal(wakeup_ports, port);
-        port_list_stack_free(wakeup_ports);
-        wakeup_ports = NULL;
-    }
-    
-    /* If we're actually receiving, poll the channel until the sender marks the channel's unbuf_state as either _done or _canceled. */
-    if (recv) {
-        bool done = false;
-        while (!done) {
-            unbuf_state_t state = chan->unbuf_state;
-            /* Don't acquire the lock until it looks like the state is what we're looking for, otherwise we compete
-               with the sending thread, which really slows us down. */
-            if (state == unbuf_state_done || state == unbuf_state_canceled) {
-                OSSpinLockLock(&chan->lock);
-                    /* We don't want to check whether the channel's open here, because the 'recv' flag is set, which
-                       means that the original send occurred before the channel was closed, which is all we care about. */
-                    if (chan->unbuf_state == unbuf_state_done) {
-                        /* We successfully received a value, so set our op's state signifying as such. */
-                        op->open = true;
-                        op->val = chan->unbuf_send_op->val;
-                        /* Set our flag signifying that we completed this op */
-                        result = true;
-                    }
-                    
-                    if (chan->unbuf_state == unbuf_state_done || chan->unbuf_state == unbuf_state_canceled) {
-                        done = true;
-                        /* Reset our channel's unbuf_state so others can send again. */
-                        chan->unbuf_state = unbuf_state_idle;
-                        /* Copy the channel's sends so we can wake them up (after we relinquish the lock), so that one of them can send. */
-                        wakeup_ports = port_list_stack_copy(chan->sends);
-                    }
-                OSSpinLockUnlock(&chan->lock);
+        OSSpinLockUnlock(&chan->lock);
+        
+        /* Signal every port in wakeup_ports */
+        if (wakeup_ports) {
+            port_list_signal(wakeup_ports, port);
+            port_list_stack_free(wakeup_ports);
+            wakeup_ports = NULL;
+        }
+        
+        /* If we're actually receiving, poll the channel until the sender marks the channel's unbuf_state as either _done or _canceled. */
+        if (recv) {
+            bool done = false;
+            while (!done) {
+                unbuf_state_t state = chan->unbuf_state;
+                /* Don't acquire the lock until it looks like the state is what we're looking for, otherwise we compete
+                   with the sending thread, which really slows us down. */
+                if (state == unbuf_state_done || state == unbuf_state_canceled) {
+                    OSSpinLockLock(&chan->lock);
+                        /* We don't want to check whether the channel's open here, because the 'recv' flag is set, which
+                           means that the original send occurred before the channel was closed, which is all we care about. */
+                        if (chan->unbuf_state == unbuf_state_done) {
+                            /* We successfully received a value, so set our op's state signifying as such. */
+                            op->open = true;
+                            op->val = chan->unbuf_send_op->val;
+                            /* Set our flag signifying that we completed this op */
+                            result = true;
+                        }
+                        
+                        if (chan->unbuf_state == unbuf_state_done || chan->unbuf_state == unbuf_state_canceled) {
+                            done = true;
+                            /* Reset our channel's unbuf_state so others can send again. */
+                            chan->unbuf_state = unbuf_state_idle;
+                            /* Copy the channel's sends so we can wake them up (after we relinquish the lock), so that one of them can send. */
+                            wakeup_ports = port_list_stack_copy(chan->sends);
+                        }
+                    OSSpinLockUnlock(&chan->lock);
+                }
             }
         }
-    }
-    
-    /* Signal every port in wakeup_ports */
-    if (wakeup_ports) {
-        port_list_signal(wakeup_ports, port);
-        port_list_stack_free(wakeup_ports);
-        wakeup_ports = NULL;
+        
+        /* Signal every port in wakeup_ports */
+        if (wakeup_ports) {
+            port_list_signal(wakeup_ports, port);
+            port_list_stack_free(wakeup_ports);
+            wakeup_ports = NULL;
+        }
     }
     
     return result;
@@ -547,10 +550,10 @@ eb_chan_op_t *eb_chan_do(eb_chan_op_t *const ops[], size_t nops) {
     /* ## Fast path: loop randomly over our operations to see if one of them was able to send/receive.
        If not, we'll enter the slow path where we put our thread to sleep until we're signalled. */
     if (nops) {
-        static const size_t k_attempt_multiplier = 1000;
+        static const size_t k_attempt_multiplier = 500;
         for (size_t i = 0; i < k_attempt_multiplier * nops; i++) {
             // TODO: not using random() here speeds this up a lot, so we should generate random bits more efficiently
-//            result = try_op((uintptr_t)&result, port, false, ops[(random() % nops)]);
+//            result = try_op((uintptr_t)&result, ops[(random() % nops)], NULL);
             result = try_op((uintptr_t)&result, ops[(i % nops)], NULL);
             /* If the op completed, we need to exit! */
             if (result) {
