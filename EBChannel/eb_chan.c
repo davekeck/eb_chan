@@ -616,6 +616,7 @@ eb_chan_op_t *eb_chan_do(eb_chan_op_t *const ops[], size_t nops) {
 
 eb_chan_op_t *eb_chan_try(eb_chan_op_t *const ops[], size_t nops) {
     // TODO: randomize iteration!
+    // TODO: we need to call cleanup_after_op() here, because we may need to reset unbuf_state
     eb_chan_op_t *result = NULL;
     for (size_t i = 0; i < nops; i++) {
         result = try_op((uintptr_t)&result, ops[i], NULL, false);
