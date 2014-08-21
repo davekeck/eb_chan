@@ -1,0 +1,2 @@
+- add linux support
+- support sending in-line data of constant length
