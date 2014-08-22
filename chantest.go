@@ -6,7 +6,7 @@ import (
     "os"
 )
 
-const NTRIALS = 10000000
+const NTRIALS = 1000000
 
 // func thread(c chan string) {
 //     start := time.Now()
