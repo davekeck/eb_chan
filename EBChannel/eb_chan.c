@@ -154,7 +154,7 @@ enum {
     unbuf_state_send,
     unbuf_state_recv,
     unbuf_state_done,
-    unbuf_state_canceled
+    unbuf_state_cancelled
 }; typedef uint8_t unbuf_state_t;
 
 struct eb_chan {
@@ -446,14 +446,14 @@ static inline bool recv_unbuf(uintptr_t id, eb_chan_op_t *op, eb_port_t port) {
             wakeup_ports = NULL;
         }
         
-        /* If we're actually receiving, poll the channel until the sender marks the channel's unbuf_state as either _done or _canceled. */
+        /* If we're actually receiving, poll the channel until the sender marks the channel's unbuf_state as either _done or _cancelled. */
         if (recv) {
             bool done = false;
             while (!done) {
                 unbuf_state_t state = chan->unbuf_state;
                 /* Don't acquire the lock until it looks like the state is what we're looking for, otherwise we compete
                    with the sending thread, which really slows us down. */
-                if (state == unbuf_state_done || state == unbuf_state_canceled) {
+                if (state == unbuf_state_done || state == unbuf_state_cancelled) {
                     SpinLock(&chan->lock, true);
                         /* We don't want to check whether the channel's open here, because the 'recv' flag is set, which
                            means that the original send occurred before the channel was closed, which is all we care about. */
@@ -465,7 +465,7 @@ static inline bool recv_unbuf(uintptr_t id, eb_chan_op_t *op, eb_port_t port) {
                             result = true;
                         }
                         
-                        if (chan->unbuf_state == unbuf_state_done || chan->unbuf_state == unbuf_state_canceled) {
+                        if (chan->unbuf_state == unbuf_state_done || chan->unbuf_state == unbuf_state_cancelled) {
                             done = true;
                             /* Reset our channel's unbuf_state so others can send again. */
                             chan->unbuf_state = unbuf_state_idle;
@@ -503,9 +503,9 @@ static inline void cleanup_after_op(eb_port_t port, eb_chan_op_t *op) {
                 wakeup_ports = port_list_stack_copy(chan->sends);
             } else if (chan->unbuf_state == unbuf_state_recv && chan->unbuf_send_op == op) {
                 /* 'op' was in the process of an unbuffered send on the channel, and a receiver is waiting on
-                   the send, so set unbuf_state to _canceled so that the receiver notices and stops waiting
+                   the send, so set unbuf_state to _cancelled so that the receiver notices and stops waiting
                    on the sender. */
-                chan->unbuf_state = unbuf_state_canceled;
+                chan->unbuf_state = unbuf_state_cancelled;
             }
         SpinUnlock(&chan->lock);
         
