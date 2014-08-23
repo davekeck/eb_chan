@@ -358,10 +358,13 @@ static inline op_result_t send_unbuf(uintptr_t id, const eb_chan_op_t *op, eb_po
         // TODO: do we want to wakeup recvs here? profile, and if not, only wakeup recvs when we enter the slow path.
         
         /* Give the receiver a chance to receive. */
+        eb_port_list_t wakeup_ports = NULL;
         /* By default we fail and should move on to the next op */
         result = op_result_fail;
-        for (size_t i = 0; i < SIZE_MAX; i++) {
-            if (CAS(unbuf_state_recvfast, unbuf_state_idle, &chan->unbuf_state)) {
+        for (size_t i = 0; i < 100; i++) {
+            if (CAS(unbuf_state_recvfast, unbuf_state_busy, &chan->unbuf_state)) {
+                wakeup_ports = port_list_stack_copy(chan->sends);
+                assert(CAS(unbuf_state_busy, unbuf_state_idle, &chan->unbuf_state));
                 /* A receiver got the value! */
                 result = op_result_ok;
                 break;
@@ -371,30 +374,26 @@ static inline op_result_t send_unbuf(uintptr_t id, const eb_chan_op_t *op, eb_po
         /* ## Slow path */
         if (result != op_result_ok) {
             /* Attempt transition from the fast-path to the slow-path (_sendfast->_send) */
-            if (!CAS(unbuf_state_sendfast, unbuf_state_send, &chan->unbuf_state)) {
-                /* We failed to transition to _send, so the receiver must be receiving the value, so wait for it to complete. */
-                while (!CAS(unbuf_state_recvfast, unbuf_state_idle, &chan->unbuf_state));
+            if (CAS(unbuf_state_sendfast, unbuf_state_busy, &chan->unbuf_state)) {
+                /* We're in the slow-path, so wakeup the recvs since one of them can proceed. */
+                wakeup_ports = port_list_stack_copy(chan->recvs);
+                assert(CAS(unbuf_state_busy, unbuf_state_send, &chan->unbuf_state));
+            } else {
+                /* We failed to transition _sendfast->_busy, so the receiver must be receiving the value, so wait for it to complete. */
+                while (!CAS(unbuf_state_recvfast, unbuf_state_busy, &chan->unbuf_state));
+                /* We're resetting unbuf_state to _idle, so wakeup the sends since one of them can proceed. */
+                wakeup_ports = port_list_stack_copy(chan->sends);
+                assert(CAS(unbuf_state_busy, unbuf_state_idle, &chan->unbuf_state));
                 result = op_result_ok;
             }
         }
         
-        eb_port_list_t wakeup_ports = NULL;
-        if (result == op_result_ok) {
-            /* We reset unbuf_state to _idle, so wakeup the sends since one of them can proceed. */
-            SpinLock(&chan->lock, true);
-                wakeup_ports = port_list_stack_copy(chan->sends);
-            SpinUnlock(&chan->lock);
-        } else {
-            /* We're in the slow-path, so wakeup the recvs since one of them can proceed. */
-            SpinLock(&chan->lock, true);
-                wakeup_ports = port_list_stack_copy(chan->recvs);
-            SpinUnlock(&chan->lock);
+        if (wakeup_ports->len) {
+            /* Signal every port in wakeup_ports */
+            port_list_signal(wakeup_ports, port);
+            port_list_stack_free(wakeup_ports);
+            wakeup_ports = NULL;
         }
-        
-        /* Signal every port in wakeup_ports */
-        port_list_signal(wakeup_ports, port);
-        port_list_stack_free(wakeup_ports);
-        wakeup_ports = NULL;
     } else if (CAS(unbuf_state_send, unbuf_state_busy, &chan->unbuf_state)) {
         assert(CAS(unbuf_state_busy, unbuf_state_send, &chan->unbuf_state));
         /* The channel's already sending so the caller should move on to the next op */
@@ -488,35 +487,37 @@ static inline op_result_t recv_unbuf(uintptr_t id, eb_chan_op_t *op, eb_port_t p
         if (chan->unbuf_send_id != id) {
             op->open = true;
             op->val = chan->unbuf_send_op->val;
+            eb_port_list_t wakeup_ports = port_list_stack_copy(chan->sends);
             assert(CAS(unbuf_state_busy, unbuf_state_recv, &chan->unbuf_state));
             
             /* Wakeup chan's sends so it updates its unbuf_state */
-            eb_port_list_t wakeup_ports = NULL;
-            SpinLock(&chan->lock, true);
-                wakeup_ports = port_list_stack_copy(chan->sends);
-            SpinUnlock(&chan->lock);
-            port_list_signal(wakeup_ports, port);
-            port_list_stack_free(wakeup_ports);
-            wakeup_ports = NULL;
+            if (wakeup_ports->len) {
+                port_list_signal(wakeup_ports, port);
+                port_list_stack_free(wakeup_ports);
+                wakeup_ports = NULL;
+            }
             
             /* Poll until chan's unbuf_state is either _done or _cancelled, and reset the state to _idle. */
             for (;;) {
-                if (CAS(unbuf_state_done, unbuf_state_idle, &chan->unbuf_state)) {
+                if (CAS(unbuf_state_done, unbuf_state_busy, &chan->unbuf_state)) {
+                    wakeup_ports = port_list_stack_copy(chan->sends);
+                    assert(CAS(unbuf_state_busy, unbuf_state_idle, &chan->unbuf_state));
                     result = op_result_ok;
                     break;
-                } else if (CAS(unbuf_state_cancelled, unbuf_state_idle, &chan->unbuf_state)) {
+                } else if (CAS(unbuf_state_cancelled, unbuf_state_busy, &chan->unbuf_state)) {
+                    wakeup_ports = port_list_stack_copy(chan->sends);
+                    assert(CAS(unbuf_state_busy, unbuf_state_idle, &chan->unbuf_state));
                     result = op_result_fail;
                     break;
                 }
             }
             
             /* Wakeup chan's sends because we reset unbuf_state to _idle, so one of them can now proceed. */
-            SpinLock(&chan->lock, true);
-                wakeup_ports = port_list_stack_copy(chan->sends);
-            SpinUnlock(&chan->lock);
-            port_list_signal(wakeup_ports, port);
-            port_list_stack_free(wakeup_ports);
-            wakeup_ports = NULL;
+            if (wakeup_ports->len) {
+                port_list_signal(wakeup_ports, port);
+                port_list_stack_free(wakeup_ports);
+                wakeup_ports = NULL;
+            }
         } else {
             /* We can't receive from our own op */
             assert(CAS(unbuf_state_busy, unbuf_state_send, &chan->unbuf_state));
@@ -527,77 +528,6 @@ static inline op_result_t recv_unbuf(uintptr_t id, eb_chan_op_t *op, eb_port_t p
         /* Otherwise, we should try the op again because it was in an intermittent state */
         result = op_result_busy;
     }
-    
-    return result;
-    
-//    if (SpinLock(&chan->lock, port != NULL)) {
-//        eb_port_list_t wakeup_ports = NULL;
-//        bool recv = false;
-//        /* See if there's a value being sent, and that the sender isn't from the same eb_chan_do() call (as determined via unbuf_send_id.) */
-//        if (chan->unbuf_state == unbuf_state_send && chan->unbuf_send_id != id) {
-//            /* ## Receiving, unbuffered, value is available */
-//            /* Set our channel's state signifying that we received a value */
-//            chan->unbuf_state = unbuf_state_recv;
-//            /* Copy the channel's sends so that we can signal them after we relinquish the lock, to notify
-//               them that there's a receiver. */
-//            wakeup_ports = port_list_stack_copy(chan->sends);
-//            /* Set our flag so that we know to poll for a unbuf_state change after exiting this block. */
-//            recv = true;
-//        } else if (!chan->open) {
-//            /* ## Receiving, unbuffered, no value available, channel closed */
-//            /* Set our op's state signifying that it completed because the channel's closed */
-//            op->open = false;
-//            op->val = NULL;
-//            /* Set our flag signifying that we completed this op. */
-//            result = true;
-//        }
-//        SpinUnlock(&chan->lock);
-//        
-//        /* Signal every port in wakeup_ports */
-//        if (wakeup_ports) {
-//            port_list_signal(wakeup_ports, port);
-//            port_list_stack_free(wakeup_ports);
-//            wakeup_ports = NULL;
-//        }
-//        
-//        /* If we're actually receiving, poll the channel until the sender marks the channel's unbuf_state as either _done or _cancelled. */
-//        if (recv) {
-//            bool done = false;
-//            while (!done) {
-//                unbuf_state_t state = chan->unbuf_state;
-//                /* Don't acquire the lock until it looks like the state is what we're looking for, otherwise we compete
-//                   with the sending thread, which really slows us down. */
-//                if (state == unbuf_state_done || state == unbuf_state_cancelled) {
-//                    SpinLock(&chan->lock, true);
-//                        /* We don't want to check whether the channel's open here, because the 'recv' flag is set, which
-//                           means that the original send occurred before the channel was closed, which is all we care about. */
-//                        if (chan->unbuf_state == unbuf_state_done) {
-//                            /* We successfully received a value, so set our op's state signifying as such. */
-//                            op->open = true;
-//                            op->val = chan->unbuf_send_op->val;
-//                            /* Set our flag signifying that we completed this op */
-//                            result = true;
-//                        }
-//                        
-//                        if (chan->unbuf_state == unbuf_state_done || chan->unbuf_state == unbuf_state_cancelled) {
-//                            done = true;
-//                            /* Reset our channel's unbuf_state so others can send again. */
-//                            chan->unbuf_state = unbuf_state_idle;
-//                            /* Copy the channel's sends so we can wake them up (after we relinquish the lock), so that one of them can send. */
-//                            wakeup_ports = port_list_stack_copy(chan->sends);
-//                        }
-//                    SpinUnlock(&chan->lock);
-//                }
-//            }
-//            
-//            /* Signal every port in wakeup_ports */
-//            if (wakeup_ports) {
-//                port_list_signal(wakeup_ports, port);
-//                port_list_stack_free(wakeup_ports);
-//                wakeup_ports = NULL;
-//            }
-//        }
-//    }
     
     return result;
 }
@@ -614,16 +544,15 @@ static inline op_result_t cleanup_after_op(eb_port_t port, eb_chan_op_t *op) {
             if (chan->unbuf_send_op == op) {
                 /* 'op' was in the process of an unbuffered send on the channel, but no receiver had arrived
                    yet, so reset unbuf_state to _idle. */
+                eb_port_list_t wakeup_ports = port_list_stack_copy(chan->sends);
                 assert(CAS(unbuf_state_busy, unbuf_state_idle, &chan->unbuf_state));
                 
                 /* Wakeup chan's sends since we just reset unbuf_state to _idle. */
-                eb_port_list_t wakeup_ports = NULL;
-                SpinLock(&chan->lock, true);
-                    wakeup_ports = port_list_stack_copy(chan->sends);
-                SpinUnlock(&chan->lock);
-                port_list_signal(wakeup_ports, port);
-                port_list_stack_free(wakeup_ports);
-                wakeup_ports = NULL;
+                if (wakeup_ports->len) {
+                    port_list_signal(wakeup_ports, port);
+                    port_list_stack_free(wakeup_ports);
+                    wakeup_ports = NULL;
+                }
             } else {
                 /* This isn't our op, reset unbuf_state back to _send */
                 assert(CAS(unbuf_state_busy, unbuf_state_send, &chan->unbuf_state));
@@ -672,7 +601,7 @@ eb_chan_op_t *eb_chan_do(eb_chan_op_t *const ops[], size_t nops) {
     /* ## Fast path: loop randomly over our operations to see if one of them was able to send/receive.
        If not, we'll enter the slow path where we put our thread to sleep until we're signalled. */
     if (nops) {
-        static const size_t k_attempt_multiplier = SIZE_MAX;
+        static const size_t k_attempt_multiplier = 50;
         for (size_t i = 0; i < k_attempt_multiplier * nops; i++) {
             // TODO: not using random() here speeds this up a lot, so we should generate random bits more efficiently
 //            result = try_op((uintptr_t)&result, ops[(random() % nops)], NULL);
@@ -700,13 +629,37 @@ eb_chan_op_t *eb_chan_do(eb_chan_op_t *const ops[], size_t nops) {
         if (chan) {
             eb_chan_op_t *op = ops[i];
             if (op->send) {
-                SpinLock(&chan->lock, true);
-                    port_list_add(chan->sends, port);
-                SpinUnlock(&chan->lock);
+                for (;;) {
+                    if (CAS(unbuf_state_idle, unbuf_state_busy, &chan->unbuf_state)) {
+                        port_list_add(chan->sends, port);
+                        assert(CASB(unbuf_state_busy, unbuf_state_idle, &chan->unbuf_state));
+                        break;
+                    } else if (CAS(unbuf_state_send, unbuf_state_busy, &chan->unbuf_state)) {
+                        port_list_add(chan->sends, port);
+                        assert(CASB(unbuf_state_busy, unbuf_state_send, &chan->unbuf_state));
+                        break;
+                    } else if (CAS(unbuf_state_recv, unbuf_state_busy, &chan->unbuf_state)) {
+                        port_list_add(chan->sends, port);
+                        assert(CASB(unbuf_state_busy, unbuf_state_recv, &chan->unbuf_state));
+                        break;
+                    }
+                }
             } else {
-                SpinLock(&chan->lock, true);
-                    port_list_add(chan->recvs, port);
-                SpinUnlock(&chan->lock);
+                for (;;) {
+                    if (CAS(unbuf_state_idle, unbuf_state_busy, &chan->unbuf_state)) {
+                        port_list_add(chan->recvs, port);
+                        assert(CASB(unbuf_state_busy, unbuf_state_idle, &chan->unbuf_state));
+                        break;
+                    } else if (CAS(unbuf_state_send, unbuf_state_busy, &chan->unbuf_state)) {
+                        port_list_add(chan->recvs, port);
+                        assert(CASB(unbuf_state_busy, unbuf_state_send, &chan->unbuf_state));
+                        break;
+                    } else if (CAS(unbuf_state_recv, unbuf_state_busy, &chan->unbuf_state)) {
+                        port_list_add(chan->recvs, port);
+                        assert(CASB(unbuf_state_busy, unbuf_state_recv, &chan->unbuf_state));
+                        break;
+                    }
+                }
             }
         }
     }
@@ -736,13 +689,37 @@ eb_chan_op_t *eb_chan_do(eb_chan_op_t *const ops[], size_t nops) {
                 if (chan) {
                     eb_chan_op_t *op = ops[i];
                     if (op->send) {
-                        SpinLock(&chan->lock, true);
-                            port_list_rm(chan->sends, port);
-                        SpinUnlock(&chan->lock);
+                        for (;;) {
+                            if (CAS(unbuf_state_idle, unbuf_state_busy, &chan->unbuf_state)) {
+                                port_list_rm(chan->sends, port);
+                                assert(CASB(unbuf_state_busy, unbuf_state_idle, &chan->unbuf_state));
+                                break;
+                            } else if (CAS(unbuf_state_send, unbuf_state_busy, &chan->unbuf_state)) {
+                                port_list_rm(chan->sends, port);
+                                assert(CASB(unbuf_state_busy, unbuf_state_send, &chan->unbuf_state));
+                                break;
+                            } else if (CAS(unbuf_state_recv, unbuf_state_busy, &chan->unbuf_state)) {
+                                port_list_rm(chan->sends, port);
+                                assert(CASB(unbuf_state_busy, unbuf_state_recv, &chan->unbuf_state));
+                                break;
+                            }
+                        }
                     } else {
-                        SpinLock(&chan->lock, true);
-                            port_list_rm(chan->recvs, port);
-                        SpinUnlock(&chan->lock);
+                        for (;;) {
+                            if (CAS(unbuf_state_idle, unbuf_state_busy, &chan->unbuf_state)) {
+                                port_list_rm(chan->recvs, port);
+                                assert(CASB(unbuf_state_busy, unbuf_state_idle, &chan->unbuf_state));
+                                break;
+                            } else if (CAS(unbuf_state_send, unbuf_state_busy, &chan->unbuf_state)) {
+                                port_list_rm(chan->recvs, port);
+                                assert(CASB(unbuf_state_busy, unbuf_state_send, &chan->unbuf_state));
+                                break;
+                            } else if (CAS(unbuf_state_recv, unbuf_state_busy, &chan->unbuf_state)) {
+                                port_list_rm(chan->recvs, port);
+                                assert(CASB(unbuf_state_busy, unbuf_state_recv, &chan->unbuf_state));
+                                break;
+                            }
+                        }
                     }
                 }
             }
