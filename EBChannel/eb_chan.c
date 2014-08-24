@@ -3,6 +3,7 @@
 #include <assert.h>
 #include <libkern/OSAtomic.h>
 #include <mach/mach.h>
+#include <stdio.h>
 #include "eb_assert.h"
 #include "eb_port.h"
 
@@ -39,7 +40,7 @@ typedef struct {
 static inline void port_list_free(eb_port_list_t l);
 
 /* Creates a new empty list */
-static inline eb_port_list_t port_list_alloc(size_t cap) {
+static eb_port_list_t port_list_alloc(size_t cap) {
     assert(cap > 0);
     
     eb_port_list_t result = malloc(sizeof(*result));
@@ -348,51 +349,22 @@ static inline op_result_t send_unbuf(uintptr_t id, const eb_chan_op_t *op, eb_po
     
     /* Attempt to gain control of the channel's unbuf_state */
     if (CAS(unbuf_state_idle, unbuf_state_busy, &chan->unbuf_state)) {
-        /* ## Fast path */
         /* We successfully gained control of unbuf_state, so assign our fields. */
         chan->unbuf_send_id = id;
         chan->unbuf_send_op = op;
-        /* Transition from _busy->_sendfast, which should always succeed because we have exclusive control over unbuf_state. */
-        assert(CASB(unbuf_state_busy, unbuf_state_sendfast, &chan->unbuf_state));
         
-        // TODO: do we want to wakeup recvs here? profile, and if not, only wakeup recvs when we enter the slow path.
-        
-        /* Give the receiver a chance to receive. */
-        eb_port_list_t wakeup_ports = NULL;
-        /* By default we fail and should move on to the next op */
-        result = op_result_fail;
-        for (size_t i = 0; i < 100; i++) {
-            if (CAS(unbuf_state_recvfast, unbuf_state_busy, &chan->unbuf_state)) {
-                wakeup_ports = port_list_stack_copy(chan->sends);
-                assert(CAS(unbuf_state_busy, unbuf_state_idle, &chan->unbuf_state));
-                /* A receiver got the value! */
-                result = op_result_ok;
-                break;
-            }
+        /* Maintain a reference to the head of chan's recvs so we can wake it up when we relinquish the lock. */
+        eb_port_t wakeup_port = NULL;
+        if (chan->recvs->len) {
+            wakeup_port = eb_port_retain(chan->recvs->ports[0]);
         }
         
-        /* ## Slow path */
-        if (result != op_result_ok) {
-            /* Attempt transition from the fast-path to the slow-path (_sendfast->_send) */
-            if (CAS(unbuf_state_sendfast, unbuf_state_busy, &chan->unbuf_state)) {
-                /* We're in the slow-path, so wakeup the recvs since one of them can proceed. */
-                wakeup_ports = port_list_stack_copy(chan->recvs);
-                assert(CAS(unbuf_state_busy, unbuf_state_send, &chan->unbuf_state));
-            } else {
-                /* We failed to transition _sendfast->_busy, so the receiver must be receiving the value, so wait for it to complete. */
-                while (!CAS(unbuf_state_recvfast, unbuf_state_busy, &chan->unbuf_state));
-                /* We're resetting unbuf_state to _idle, so wakeup the sends since one of them can proceed. */
-                wakeup_ports = port_list_stack_copy(chan->sends);
-                assert(CAS(unbuf_state_busy, unbuf_state_idle, &chan->unbuf_state));
-                result = op_result_ok;
-            }
-        }
+        assert(CAS(unbuf_state_busy, unbuf_state_send, &chan->unbuf_state));
         
-        if (wakeup_ports->len) {
-            /* Signal every port in wakeup_ports */
-            port_list_signal(wakeup_ports, port);
-            port_list_stack_free(wakeup_ports);
-            wakeup_ports = NULL;
+        if (wakeup_port) {
+            eb_port_signal(wakeup_port);
+            eb_port_release(wakeup_port);
+            wakeup_port = NULL;
         }
     } else if (CAS(unbuf_state_send, unbuf_state_busy, &chan->unbuf_state)) {
         assert(CAS(unbuf_state_busy, unbuf_state_send, &chan->unbuf_state));
@@ -478,45 +450,35 @@ static inline op_result_t recv_unbuf(uintptr_t id, eb_chan_op_t *op, eb_port_t p
     op_result_t result = op_result_fail;
     
     /* Attempt to gain control of the channel's unbuf_state */
-    if (CAS(unbuf_state_sendfast, unbuf_state_busy, &chan->unbuf_state)) {
-        op->open = true;
-        op->val = chan->unbuf_send_op->val;
-        assert(CAS(unbuf_state_busy, unbuf_state_recvfast, &chan->unbuf_state));
-        result = op_result_ok;
-    } else if (CAS(unbuf_state_send, unbuf_state_busy, &chan->unbuf_state)) {
+    if (CAS(unbuf_state_send, unbuf_state_busy, &chan->unbuf_state)) {
         if (chan->unbuf_send_id != id) {
             op->open = true;
             op->val = chan->unbuf_send_op->val;
-            eb_port_list_t wakeup_ports = port_list_stack_copy(chan->sends);
             assert(CAS(unbuf_state_busy, unbuf_state_recv, &chan->unbuf_state));
-            
-            /* Wakeup chan's sends so it updates its unbuf_state */
-            if (wakeup_ports->len) {
-                port_list_signal(wakeup_ports, port);
-                port_list_stack_free(wakeup_ports);
-                wakeup_ports = NULL;
-            }
             
             /* Poll until chan's unbuf_state is either _done or _cancelled, and reset the state to _idle. */
             for (;;) {
                 if (CAS(unbuf_state_done, unbuf_state_busy, &chan->unbuf_state)) {
-                    wakeup_ports = port_list_stack_copy(chan->sends);
-                    assert(CAS(unbuf_state_busy, unbuf_state_idle, &chan->unbuf_state));
                     result = op_result_ok;
                     break;
                 } else if (CAS(unbuf_state_cancelled, unbuf_state_busy, &chan->unbuf_state)) {
-                    wakeup_ports = port_list_stack_copy(chan->sends);
-                    assert(CAS(unbuf_state_busy, unbuf_state_idle, &chan->unbuf_state));
                     result = op_result_fail;
                     break;
                 }
             }
             
-            /* Wakeup chan's sends because we reset unbuf_state to _idle, so one of them can now proceed. */
-            if (wakeup_ports->len) {
-                port_list_signal(wakeup_ports, port);
-                port_list_stack_free(wakeup_ports);
-                wakeup_ports = NULL;
+            /* Maintain a reference to the head of chan's sends so we can wake it up when we relinquish the lock. */
+            eb_port_t wakeup_port = NULL;
+            if (chan->sends->len) {
+                wakeup_port = eb_port_retain(chan->sends->ports[0]);
+            }
+            
+            assert(CAS(unbuf_state_busy, unbuf_state_idle, &chan->unbuf_state));
+            
+            if (wakeup_port) {
+                eb_port_signal(wakeup_port);
+                eb_port_release(wakeup_port);
+                wakeup_port = NULL;
             }
         } else {
             /* We can't receive from our own op */
@@ -601,7 +563,7 @@ eb_chan_op_t *eb_chan_do(eb_chan_op_t *const ops[], size_t nops) {
     /* ## Fast path: loop randomly over our operations to see if one of them was able to send/receive.
        If not, we'll enter the slow path where we put our thread to sleep until we're signalled. */
     if (nops) {
-        static const size_t k_attempt_multiplier = 50;
+        static const size_t k_attempt_multiplier = SIZE_MAX;
         for (size_t i = 0; i < k_attempt_multiplier * nops; i++) {
             // TODO: not using random() here speeds this up a lot, so we should generate random bits more efficiently
 //            result = try_op((uintptr_t)&result, ops[(random() % nops)], NULL);
