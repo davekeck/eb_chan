@@ -35,7 +35,7 @@ typedef struct {
 static inline void port_list_free(port_list_t l);
 
 /* Creates a new empty list */
-static port_list_t port_list_alloc(size_t cap) {
+static inline port_list_t port_list_alloc(size_t cap) {
     assert(cap > 0);
     
     port_list_t result = malloc(sizeof(*result));
@@ -517,12 +517,12 @@ static inline op_result_t recv_unbuf(uintptr_t id, eb_chan_op_t *op, eb_port_t p
 static inline op_result_t cleanup_after_op(uintptr_t id, const eb_chan_op_t *op, eb_port_t port) {
         assert(op);
     eb_chan_t chan = op->chan;
-    op_result_t result = op_result_fail;
+    op_result_t result = op_result_ok;
     
     if (chan) {
         if (op->send && !chan->buf_cap) {
             if (CAS(unbuf_state_idle, unbuf_state_idle, &chan->unbuf_state)) {
-                result = op_result_ok;
+                /* Nothing to do in this case except prevent the else case from running... */
             } else if (CAS(unbuf_state_send, unbuf_state_busy, &chan->unbuf_state)) {
                 if (chan->unbuf_send_op == op) {
                     /* 'op' was in the process of an unbuffered send on the channel, but no receiver had arrived
@@ -534,7 +534,6 @@ static inline op_result_t cleanup_after_op(uintptr_t id, const eb_chan_op_t *op,
                     /* This isn't our op, reset unbuf_state back to _send */
                     assert(CAS(unbuf_state_busy, unbuf_state_send, &chan->unbuf_state));
                 }
-                result = op_result_ok;
             } else if (CAS(unbuf_state_recv, unbuf_state_busy, &chan->unbuf_state)) {
                 if (chan->unbuf_send_op == op) {
                     /* Verify that the _send_id matches our 'id' parameter. If this assertion fails, it means there's likely
@@ -548,12 +547,9 @@ static inline op_result_t cleanup_after_op(uintptr_t id, const eb_chan_op_t *op,
                     /* This isn't our op, reset unbuf_state back to _recv */
                     assert(CAS(unbuf_state_busy, unbuf_state_recv, &chan->unbuf_state));
                 }
-                result = op_result_ok;
             } else {
                 result = op_result_busy;
             }
-        } else {
-            result = op_result_ok;
         }
     }
     
@@ -576,62 +572,64 @@ static inline op_result_t try_op(uintptr_t id, eb_chan_op_t *op, eb_port_t port)
 }
 
 eb_chan_op_t *eb_chan_do(eb_chan_op_t *const ops[], size_t nops) {
-    // TODO: how about every time we wake up, we enter the fast path? but then senders will slow down because they'll always message the port. hmm. maybe thats ok.
-    // TODO: let's go back to the spinlock implementation of port lists, as it'll clean up the code a lot, and may make us faster?
-    
         assert(ops);
     eb_port_t port = NULL;
     eb_chan_op_t *result = NULL;
     uintptr_t id = (uintptr_t)&result;
-    /* ## Fast path: loop randomly over our operations to see if one of them was able to send/receive.
-       If not, we'll enter the slow path where we put our thread to sleep until we're signalled. */
-    if (nops) {
-        static const size_t k_attempt_multiplier = 50;
-        for (size_t i = 0; i < k_attempt_multiplier * nops; i++) {
-            // TODO: not using random() here speeds this up a lot, so we should generate random bits more efficiently
-//            result = try_op((uintptr_t)&result, ops[(random() % nops)], NULL);
-            eb_chan_op_t *op = ops[(i % nops)];
-            op_result_t r = try_op(id, op, NULL);
-            /* If the op completed, we need to exit! */
-            if (r == op_result_ok) {
-                result = op;
-                goto cleanup;
-            }
-        }
-    }
-    
-    /* ## Slow path: we weren't able to find an operation that could send/receive, so we'll create a
-       port to receive notifications on and put this thread to sleep until someone wakes us up. */
-    /* Create our port that we'll attach to channels so that we can be notified when events occur. */
-    port = eb_port_create();
-        eb_assert_or_recover(port, goto cleanup);
-    
-    /* ## Register our port for the appropriate notifications on every channel. */
-    /* This adds 'port' to the channel's sends/recvs (depending on the op), which we clean up at the
-       end of this function. */
-    for (size_t i = 0; i < nops; i++) {
-        eb_chan_op_t *op = ops[i];
-        eb_chan_t chan = op->chan;
-        if (chan) {
-            port_list_add((op->send ? chan->sends : chan->recvs), port);
-        }
-    }
     
     for (;;) {
-        // TODO: randomize iteration!
-        for (size_t i = 0; i < nops; i++) {
-            eb_chan_op_t *op = ops[i];
-            op_result_t r;
-            while ((r = try_op(id, op, port)) == op_result_busy);
-            /* If the op completed, we need to exit! */
-            if (r == op_result_ok) {
-                result = op;
-                goto cleanup;
+        /* ## Fast path: loop randomly over our operations to see if one of them was able to send/receive.
+           If not, we'll enter the slow path where we put our thread to sleep until we're signalled. */
+        if (nops) {
+            static const size_t k_attempt_multiplier = 50;
+            for (size_t i = 0; i < k_attempt_multiplier * nops; i++) {
+                // TODO: not using random() here speeds this up a lot, so we should generate random bits more efficiently
+    //            result = try_op((uintptr_t)&result, ops[(random() % nops)], NULL);
+                eb_chan_op_t *op = ops[(i % nops)];
+                op_result_t r = try_op(id, op, port);
+                /* If the op completed, we need to exit! */
+                if (r == op_result_ok) {
+                    result = op;
+                    goto cleanup;
+                }
             }
         }
         
-        /* Put our thread to sleep until someone alerts us of an event */
-        eb_port_wait(port);
+        /* ## Slow path: we weren't able to find an operation that could send/receive, so we'll create a
+           port to receive notifications on and put this thread to sleep until someone wakes us up. */
+        if (!port) {
+            /* Create our port that we'll attach to channels so that we can be notified when events occur. */
+            port = eb_port_create();
+                eb_assert_or_recover(port, goto cleanup);
+            
+            /* ## Register our port for the appropriate notifications on every channel. */
+            /* This adds 'port' to the channel's sends/recvs (depending on the op), which we clean up at the
+               end of this function. */
+            for (size_t i = 0; i < nops; i++) {
+                eb_chan_op_t *op = ops[i];
+                eb_chan_t chan = op->chan;
+                if (chan) {
+                    port_list_add((op->send ? chan->sends : chan->recvs), port);
+                }
+            }
+        }
+        
+        for (;;) {
+            // TODO: randomize iteration!
+            for (size_t i = 0; i < nops; i++) {
+                eb_chan_op_t *op = ops[i];
+                op_result_t r;
+                while ((r = try_op(id, op, port)) == op_result_busy);
+                /* If the op completed, we need to exit! */
+                if (r == op_result_ok) {
+                    result = op;
+                    goto cleanup;
+                }
+            }
+            
+            /* Put our thread to sleep until someone alerts us of an event */
+            eb_port_wait(port);
+        }
     }
     
     /* Cleanup! */
