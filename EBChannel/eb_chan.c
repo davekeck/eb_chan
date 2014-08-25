@@ -487,6 +487,13 @@ static inline op_result_t recv_unbuf(uintptr_t id, eb_chan_op_t *op, eb_port_t p
                 wakeup_port = NULL;
             }
             
+            // slight performance boost by checking values before we actually do CAS
+//            for (;;) {
+//                if (*((volatile unbuf_state_t *)&chan->unbuf_state) == unbuf_state_done || *((volatile unbuf_state_t *)&chan->unbuf_state) == unbuf_state_cancelled) {
+//                    break;
+//                }
+//            }
+            
             /* Poll until chan's unbuf_state is either _done or _cancelled, and reset the state to _idle. */
             for (;;) {
                 if (CAS(unbuf_state_done, unbuf_state_idle, &chan->unbuf_state)) {
@@ -506,6 +513,9 @@ static inline op_result_t recv_unbuf(uintptr_t id, eb_chan_op_t *op, eb_port_t p
             /* Move on to the next op */
             result = op_result_fail;
         }
+    } else if (CAS(unbuf_state_recv, unbuf_state_recv, &chan->unbuf_state)) {
+        /* Someone's already receiving; tell the caller to move on to the next op. */
+        result = op_result_fail;
     } else {
         /* Otherwise, we should try the op again because it was in an intermittent state */
         result = op_result_busy;
@@ -602,7 +612,7 @@ eb_chan_op_t *eb_chan_do(eb_chan_op_t *const ops[], size_t nops) {
             port = eb_port_create();
                 eb_assert_or_recover(port, goto cleanup);
             
-            /* ## Register our port for the appropriate notifications on every channel. */
+            /* Register our port for the appropriate notifications on every channel. */
             /* This adds 'port' to the channel's sends/recvs (depending on the op), which we clean up at the
                end of this function. */
             for (size_t i = 0; i < nops; i++) {
@@ -614,22 +624,20 @@ eb_chan_op_t *eb_chan_do(eb_chan_op_t *const ops[], size_t nops) {
             }
         }
         
-        for (;;) {
-            // TODO: randomize iteration!
-            for (size_t i = 0; i < nops; i++) {
-                eb_chan_op_t *op = ops[i];
-                op_result_t r;
-                while ((r = try_op(id, op, port)) == op_result_busy);
-                /* If the op completed, we need to exit! */
-                if (r == op_result_ok) {
-                    result = op;
-                    goto cleanup;
-                }
+        // TODO: randomize iteration!
+        for (size_t i = 0; i < nops; i++) {
+            eb_chan_op_t *op = ops[i];
+            op_result_t r;
+            while ((r = try_op(id, op, port)) == op_result_busy);
+            /* If the op completed, we need to exit! */
+            if (r == op_result_ok) {
+                result = op;
+                goto cleanup;
             }
-            
-            /* Put our thread to sleep until someone alerts us of an event */
-            eb_port_wait(port);
         }
+        
+        /* Put our thread to sleep until someone alerts us of an event */
+        eb_port_wait(port);
     }
     
     /* Cleanup! */

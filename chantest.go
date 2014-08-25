@@ -4,22 +4,22 @@ import (
     "fmt"
     "time"
     "os"
-    // "runtime"
+    "runtime"
 )
 
 const NTRIALS = 1000000
 
-// func thread(c chan string) {
-//     start := time.Now()
-//     for i := 0; i < NTRIALS; i++ {
-//         select {
-//         case <-c:
-//         case c<-"hello":
-//         }
-//     }
-//     fmt.Printf("elapsed (%v): %f\n", NTRIALS, time.Since(start).Seconds())
-//     // os.Exit(0)
-// }
+func thread(c chan string) {
+    start := time.Now()
+    for i := 0; i < NTRIALS; i++ {
+        select {
+        case <-c:
+        case c<-"hello":
+        }
+    }
+    fmt.Printf("elapsed (%v): %f\n", NTRIALS, time.Since(start).Seconds())
+    // os.Exit(0)
+}
 
 func threadSend(c chan string) {
     for i := 0; i < NTRIALS; i++ {
@@ -38,15 +38,15 @@ func threadRecv(c chan string) {
 }
 
 func main() {
-    //runtime.GOMAXPROCS(2)
+    runtime.GOMAXPROCS(2)
     
     c := make(chan string, 0)
     
-    // go thread(c)
-    // go thread(c)
+    go thread(c)
+    go thread(c)
     
-    go threadSend(c)
-    go threadRecv(c)
+    // go threadSend(c)
+    // go threadRecv(c)
     
     time.Sleep(4 * time.Second)
     
