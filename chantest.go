@@ -4,6 +4,7 @@ import (
     "fmt"
     "time"
     "os"
+    // "runtime"
 )
 
 const NTRIALS = 1000000
@@ -37,6 +38,8 @@ func threadRecv(c chan string) {
 }
 
 func main() {
+    //runtime.GOMAXPROCS(2)
+    
     c := make(chan string, 0)
     
     // go thread(c)

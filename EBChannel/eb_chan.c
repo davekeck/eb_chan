@@ -26,18 +26,19 @@
 #define CASB OSAtomicCompareAndSwap32Barrier
 
 typedef struct {
+    OSSpinLock lock;
     size_t cap;
     size_t len;
     eb_port_t *ports;
-} *eb_port_list_t;
+} *port_list_t;
 
-static inline void port_list_free(eb_port_list_t l);
+static inline void port_list_free(port_list_t l);
 
 /* Creates a new empty list */
-static eb_port_list_t port_list_alloc(size_t cap) {
+static port_list_t port_list_alloc(size_t cap) {
     assert(cap > 0);
     
-    eb_port_list_t result = malloc(sizeof(*result));
+    port_list_t result = malloc(sizeof(*result));
         eb_assert_or_recover(result, goto failed);
     
     result->lock = OS_SPINLOCK_INIT;
@@ -57,7 +58,7 @@ static eb_port_list_t port_list_alloc(size_t cap) {
 //#define port_list_stack_copy(l) ({                        \
 //    assert(l);                                            \
 //                                                          \
-//    eb_port_list_t r = alloca(sizeof(*(r)));              \
+//    port_list_t r = alloca(sizeof(*(r)));              \
 //    r->cap = l->len;                                      \
 //    r->len = l->len;                                      \
 //    r->ports = alloca(r->len * sizeof(*(r->ports)));      \
@@ -69,7 +70,7 @@ static eb_port_list_t port_list_alloc(size_t cap) {
 //    r;                                                    \
 //})
 //
-//static inline void port_list_stack_free(eb_port_list_t l) {
+//static inline void port_list_stack_free(port_list_t l) {
 //    assert(l);
 //    /* Release each port in our list */
 //    for (size_t i = 0; i < l->len; i++) {
@@ -79,7 +80,7 @@ static eb_port_list_t port_list_alloc(size_t cap) {
 //}
 
 /* Releases every port in the list, and frees the list itself */
-static inline void port_list_free(eb_port_list_t l) {
+static inline void port_list_free(port_list_t l) {
     /* Intentionally allowing l==NULL */
     if (!l) {
         return;
@@ -98,60 +99,74 @@ static inline void port_list_free(eb_port_list_t l) {
 }
 
 /* Add a port to the end of the list, expanding the buffer as necessary */
-static inline void port_list_add(eb_port_list_t l, const eb_port_t p) {
+static inline void port_list_add(port_list_t l, const eb_port_t p) {
     assert(l);
     assert(p);
     
-    /* Sanity-check that the list's length is less than its capacity */
-    eb_assert_or_bail(l->len <= l->cap, "Sanity check failed");
-    
-    /* Expand the list's buffer if it's full */
-    if (l->len == l->cap) {
-        l->cap *= 2;
-        l->ports = realloc(l->ports, l->cap * sizeof(*(l->ports)));
-        // TODO: handle allocation failures better
-        eb_assert_or_recover(l->ports, return);
-    }
-    
-    l->ports[l->len] = eb_port_retain(p);
-    l->len++;
+    OSSpinLockLock(&l->lock);
+        /* Sanity-check that the list's length is less than its capacity */
+        eb_assert_or_bail(l->len <= l->cap, "Sanity check failed");
+        
+        /* Expand the list's buffer if it's full */
+        if (l->len == l->cap) {
+            l->cap *= 2;
+            l->ports = realloc(l->ports, l->cap * sizeof(*(l->ports)));
+            // TODO: handle allocation failures better
+            eb_assert_or_recover(l->ports, return);
+        }
+        
+        l->ports[l->len] = eb_port_retain(p);
+        l->len++;
+    OSSpinLockUnlock(&l->lock);
 }
 
 /* Remove the first occurence of 'p' in the list. Returns whether a port was actually removed. */
-static inline bool port_list_rm(eb_port_list_t l, eb_port_t p) {
+static inline bool port_list_rm(port_list_t l, eb_port_t p) {
     assert(l);
     assert(p);
     
-    /* Sanity-check that the list's length is less than its capacity */
-    eb_assert_or_bail(l->len <= l->cap, "Sanity-check failed");
-    
-    /* Search for first occurence of the given port. If we find it, release it and move all subsequent ports up one spot. */
-    for (size_t i = 0; i < l->len; i++) {
-        if (l->ports[i] == p) {
-            /* Release the port */
-            eb_port_release(l->ports[i]);
-            /* Move the last element in the port list into the now-vacant spot */
-            l->ports[i] = l->ports[l->len-1];
-            /* Decrement the buffer length */
-            l->len--;
-            return true;
+    bool result = false;
+    OSSpinLockLock(&l->lock);
+        /* Sanity-check that the list's length is less than its capacity */
+        eb_assert_or_bail(l->len <= l->cap, "Sanity-check failed");
+        
+        /* Search for first occurence of the given port. If we find it, release it and move the last port in the list into the hole. */
+        for (size_t i = 0; i < l->len; i++) {
+            if (l->ports[i] == p) {
+                /* Release the port */
+                eb_port_release(l->ports[i]);
+                /* Move the last element in the port list into the now-vacant spot */
+                l->ports[i] = l->ports[l->len-1];
+                /* Decrement the buffer length */
+                l->len--;
+                result = true;
+                break;
+            }
         }
-    }
-    return false;
+    OSSpinLockUnlock(&l->lock);
+    return result;
 }
 
 /* Returns a retained reference to the first port that isn't 'ignore', or NULL otherwise. */
 // TODO: we may want to randomize the port that we pick out of the list?
-static inline eb_port_t port_list_first(const eb_port_list_t l, eb_port_t ignore) {
+static inline void port_list_signal_first(const port_list_t l, eb_port_t ignore) {
     assert(l);
     
-    for (size_t i = 0; i < l->len; i++) {
-        if (l->ports[i] != ignore) {
-            return eb_port_retain(l->ports[i]);
+    eb_port_t p = NULL;
+    OSSpinLockLock(&l->lock);
+        for (size_t i = 0; i < l->len; i++) {
+            if (l->ports[i] != ignore) {
+                p = eb_port_retain(l->ports[i]);
+                break;
+            }
         }
-    }
+    OSSpinLockUnlock(&l->lock);
     
-    return NULL;
+    if (p) {
+        eb_port_signal(p);
+        eb_port_release(p);
+        p = NULL;
+    }
 }
 
 enum {
@@ -167,8 +182,8 @@ struct eb_chan {
     bool open;
     size_t buf_cap;
     
-    eb_port_list_t sends;
-    eb_port_list_t recvs;
+    port_list_t sends;
+    port_list_t recvs;
     
     /* Buffered ivars */
     size_t buf_len;
@@ -246,8 +261,8 @@ void eb_chan_close(eb_chan_t c) {
 //    assert(c);
 //    
 //    /* Mark ourself as closed, and wake up senders/receivers so that they notice our new state and act appropriately. */
-////    eb_port_list_t sends = NULL;
-////    eb_port_list_t recvs = NULL;
+////    port_list_t sends = NULL;
+////    port_list_t recvs = NULL;
 //    SpinLock(&c->lock, true);
 //        eb_assert_or_bail(c->open, "Can't close a channel that's already closed.");
 //        c->open = false;
@@ -305,7 +320,7 @@ typedef enum {
     op_result_busy,    /* The channel was busy so we need to try again (we neither succeeded nor failed) */
 } op_result_t;
 
-static inline op_result_t send_buf(uintptr_t id, const eb_chan_op_t *op, eb_port_t port, bool reg_port) {
+static inline op_result_t send_buf(uintptr_t id, const eb_chan_op_t *op, eb_port_t port) {
     abort();
     return op_result_fail;
     
@@ -316,7 +331,7 @@ static inline op_result_t send_buf(uintptr_t id, const eb_chan_op_t *op, eb_port
 //    bool result = false;
 //    if (SpinLock(&chan->lock, port != NULL)) {
 //        eb_assert_or_bail(chan->open, "Can't send on closed channel.");
-//        eb_port_list_t wakeup_ports = NULL;
+//        port_list_t wakeup_ports = NULL;
 //        if (chan->buf_len < chan->buf_cap) {
 //            /* ## Sending, buffered, channel open, buffer has space */
 //            /* Add the value to the buffer */
@@ -344,10 +359,9 @@ static inline op_result_t send_buf(uintptr_t id, const eb_chan_op_t *op, eb_port
 //    return result;
 }
 
-static inline op_result_t send_unbuf(uintptr_t id, const eb_chan_op_t *op, eb_port_t port, bool reg_port) {
+static inline op_result_t send_unbuf(uintptr_t id, const eb_chan_op_t *op, eb_port_t port) {
         assert(op);
         assert(op->chan);
-        assert(!reg_port || port);
     
     eb_chan_t chan = op->chan;
     op_result_t result = op_result_fail;
@@ -358,35 +372,25 @@ static inline op_result_t send_unbuf(uintptr_t id, const eb_chan_op_t *op, eb_po
         chan->unbuf_send_id = id;
         chan->unbuf_send_op = op;
         chan->unbuf_send_port = port;
-        /* Get a reference to the first recv that isn't 'port', before we relinquish unbuf_state. */
-        eb_port_t wakeup_port = port_list_first(chan->recvs, port);
         assert(CASB(unbuf_state_busy, unbuf_state_send, &chan->unbuf_state));
-        
-        /* Signal and release wakeup_port */
-        if (wakeup_port) {
-            eb_port_signal(wakeup_port);
-            eb_port_release(wakeup_port);
-            wakeup_port = NULL;
-        }
-    } else if (reg_port && CAS(unbuf_state_send, unbuf_state_busy, &chan->unbuf_state)) {
-        /* reg_port and the channel's sending, so register 'port' if we own the send op */
-        if (chan->unbuf_send_op == op) {
+        /* Signal the first port in 'recvs' that isn't 'port' */
+        port_list_signal_first(chan->recvs, port);
+    } else if (CAS(unbuf_state_send, unbuf_state_busy, &chan->unbuf_state)) {
+        if (port && chan->unbuf_send_op == op) {
             /* We own the send op that's in progress, so assign chan's unbuf_send_port */
             /* Verify that the _send_id matches our 'id' parameter. If this assertion fails, it means there's likely
                some static eb_chan_op_t being shared by multiple threads, which isn't allowed. */
             eb_assert_or_bail(chan->unbuf_send_id == id, "Send id invalid");
             /* Assign the port */
             chan->unbuf_send_port = port;
-        } else {
-            /* We don't own the send op that's in progress, so add our port to chan's 'sends' */
-            port_list_add(chan->sends, port);
         }
         assert(CASB(unbuf_state_busy, unbuf_state_send, &chan->unbuf_state));
         /* The channel's already sending so the caller should move on to the next op */
         result = op_result_fail;
-    } else if (CAS(unbuf_state_send, unbuf_state_send, &chan->unbuf_state)) {
-        /* The channel's already sending so the caller should move on to the next op */
-        result = op_result_fail;
+        // TODO: uncomment for optimization (and add port!=NULL requirement to previous if-expression)
+//    } else if (CAS(unbuf_state_send, unbuf_state_send, &chan->unbuf_state)) {
+//        /* The channel's already sending so the caller should move on to the next op */
+//        result = op_result_fail;
     } else if (CAS(unbuf_state_recv, unbuf_state_busy, &chan->unbuf_state)) {
         /* Check the send op in progress to see if it's ours */
         if (chan->unbuf_send_op == op) {
@@ -411,7 +415,7 @@ static inline op_result_t send_unbuf(uintptr_t id, const eb_chan_op_t *op, eb_po
     return result;
 }
 
-static inline op_result_t recv_buf(uintptr_t id, const eb_chan_op_t *op, eb_port_t port, bool reg_port) {
+static inline op_result_t recv_buf(uintptr_t id, const eb_chan_op_t *op, eb_port_t port) {
     abort();
     return op_result_fail;
     
@@ -421,7 +425,7 @@ static inline op_result_t recv_buf(uintptr_t id, const eb_chan_op_t *op, eb_port
 //    eb_chan_t chan = op->chan;
 //    bool result = false;
 //    if (SpinLock(&chan->lock, port != NULL)) {
-//        eb_port_list_t wakeup_ports = NULL;
+//        port_list_t wakeup_ports = NULL;
 //        if (chan->buf_len) {
 //            /* ## Receiving, buffered, buffer non-empty */
 //            /* Set our op's state signifying that we received a value */
@@ -459,10 +463,9 @@ static inline op_result_t recv_buf(uintptr_t id, const eb_chan_op_t *op, eb_port
 //    return result;
 }
 
-static inline op_result_t recv_unbuf(uintptr_t id, eb_chan_op_t *op, eb_port_t port, bool reg_port) {
+static inline op_result_t recv_unbuf(uintptr_t id, eb_chan_op_t *op, eb_port_t port) {
         assert(op);
         assert(op->chan);
-        assert(!reg_port || port);
     
     eb_chan_t chan = op->chan;
     op_result_t result = op_result_fail;
@@ -474,11 +477,7 @@ static inline op_result_t recv_unbuf(uintptr_t id, eb_chan_op_t *op, eb_port_t p
             op->val = chan->unbuf_send_op->val;
             
             /* Get a reference to the sender that's in progress */
-            eb_port_t wakeup_port = NULL;
-            if (chan->unbuf_send_port) {
-                wakeup_port = eb_port_retain(chan->unbuf_send_port);
-            }
-            
+            eb_port_t wakeup_port = (chan->unbuf_send_port ? eb_port_retain(chan->unbuf_send_port) : NULL);
             assert(CAS(unbuf_state_busy, unbuf_state_recv, &chan->unbuf_state));
             
             /* Wake up the sender */
@@ -490,26 +489,17 @@ static inline op_result_t recv_unbuf(uintptr_t id, eb_chan_op_t *op, eb_port_t p
             
             /* Poll until chan's unbuf_state is either _done or _cancelled, and reset the state to _idle. */
             for (;;) {
-                if (CAS(unbuf_state_done, unbuf_state_busy, &chan->unbuf_state)) {
+                if (CAS(unbuf_state_done, unbuf_state_idle, &chan->unbuf_state)) {
                     result = op_result_ok;
                     break;
-                } else if (CAS(unbuf_state_cancelled, unbuf_state_busy, &chan->unbuf_state)) {
+                } else if (CAS(unbuf_state_cancelled, unbuf_state_idle, &chan->unbuf_state)) {
                     result = op_result_fail;
                     break;
                 }
             }
             
-            /* Get a reference to any sender other than 'port', to signal after we relinquish unbuf_state, since it can now proceed. */
-            wakeup_port = port_list_first(chan->sends, port);
-            
-            assert(CAS(unbuf_state_busy, unbuf_state_idle, &chan->unbuf_state));
-            
-            /* Wake up the sender */
-            if (wakeup_port) {
-                eb_port_signal(wakeup_port);
-                eb_port_release(wakeup_port);
-                wakeup_port = NULL;
-            }
+            /* Signal the first port in 'sends' that isn't 'port' */
+            port_list_signal_first(chan->sends, port);
         } else {
             /* We can't receive from our own op */
             assert(CAS(unbuf_state_busy, unbuf_state_send, &chan->unbuf_state));
@@ -524,7 +514,7 @@ static inline op_result_t recv_unbuf(uintptr_t id, eb_chan_op_t *op, eb_port_t p
     return result;
 }
 
-static inline op_result_t cleanup_after_op(const eb_chan_op_t *op, eb_port_t port) {
+static inline op_result_t cleanup_after_op(uintptr_t id, const eb_chan_op_t *op, eb_port_t port) {
         assert(op);
     eb_chan_t chan = op->chan;
     op_result_t result = op_result_fail;
@@ -547,6 +537,9 @@ static inline op_result_t cleanup_after_op(const eb_chan_op_t *op, eb_port_t por
                 result = op_result_ok;
             } else if (CAS(unbuf_state_recv, unbuf_state_busy, &chan->unbuf_state)) {
                 if (chan->unbuf_send_op == op) {
+                    /* Verify that the _send_id matches our 'id' parameter. If this assertion fails, it means there's likely
+                       some static eb_chan_op_t being shared by multiple threads, which isn't allowed. */
+                    eb_assert_or_bail(chan->unbuf_send_id == id, "Send id invalid");
                     /* 'op' was in the process of an unbuffered send on the channel, and a receiver is waiting on
                        the send, so set unbuf_state to _cancelled so that the receiver notices and stops waiting
                        on the sender. */
@@ -567,16 +560,16 @@ static inline op_result_t cleanup_after_op(const eb_chan_op_t *op, eb_port_t por
     return result;
 }
 
-static inline op_result_t try_op(uintptr_t id, eb_chan_op_t *op, eb_port_t port, bool reg_port) {
+static inline op_result_t try_op(uintptr_t id, eb_chan_op_t *op, eb_port_t port) {
         assert(op);
     eb_chan_t chan = op->chan;
     if (chan) {
         if (op->send) {
             /* ## Send */
-            return (chan->buf_cap ? send_buf(id, op, port, reg_port) : send_unbuf(id, op, port, reg_port));
+            return (chan->buf_cap ? send_buf(id, op, port) : send_unbuf(id, op, port));
         } else if (!op->send) {
             /* ## Receive */
-            return (chan->buf_cap ? recv_buf(id, op, port, reg_port) : recv_unbuf(id, op, port, reg_port));
+            return (chan->buf_cap ? recv_buf(id, op, port) : recv_unbuf(id, op, port));
         }
     }
     return op_result_fail;
@@ -589,6 +582,7 @@ eb_chan_op_t *eb_chan_do(eb_chan_op_t *const ops[], size_t nops) {
         assert(ops);
     eb_port_t port = NULL;
     eb_chan_op_t *result = NULL;
+    uintptr_t id = (uintptr_t)&result;
     /* ## Fast path: loop randomly over our operations to see if one of them was able to send/receive.
        If not, we'll enter the slow path where we put our thread to sleep until we're signalled. */
     if (nops) {
@@ -597,7 +591,7 @@ eb_chan_op_t *eb_chan_do(eb_chan_op_t *const ops[], size_t nops) {
             // TODO: not using random() here speeds this up a lot, so we should generate random bits more efficiently
 //            result = try_op((uintptr_t)&result, ops[(random() % nops)], NULL);
             eb_chan_op_t *op = ops[(i % nops)];
-            op_result_t r = try_op((uintptr_t)&result, op, NULL, false);
+            op_result_t r = try_op(id, op, NULL);
             /* If the op completed, we need to exit! */
             if (r == op_result_ok) {
                 result = op;
@@ -615,39 +609,47 @@ eb_chan_op_t *eb_chan_do(eb_chan_op_t *const ops[], size_t nops) {
     /* ## Register our port for the appropriate notifications on every channel. */
     /* This adds 'port' to the channel's sends/recvs (depending on the op), which we clean up at the
        end of this function. */
-    // TODO: randomize iteration!
     for (size_t i = 0; i < nops; i++) {
         eb_chan_op_t *op = ops[i];
-        op_result_t r;
-        while ((r = try_op((uintptr_t)&result, op, port, true)) == op_result_busy);
-        /* If the op completed, we need to exit! */
-        if (r == op_result_ok) {
-            result = op;
-            goto cleanup;
+        eb_chan_t chan = op->chan;
+        if (chan) {
+            port_list_add((op->send ? chan->sends : chan->recvs), port);
         }
     }
     
     for (;;) {
-        /* Put our thread to sleep until someone alerts us of an event */
-        eb_port_wait(port);
-        
         // TODO: randomize iteration!
         for (size_t i = 0; i < nops; i++) {
             eb_chan_op_t *op = ops[i];
             op_result_t r;
-            while ((r = try_op((uintptr_t)&result, op, NULL, false)) == op_result_busy);
+            while ((r = try_op(id, op, port)) == op_result_busy);
             /* If the op completed, we need to exit! */
             if (r == op_result_ok) {
                 result = op;
                 goto cleanup;
             }
         }
+        
+        /* Put our thread to sleep until someone alerts us of an event */
+        eb_port_wait(port);
     }
     
     /* Cleanup! */
     cleanup: {
+        if (port) {
+            for (size_t i = 0; i < nops; i++) {
+                eb_chan_op_t *op = ops[i];
+                eb_chan_t chan = op->chan;
+                if (chan) {
+                    port_list_t ports = (op->send ? chan->sends : chan->recvs);
+                    port_list_rm(ports, port);
+                    port_list_signal_first(ports, port);
+                }
+            }
+        }
+        
         for (size_t i = 0; i < nops; i++) {
-            while (cleanup_after_op(ops[i], port) == op_result_busy);
+            while (cleanup_after_op(id, ops[i], port) == op_result_busy);
         }
         
         if (port) {
@@ -663,10 +665,11 @@ eb_chan_op_t *eb_chan_try(eb_chan_op_t *const ops[], size_t nops) {
     // TODO: randomize iteration!
     // TODO: we need to call cleanup_after_op() here, because we may need to reset unbuf_state
     eb_chan_op_t *result = NULL;
+    uintptr_t id = (uintptr_t)&result;
     for (size_t i = 0; i < nops; i++) {
         eb_chan_op_t *op = ops[i];
         op_result_t r;
-        while ((r = try_op((uintptr_t)&result, op, NULL)) == op_result_busy);
+        while ((r = try_op(id, op, NULL)) == op_result_busy);
         /* If the op completed, we need to exit! */
         if (r == op_result_ok) {
             result = op;
