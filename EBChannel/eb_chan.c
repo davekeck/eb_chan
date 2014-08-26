@@ -7,20 +7,20 @@
 #include "eb_assert.h"
 #include "eb_port.h"
 
-//#define OSSpinLock int32_t
-//#define OS_SPINLOCK_INIT 0
-//
-//#define OSSpinLockTry(l) ({                                \
-//    OSAtomicCompareAndSwap32(false, true, l);              \
-//})
-//
-//#define OSSpinLockLock(l) ({                                \
-//    while (!OSAtomicCompareAndSwap32(false, true, l));      \
-//})
-//
-//#define OSSpinLockUnlock(l) ({                                  \
-//    assert(OSAtomicCompareAndSwap32Barrier(true, false, l));    \
-//})
+#define OSSpinLock int32_t
+#define OS_SPINLOCK_INIT 0
+
+#define OSSpinLockTry(l) ({                                \
+    OSAtomicCompareAndSwap32(false, true, l);              \
+})
+
+#define OSSpinLockLock(l) ({                                \
+    while (!OSAtomicCompareAndSwap32(false, true, l));      \
+})
+
+#define OSSpinLockUnlock(l) ({                                  \
+    assert(OSAtomicCompareAndSwap32Barrier(true, false, l));    \
+})
 
 #define CAS OSAtomicCompareAndSwap32
 #define CASB OSAtomicCompareAndSwap32Barrier
@@ -53,31 +53,6 @@ static inline port_list_t port_list_alloc(size_t cap) {
         return NULL;
     }
 }
-
-///* Creates a new list on the stack by copying every port into the new list, and retaining each port in the process */
-//#define port_list_stack_copy(l) ({                        \
-//    assert(l);                                            \
-//                                                          \
-//    port_list_t r = alloca(sizeof(*(r)));              \
-//    r->cap = l->len;                                      \
-//    r->len = l->len;                                      \
-//    r->ports = alloca(r->len * sizeof(*(r->ports)));      \
-//                                                          \
-//    for (size_t i = 0; i < r->len; i++) {                 \
-//        r->ports[i] = eb_port_retain(l->ports[i]);        \
-//    }                                                     \
-//                                                          \
-//    r;                                                    \
-//})
-//
-//static inline void port_list_stack_free(port_list_t l) {
-//    assert(l);
-//    /* Release each port in our list */
-//    for (size_t i = 0; i < l->len; i++) {
-//        eb_port_release(l->ports[i]);
-//    }
-//    l->ports = NULL;
-//}
 
 /* Releases every port in the list, and frees the list itself */
 static inline void port_list_free(port_list_t l) {
@@ -147,7 +122,7 @@ static inline bool port_list_rm(port_list_t l, eb_port_t p) {
     return result;
 }
 
-/* Returns a retained reference to the first port that isn't 'ignore', or NULL otherwise. */
+/* Signal the first port in the list that isn't 'ignore' */
 // TODO: we may want to randomize the port that we pick out of the list?
 static inline void port_list_signal_first(const port_list_t l, eb_port_t ignore) {
     assert(l);
@@ -256,29 +231,25 @@ void eb_chan_free(eb_chan_t c) {
 
 /* Close a channel */
 void eb_chan_close(eb_chan_t c) {
-    abort();
+    assert(c);
     
-//    assert(c);
-//    
-//    /* Mark ourself as closed, and wake up senders/receivers so that they notice our new state and act appropriately. */
-////    port_list_t sends = NULL;
-////    port_list_t recvs = NULL;
-//    SpinLock(&c->lock, true);
-//        eb_assert_or_bail(c->open, "Can't close a channel that's already closed.");
-//        c->open = false;
-//        // TODO: notify head of sends/recvs
-////        sends = port_list_stack_copy(c->sends);
-////        recvs = port_list_stack_copy(c->recvs);
-//    SpinUnlock(&c->lock);
-//    
-//    /* Wake up our senders/receivers so they notice our new closed state. */
-//    port_list_signal(sends, NULL);
-//    port_list_stack_free(sends);
-//    sends = NULL;
-//    
-//    port_list_signal(recvs, NULL);
-//    port_list_stack_free(recvs);
-//    recvs = NULL;
+    for (;;) {
+        if (CAS(state_idle, state_busy, &c->state)) {
+            /* Verify that the channel hasn't been closed already */
+            eb_assert_or_bail(c->open, "Illegal close of already-closed channel.");
+            c->open = false;
+            assert(CASB(state_busy, state_idle, &c->state));
+            break;
+        }
+        
+        /* Verify that the channel isn't in the process of sending */
+        state_t s = c->state;
+        eb_assert_or_bail(s != state_send && s != state_recv, "Illegal close of channel while send is in progress.");
+    }
+    
+    /* Wake up the first sender/receiver */
+    port_list_signal_first(c->sends, NULL);
+    port_list_signal_first(c->recvs, NULL);
 }
 
 /* Getters */
@@ -288,20 +259,18 @@ size_t eb_chan_get_buf_cap(eb_chan_t c) {
 }
 
 size_t eb_chan_get_buf_len(eb_chan_t c) {
-    abort();
+    assert(c);
     
-//    assert(c);
-//    
-//    /* buf_len is only valid if the channel's buffered */
-//    if (!c->buf_cap) {
-//        return 0;
-//    }
-//    
-//    size_t r = 0;
-//    SpinLock(&c->lock, true);
-//        r = c->buf_len;
-//    SpinUnlock(&c->lock);
-//    return r;
+    /* buf_len is only valid if the channel's buffered */
+    if (!c->buf_cap) {
+        return 0;
+    }
+    
+    size_t r = 0;
+    while (!CAS(state_idle, state_busy, &c->state));
+    r = c->buf_len;
+    assert(CAS(state_busy, state_idle, &c->state));
+    return r;
 }
 
 /* Op-making convenience functions */
@@ -416,6 +385,9 @@ static inline op_result_t send_unbuf(uintptr_t id, const eb_chan_op_t *op, eb_po
     
     /* Attempt to gain control of the channel's state */
     if (CAS(state_idle, state_busy, &chan->state)) {
+        /* Verify that the channel's still open */
+        eb_assert_or_bail(chan->open, "Illegal send on closed channel");
+        
         /* We successfully gained control of state, so assign our fields. */
         chan->unbuf_send_id = id;
         chan->unbuf_send_op = op;
@@ -423,7 +395,7 @@ static inline op_result_t send_unbuf(uintptr_t id, const eb_chan_op_t *op, eb_po
         assert(CASB(state_busy, state_send, &chan->state));
         /* Signal the first port in 'recvs' that isn't 'port' */
         port_list_signal_first(chan->recvs, port);
-        /* Move on to the next op */
+        /* We only started the send process, so tell the caller to move on to the next op. */
         result = op_result_next;
     } else if (CAS(state_send, state_busy, &chan->state)) {
         if (port && chan->unbuf_send_op == op) {
@@ -465,8 +437,19 @@ static inline op_result_t recv_unbuf(uintptr_t id, eb_chan_op_t *op, eb_port_t p
     eb_chan_t chan = op->chan;
     op_result_t result = op_result_busy;
     
-    /* Attempt to gain control of the channel's state */
-    if (CAS(state_send, state_busy, &chan->state)) {
+    if (CAS(state_idle, state_busy, &chan->state)) {
+        if (chan->open) {
+            /* Move on to the next op because this channel has nothing to receive */
+            result = op_result_next;
+        } else {
+            /* Set our op's state signifying that we're returning the value due to a closed channel */
+            op->open = false;
+            op->val = NULL;
+            /* We completed this op so set our return value! */
+            result = op_result_complete;
+        }
+        assert(CAS(state_busy, state_idle, &chan->state));
+    } else if (CAS(state_send, state_busy, &chan->state)) {
         if (chan->unbuf_send_id != id) {
             op->open = true;
             op->val = chan->unbuf_send_op->val;
