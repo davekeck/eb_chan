@@ -315,14 +315,14 @@ eb_chan_op_t eb_chan_recv(eb_chan_t c) {
 
 /* Performing operations on a channel */
 typedef enum {
-    op_result_ok,      /* The op succeeded */
-    op_result_fail,    /* The op failed (eg, the buffer was full) and we should move on to the next op */
-    op_result_busy,    /* The channel was busy so we need to try again (we neither succeeded nor failed) */
+    op_result_complete, /* The op succeeded */
+    op_result_next,     /* The op failed (eg, the buffer was full) and we should move on to the next op */
+    op_result_busy,     /* The channel was busy so we need to try again (we neither succeeded nor failed) */
 } op_result_t;
 
 static inline op_result_t send_buf(uintptr_t id, const eb_chan_op_t *op, eb_port_t port) {
     abort();
-    return op_result_fail;
+    return op_result_next;
     
 //        assert(op);
 //        assert(op->chan);
@@ -364,7 +364,7 @@ static inline op_result_t send_unbuf(uintptr_t id, const eb_chan_op_t *op, eb_po
         assert(op->chan);
     
     eb_chan_t chan = op->chan;
-    op_result_t result = op_result_fail;
+    op_result_t result = op_result_next;
     
     /* Attempt to gain control of the channel's unbuf_state */
     if (CAS(unbuf_state_idle, unbuf_state_busy, &chan->unbuf_state)) {
@@ -386,11 +386,11 @@ static inline op_result_t send_unbuf(uintptr_t id, const eb_chan_op_t *op, eb_po
         }
         assert(CASB(unbuf_state_busy, unbuf_state_send, &chan->unbuf_state));
         /* The channel's already sending so the caller should move on to the next op */
-        result = op_result_fail;
+        result = op_result_next;
         // TODO: uncomment for optimization (and add port!=NULL requirement to previous if-expression)
 //    } else if (CAS(unbuf_state_send, unbuf_state_send, &chan->unbuf_state)) {
 //        /* The channel's already sending so the caller should move on to the next op */
-//        result = op_result_fail;
+//        result = op_result_next;
     } else if (CAS(unbuf_state_recv, unbuf_state_busy, &chan->unbuf_state)) {
         /* Check the send op in progress to see if it's ours */
         if (chan->unbuf_send_op == op) {
@@ -400,12 +400,12 @@ static inline op_result_t send_unbuf(uintptr_t id, const eb_chan_op_t *op, eb_po
             eb_assert_or_bail(chan->unbuf_send_id == id, "Send id invalid");
             /* A receiver is currently polling for chan's unbuf_state to change, so update it to signal that we're done sending! */
             assert(CAS(unbuf_state_busy, unbuf_state_done, &chan->unbuf_state));
-            result = op_result_ok;
+            result = op_result_complete;
         } else {
             /* The send op in progress isn't ours, so ignore it and reset unbuf_state back to _recv. */
             assert(CAS(unbuf_state_busy, unbuf_state_recv, &chan->unbuf_state));
             /* The channel's in the process of receiving should move on to the next op */
-            result = op_result_fail;
+            result = op_result_next;
         }
     } else {
         /* Otherwise, we should try the op again because it was in an intermittent state */
@@ -417,7 +417,7 @@ static inline op_result_t send_unbuf(uintptr_t id, const eb_chan_op_t *op, eb_po
 
 static inline op_result_t recv_buf(uintptr_t id, const eb_chan_op_t *op, eb_port_t port) {
     abort();
-    return op_result_fail;
+    return op_result_next;
     
 //        assert(op);
 //        assert(op->chan);
@@ -468,7 +468,7 @@ static inline op_result_t recv_unbuf(uintptr_t id, eb_chan_op_t *op, eb_port_t p
         assert(op->chan);
     
     eb_chan_t chan = op->chan;
-    op_result_t result = op_result_fail;
+    op_result_t result = op_result_next;
     
     /* Attempt to gain control of the channel's unbuf_state */
     if (CAS(unbuf_state_send, unbuf_state_busy, &chan->unbuf_state)) {
@@ -497,10 +497,10 @@ static inline op_result_t recv_unbuf(uintptr_t id, eb_chan_op_t *op, eb_port_t p
             /* Poll until chan's unbuf_state is either _done or _cancelled, and reset the state to _idle. */
             for (;;) {
                 if (CAS(unbuf_state_done, unbuf_state_idle, &chan->unbuf_state)) {
-                    result = op_result_ok;
+                    result = op_result_complete;
                     break;
                 } else if (CAS(unbuf_state_cancelled, unbuf_state_idle, &chan->unbuf_state)) {
-                    result = op_result_fail;
+                    result = op_result_next;
                     break;
                 }
             }
@@ -511,11 +511,11 @@ static inline op_result_t recv_unbuf(uintptr_t id, eb_chan_op_t *op, eb_port_t p
             /* We can't receive from our own op */
             assert(CAS(unbuf_state_busy, unbuf_state_send, &chan->unbuf_state));
             /* Move on to the next op */
-            result = op_result_fail;
+            result = op_result_next;
         }
     } else if (CAS(unbuf_state_recv, unbuf_state_recv, &chan->unbuf_state)) {
         /* Someone's already receiving; tell the caller to move on to the next op. */
-        result = op_result_fail;
+        result = op_result_next;
     } else {
         /* Otherwise, we should try the op again because it was in an intermittent state */
         result = op_result_busy;
@@ -527,7 +527,7 @@ static inline op_result_t recv_unbuf(uintptr_t id, eb_chan_op_t *op, eb_port_t p
 static inline op_result_t cleanup_after_op(uintptr_t id, const eb_chan_op_t *op, eb_port_t port) {
         assert(op);
     eb_chan_t chan = op->chan;
-    op_result_t result = op_result_ok;
+    op_result_t result = op_result_complete;
     
     if (chan) {
         if (op->send && !chan->buf_cap) {
@@ -578,7 +578,7 @@ static inline op_result_t try_op(uintptr_t id, eb_chan_op_t *op, eb_port_t port)
             return (chan->buf_cap ? recv_buf(id, op, port) : recv_unbuf(id, op, port));
         }
     }
-    return op_result_fail;
+    return op_result_next;
 }
 
 eb_chan_op_t *eb_chan_do(eb_chan_op_t *const ops[], size_t nops) {
@@ -598,7 +598,7 @@ eb_chan_op_t *eb_chan_do(eb_chan_op_t *const ops[], size_t nops) {
                 eb_chan_op_t *op = ops[(i % nops)];
                 op_result_t r = try_op(id, op, port);
                 /* If the op completed, we need to exit! */
-                if (r == op_result_ok) {
+                if (r == op_result_complete) {
                     result = op;
                     goto cleanup;
                 }
@@ -630,7 +630,7 @@ eb_chan_op_t *eb_chan_do(eb_chan_op_t *const ops[], size_t nops) {
             op_result_t r;
             while ((r = try_op(id, op, port)) == op_result_busy);
             /* If the op completed, we need to exit! */
-            if (r == op_result_ok) {
+            if (r == op_result_complete) {
                 result = op;
                 goto cleanup;
             }
@@ -677,7 +677,7 @@ eb_chan_op_t *eb_chan_try(eb_chan_op_t *const ops[], size_t nops) {
         op_result_t r;
         while ((r = try_op(id, op, NULL)) == op_result_busy);
         /* If the op completed, we need to exit! */
-        if (r == op_result_ok) {
+        if (r == op_result_complete) {
             result = op;
             break;
         }

@@ -55,11 +55,16 @@ int main(int argc, const char * argv[])
     gChan = eb_chan_alloc(0);
     
     pthread_t thread1, thread2;
-    pthread_create(&thread1, NULL, thread, NULL);
-    pthread_create(&thread2, NULL, thread, NULL);
+    
+    pthread_create(&thread1, NULL, threadSend, NULL);
+    pthread_create(&thread2, NULL, threadRecv, NULL);
+    
+//    pthread_create(&thread1, NULL, thread, NULL);
+//    pthread_create(&thread2, NULL, thread, NULL);
     
     for (;;) {
         sleep(-1);
+        NSLog(@"SLEEPING");
     }
     
     return 0;
