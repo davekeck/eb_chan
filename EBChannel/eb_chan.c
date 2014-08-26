@@ -16,6 +16,7 @@
 
 #define OSSpinLockLock(l) ({                                \
     while (!OSAtomicCompareAndSwap32(false, true, l));      \
+    true;                                           \
 })
 
 #define OSSpinLockUnlock(l) ({                                  \
@@ -24,6 +25,7 @@
 
 #define CAS OSAtomicCompareAndSwap32
 #define CASB OSAtomicCompareAndSwap32Barrier
+//#define OSAtomicIncrement32(v) OSAtomicAdd32(1, v)
 
 typedef struct {
     OSSpinLock lock;
@@ -156,6 +158,7 @@ enum {
 struct eb_chan {
     int32_t change_count;
     
+    OSSpinLock lock;
     state_t state;
     bool open;
     
@@ -384,57 +387,67 @@ static inline op_result_t send_unbuf(uintptr_t id, int32_t *op_change_count, con
         assert(op->chan);
     
     eb_chan_t chan = op->chan;
-    if (!force && chan->change_count == *op_change_count) {
+    if (!force && *((volatile int32_t *)&chan->change_count) == *op_change_count) {
+//        printf("skipping\n");
         return op_result_next;
     }
     
     op_result_t result = op_result_busy;
     
-    /* Attempt to gain control of the channel's state */
-    if (CAS(state_idle, state_busy, &chan->state)) {
-        /* Verify that the channel's still open */
-        eb_assert_or_bail(chan->open, "Illegal send on closed channel");
-        
-        /* We successfully gained control of state, so assign our fields. */
-        chan->unbuf_send_id = id;
-        chan->unbuf_send_op = op;
-        chan->unbuf_send_port = port;
-        *op_change_count = OSAtomicIncrement32(&chan->change_count);
-        assert(CASB(state_busy, state_send, &chan->state));
-        
-        /* Signal the first port in 'recvs' that isn't 'port' */
-        port_list_signal_first(chan->recvs, port);
-        /* We only started the send process, so tell the caller to move on to the next op. */
-        result = op_result_next;
-    } else if (CAS(state_send, state_busy, &chan->state)) {
-        if (port && chan->unbuf_send_op == op) {
-            /* We own the send op that's in progress, so assign chan's unbuf_send_port */
-            /* Verify that the _send_id matches our 'id' parameter. If this assertion fails, it means there's likely
-               some static eb_chan_op_t being shared by multiple threads, which isn't allowed. */
-            eb_assert_or_bail(chan->unbuf_send_id == id, "Send id invalid");
-            /* Assign the port */
+    if (OSSpinLockTry(&chan->lock)) {
+        /* Attempt to gain control of the channel's state */
+        if (chan->state == state_idle) {
+            /* Verify that the channel's still open */
+            eb_assert_or_bail(chan->open, "Illegal send on closed channel");
+            
+            /* We successfully gained control of state, so assign our fields. */
+            chan->state = state_send;
+            chan->unbuf_send_id = id;
+            chan->unbuf_send_op = op;
             chan->unbuf_send_port = port;
             *op_change_count = OSAtomicIncrement32(&chan->change_count);
-        }
-        assert(CASB(state_busy, state_send, &chan->state));
-        /* The channel's already sending so the caller should move on to the next op */
-        result = op_result_next;
-    } else if (CAS(state_recv, state_busy, &chan->state)) {
-        /* Check the send op in progress to see if it's ours */
-        if (chan->unbuf_send_op == op) {
-            /* This is our send op! */
-            /* Verify that the _send_id matches our 'id' parameter. If this assertion fails, it means there's likely
-               some static eb_chan_op_t being shared by multiple threads, which isn't allowed. */
-            eb_assert_or_bail(chan->unbuf_send_id == id, "Send id invalid");
-            *op_change_count = OSAtomicIncrement32(&chan->change_count);
-            /* A receiver is currently polling for chan's state to change, so update it to signal that we're done sending! */
-            assert(CASB(state_busy, state_send_done, &chan->state));
-            result = op_result_complete;
-        } else {
-            /* The send op in progress isn't ours, so ignore it and reset state back to _recv. */
-            assert(CAS(state_busy, state_recv, &chan->state));
-            /* The channel's in the process of receiving should move on to the next op */
+            
+            OSSpinLockUnlock(&chan->lock);
+            
+            /* Signal the first port in 'recvs' that isn't 'port' */
+            port_list_signal_first(chan->recvs, port);
+            /* We only started the send process, so tell the caller to move on to the next op. */
             result = op_result_next;
+        } else if (chan->state == state_send) {
+            if (port && chan->unbuf_send_op == op) {
+                /* We own the send op that's in progress, so assign chan's unbuf_send_port */
+                /* Verify that the _send_id matches our 'id' parameter. If this assertion fails, it means there's likely
+                   some static eb_chan_op_t being shared by multiple threads, which isn't allowed. */
+                eb_assert_or_bail(chan->unbuf_send_id == id, "Send id invalid");
+                /* Assign the port */
+                chan->unbuf_send_port = port;
+                OSAtomicIncrement32(&chan->change_count);
+            }
+            *op_change_count = chan->change_count;
+            /* The channel's already sending so the caller should move on to the next op */
+            result = op_result_next;
+            
+            OSSpinLockUnlock(&chan->lock);
+        } else if (chan->state == state_recv) {
+            /* Check the send op in progress to see if it's ours */
+            if (chan->unbuf_send_op == op) {
+                /* This is our send op! */
+                /* Verify that the _send_id matches our 'id' parameter. If this assertion fails, it means there's likely
+                   some static eb_chan_op_t being shared by multiple threads, which isn't allowed. */
+                eb_assert_or_bail(chan->unbuf_send_id == id, "Send id invalid");
+                *op_change_count = OSAtomicIncrement32(&chan->change_count);
+                /* A receiver is currently polling for chan's state to change, so update it to signal that we're done sending! */
+                chan->state = state_send_done;
+                result = op_result_complete;
+            } else {
+                *op_change_count = chan->change_count;
+                /* The channel's in the process of receiving should move on to the next op */
+                result = op_result_next;
+            }
+            
+            OSSpinLockUnlock(&chan->lock);
+        } else {
+            OSSpinLockUnlock(&chan->lock);
         }
     }
     
@@ -447,80 +460,81 @@ static inline op_result_t recv_unbuf(uintptr_t id, int32_t *op_change_count, eb_
         assert(op->chan);
     
     eb_chan_t chan = op->chan;
-    if (!force && chan->change_count == *op_change_count) {
+    if (!force && *((volatile int32_t *)&chan->change_count) == *op_change_count) {
+//        printf("skipping\n");
         return op_result_next;
     }
     
     op_result_t result = op_result_busy;
-    if (CAS(state_idle, state_busy, &chan->state)) {
-        if (chan->open) {
-            /* Move on to the next op because this channel has nothing to receive */
-            result = op_result_next;
-        } else {
-            /* Set our op's state signifying that we're returning the value due to a closed channel */
-            op->open = false;
-            op->val = NULL;
-            /* We completed this op so set our return value! */
-            result = op_result_complete;
-        }
-        assert(CAS(state_busy, state_idle, &chan->state));
-    } else if (CAS(state_send, state_busy, &chan->state)) {
-        if (chan->unbuf_send_id != id) {
-            op->open = true;
-            op->val = chan->unbuf_send_op->val;
-            
-            /* Get a reference to the sender that's in progress */
-            eb_port_t wakeup_port = (chan->unbuf_send_port ? eb_port_retain(chan->unbuf_send_port) : NULL);
-            int32_t last_change_count = OSAtomicIncrement32(&chan->change_count);
-            *op_change_count = last_change_count;
-            assert(CASB(state_busy, state_recv, &chan->state));
-            
-            /* Wake up the sender */
-            if (wakeup_port) {
-                eb_port_signal(wakeup_port);
-                eb_port_release(wakeup_port);
-                wakeup_port = NULL;
+    
+    if (OSSpinLockTry(&chan->lock)) {
+        if (chan->state == state_idle) {
+            if (chan->open) {
+                *op_change_count = chan->change_count;
+                /* Move on to the next op because this channel has nothing to receive */
+                result = op_result_next;
+            } else {
+                /* Set our op's state signifying that we're returning the value due to a closed channel */
+                op->open = false;
+                op->val = NULL;
+                /* We completed this op so set our return value! */
+                result = op_result_complete;
             }
+            OSSpinLockUnlock(&chan->lock);
             
-            // slight performance boost by checking values before we actually do CAS
-//            for (;;) {
-//                if (*((volatile state_t *)&chan->state) == state_send_done || *((volatile state_t *)&chan->state) == state_send_cancelled) {
-//                    break;
-//                }
-//            }
-            
-            while (*((volatile int32_t *)&chan->change_count) == last_change_count);
-            
-            /* Poll until chan's state is either _done or _cancelled, and reset the state to _idle. */
-            for (;;) {
-                if (CAS(state_send_done, state_busy, &chan->state)) {
-                    
-                    *op_change_count = OSAtomicIncrement32(&chan->change_count);
-                    assert(CAS(state_busy, state_idle, &chan->state));
-                    
-                    result = op_result_complete;
-                    break;
-                } else if (CAS(state_send_cancelled, state_busy, &chan->state)) {
-                    
-                    *op_change_count = OSAtomicIncrement32(&chan->change_count);
-                    assert(CAS(state_busy, state_idle, &chan->state));
-                    
-                    result = op_result_next;
-                    break;
+        } else if (chan->state == state_send) {
+            if (chan->unbuf_send_id != id) {
+                op->open = true;
+                op->val = chan->unbuf_send_op->val;
+                
+                /* Get a reference to the sender that's in progress */
+                eb_port_t wakeup_port = (chan->unbuf_send_port ? eb_port_retain(chan->unbuf_send_port) : NULL);
+                int32_t last_change_count = OSAtomicIncrement32(&chan->change_count);
+                *op_change_count = last_change_count;
+                chan->state = state_recv;
+                OSSpinLockUnlock(&chan->lock);
+                
+                /* Wake up the sender */
+                if (wakeup_port) {
+                    eb_port_signal(wakeup_port);
+                    eb_port_release(wakeup_port);
+                    wakeup_port = NULL;
                 }
+                
+                // slight performance boost by checking values before we actually do CAS
+    //            for (;;) {
+    //                if (*((volatile state_t *)&chan->state) == state_send_done || *((volatile state_t *)&chan->state) == state_send_cancelled) {
+    //                    break;
+    //                }
+    //            }
+                
+                while (*((volatile int32_t *)&chan->change_count) == last_change_count);
+                
+                OSSpinLockLock(&chan->lock);
+                    *op_change_count = OSAtomicIncrement32(&chan->change_count);
+                    if (chan->state == state_send_done) {
+                        result = op_result_complete;
+                    } else if (chan->state == state_send_cancelled) {
+                        result = op_result_next;
+                    } else {
+                        abort();
+                    }
+                    
+                    chan->state = state_idle;
+                OSSpinLockUnlock(&chan->lock);
+                
+                /* Signal the first port in 'sends' that isn't 'port' */
+                port_list_signal_first(chan->sends, port);
+            } else {
+                *op_change_count = chan->change_count;
+                /* Move on to the next op */
+                result = op_result_next;
             }
-            
-            /* Signal the first port in 'sends' that isn't 'port' */
-            port_list_signal_first(chan->sends, port);
-        } else {
-            /* We can't receive from our own op */
-            assert(CAS(state_busy, state_send, &chan->state));
-            /* Move on to the next op */
+        } else if (chan->state == state_recv) {
+            *op_change_count = chan->change_count;
+            /* Someone's already receiving; tell the caller to move on to the next op. */
             result = op_result_next;
         }
-    } else if (CAS(state_recv, state_recv, &chan->state)) {
-        /* Someone's already receiving; tell the caller to move on to the next op. */
-        result = op_result_next;
     }
     
     return result;
@@ -530,38 +544,44 @@ static inline bool cleanup_after_op(uintptr_t id, const eb_chan_op_t *op, eb_por
         assert(op);
     eb_chan_t chan = op->chan;
     bool result = true;
-    
+    // TODO: still need to update this function to update change_count!
     if (chan) {
         if (op->send && !chan->buf_cap) {
-            if (CAS(state_idle, state_idle, &chan->state)) {
-                /* The channel doesn't need to be cleaned up because it's idle, so there's nothing to do in this
-                   case except prevent the else case from running. */
-            } else if (CAS(state_send, state_busy, &chan->state)) {
-                if (chan->unbuf_send_op == op) {
-                    /* 'op' was in the process of an unbuffered send on the channel, but no receiver had arrived
-                       yet, so reset state to _idle. */
-                    assert(CAS(state_busy, state_idle, &chan->state));
-                    /* Signal chan's first 'sends' because one of them can now proceed */
-                    port_list_signal_first(chan->sends, port);
+            if (OSSpinLockTry(&chan->lock)) {
+                if (chan->state == state_idle) {
+                    /* The channel doesn't need to be cleaned up because it's idle, so there's nothing to do in this
+                       case except prevent the else case from running. */
+                    OSSpinLockUnlock(&chan->lock);
+                } else if (chan->state == state_send) {
+                    if (chan->unbuf_send_op == op) {
+                        /* 'op' was in the process of an unbuffered send on the channel, but no receiver had arrived
+                           yet, so reset state to _idle. */
+                        chan->state = state_idle;
+                        OSSpinLockUnlock(&chan->lock);
+                        
+                        /* Signal chan's first 'sends' because one of them can now proceed */
+                        port_list_signal_first(chan->sends, port);
+                    } else {
+                        OSSpinLockUnlock(&chan->lock);
+                    }
+                } else if (chan->state == state_recv) {
+                    if (chan->unbuf_send_op == op) {
+                        /* Verify that the _send_id matches our 'id' parameter. If this assertion fails, it means there's likely
+                           some static eb_chan_op_t being shared by multiple threads, which isn't allowed. */
+                        eb_assert_or_bail(chan->unbuf_send_id == id, "Send id invalid");
+                        /* 'op' was in the process of an unbuffered send on the channel, and a receiver is waiting on
+                           the send, so set state to _cancelled so that the receiver notices and stops waiting
+                           on the sender. */
+                        chan->state = state_send_cancelled;
+                    }
+                    
+                    OSSpinLockUnlock(&chan->lock);
                 } else {
-                    /* This isn't our op, reset state back to _send */
-                    assert(CAS(state_busy, state_send, &chan->state));
-                }
-            } else if (CAS(state_recv, state_busy, &chan->state)) {
-                if (chan->unbuf_send_op == op) {
-                    /* Verify that the _send_id matches our 'id' parameter. If this assertion fails, it means there's likely
-                       some static eb_chan_op_t being shared by multiple threads, which isn't allowed. */
-                    eb_assert_or_bail(chan->unbuf_send_id == id, "Send id invalid");
-                    /* 'op' was in the process of an unbuffered send on the channel, and a receiver is waiting on
-                       the send, so set state to _cancelled so that the receiver notices and stops waiting
-                       on the sender. */
-                    assert(CAS(state_busy, state_send_cancelled, &chan->state));
-                } else {
-                    /* This isn't our op, reset state back to _recv */
-                    assert(CAS(state_busy, state_recv, &chan->state));
+                    OSSpinLockUnlock(&chan->lock);
+                    /* We need to try again */
+                    result = false;
                 }
             } else {
-                /* We need to try again */
                 result = false;
             }
         }
@@ -601,7 +621,7 @@ eb_chan_op_t *eb_chan_do(eb_chan_op_t *const ops[], size_t nops) {
         /* ## Fast path: loop randomly over our operations to see if one of them was able to send/receive.
            If not, we'll enter the slow path where we put our thread to sleep until we're signalled. */
         if (nops) {
-            static const size_t k_attempt_multiplier = 50;
+            static const size_t k_attempt_multiplier = SIZE_MAX;
             for (size_t i = 0; i < k_attempt_multiplier * nops; i++) {
                 // TODO: not using random() here speeds this up a lot, so we should generate random bits more efficiently
     //            result = try_op((uintptr_t)&result, ops[(random() % nops)], NULL);

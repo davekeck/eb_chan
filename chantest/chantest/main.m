@@ -3,7 +3,7 @@
 #import <pthread.h>
 #import "eb_chan.h"
 
-#define NTRIALS 10000000
+#define NTRIALS 1000000
 
 eb_chan_t gChan = NULL;
 
