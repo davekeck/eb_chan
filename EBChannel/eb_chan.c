@@ -359,6 +359,54 @@ static inline op_result_t send_buf(uintptr_t id, const eb_chan_op_t *op, eb_port
 //    return result;
 }
 
+static inline op_result_t recv_buf(uintptr_t id, const eb_chan_op_t *op, eb_port_t port) {
+    abort();
+    return op_result_next;
+    
+//        assert(op);
+//        assert(op->chan);
+//    
+//    eb_chan_t chan = op->chan;
+//    bool result = false;
+//    if (SpinLock(&chan->lock, port != NULL)) {
+//        port_list_t wakeup_ports = NULL;
+//        if (chan->buf_len) {
+//            /* ## Receiving, buffered, buffer non-empty */
+//            /* Set our op's state signifying that we received a value */
+//            op->open = true;
+//            op->val = chan->buf[0];
+//            /* Update chan's buffer */
+//            chan->buf_len--;
+//            memmove(&chan->buf[0], &chan->buf[1], chan->buf_len * sizeof(*(chan->buf)));
+//            /* Notify the channel's sends if our buffer went from full to not-full */
+//            if (chan->buf_len == chan->buf_cap-1) {
+//                /* Copy the channel's sends so that we can signal them after we relinquish the lock, to notify
+//                   them that we've removed from the buffer. */
+//                wakeup_ports = port_list_stack_copy(chan->sends);
+//            }
+//            /* Set our flag signifying that we completed this op. */
+//            result = true;
+//        } else if (!chan->open) {
+//            /* ## Receiving, buffered, buffer empty, channel closed */
+//            /* Set our op's state signifying that it completed because the channel's closed */
+//            op->open = false;
+//            op->val = NULL;
+//            /* Set our flag signifying that we completed this op. */
+//            result = true;
+//        }
+//        SpinUnlock(&chan->lock);
+//        
+//        /* Signal every port in wakeup_ports */
+//        if (wakeup_ports) {
+//            port_list_signal(wakeup_ports, port);
+//            port_list_stack_free(wakeup_ports);
+//            wakeup_ports = NULL;
+//        }
+//    }
+//    
+//    return result;
+}
+
 static inline op_result_t send_unbuf(uintptr_t id, const eb_chan_op_t *op, eb_port_t port) {
         assert(op);
         assert(op->chan);
@@ -413,54 +461,6 @@ static inline op_result_t send_unbuf(uintptr_t id, const eb_chan_op_t *op, eb_po
     }
     
     return result;
-}
-
-static inline op_result_t recv_buf(uintptr_t id, const eb_chan_op_t *op, eb_port_t port) {
-    abort();
-    return op_result_next;
-    
-//        assert(op);
-//        assert(op->chan);
-//    
-//    eb_chan_t chan = op->chan;
-//    bool result = false;
-//    if (SpinLock(&chan->lock, port != NULL)) {
-//        port_list_t wakeup_ports = NULL;
-//        if (chan->buf_len) {
-//            /* ## Receiving, buffered, buffer non-empty */
-//            /* Set our op's state signifying that we received a value */
-//            op->open = true;
-//            op->val = chan->buf[0];
-//            /* Update chan's buffer */
-//            chan->buf_len--;
-//            memmove(&chan->buf[0], &chan->buf[1], chan->buf_len * sizeof(*(chan->buf)));
-//            /* Notify the channel's sends if our buffer went from full to not-full */
-//            if (chan->buf_len == chan->buf_cap-1) {
-//                /* Copy the channel's sends so that we can signal them after we relinquish the lock, to notify
-//                   them that we've removed from the buffer. */
-//                wakeup_ports = port_list_stack_copy(chan->sends);
-//            }
-//            /* Set our flag signifying that we completed this op. */
-//            result = true;
-//        } else if (!chan->open) {
-//            /* ## Receiving, buffered, buffer empty, channel closed */
-//            /* Set our op's state signifying that it completed because the channel's closed */
-//            op->open = false;
-//            op->val = NULL;
-//            /* Set our flag signifying that we completed this op. */
-//            result = true;
-//        }
-//        SpinUnlock(&chan->lock);
-//        
-//        /* Signal every port in wakeup_ports */
-//        if (wakeup_ports) {
-//            port_list_signal(wakeup_ports, port);
-//            port_list_stack_free(wakeup_ports);
-//            wakeup_ports = NULL;
-//        }
-//    }
-//    
-//    return result;
 }
 
 static inline op_result_t recv_unbuf(uintptr_t id, eb_chan_op_t *op, eb_port_t port) {
