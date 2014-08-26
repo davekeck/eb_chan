@@ -412,7 +412,7 @@ static inline op_result_t send_unbuf(uintptr_t id, const eb_chan_op_t *op, eb_po
         assert(op->chan);
     
     eb_chan_t chan = op->chan;
-    op_result_t result = op_result_next;
+    op_result_t result = op_result_busy;
     
     /* Attempt to gain control of the channel's unbuf_state */
     if (CAS(unbuf_state_idle, unbuf_state_busy, &chan->unbuf_state)) {
@@ -423,6 +423,8 @@ static inline op_result_t send_unbuf(uintptr_t id, const eb_chan_op_t *op, eb_po
         assert(CASB(unbuf_state_busy, unbuf_state_send, &chan->unbuf_state));
         /* Signal the first port in 'recvs' that isn't 'port' */
         port_list_signal_first(chan->recvs, port);
+        /* Move on to the next op */
+        result = op_result_next;
     } else if (CAS(unbuf_state_send, unbuf_state_busy, &chan->unbuf_state)) {
         if (port && chan->unbuf_send_op == op) {
             /* We own the send op that's in progress, so assign chan's unbuf_send_port */
@@ -435,10 +437,6 @@ static inline op_result_t send_unbuf(uintptr_t id, const eb_chan_op_t *op, eb_po
         assert(CASB(unbuf_state_busy, unbuf_state_send, &chan->unbuf_state));
         /* The channel's already sending so the caller should move on to the next op */
         result = op_result_next;
-        // TODO: uncomment for optimization (and add port!=NULL requirement to previous if-expression)
-//    } else if (CAS(unbuf_state_send, unbuf_state_send, &chan->unbuf_state)) {
-//        /* The channel's already sending so the caller should move on to the next op */
-//        result = op_result_next;
     } else if (CAS(unbuf_state_recv, unbuf_state_busy, &chan->unbuf_state)) {
         /* Check the send op in progress to see if it's ours */
         if (chan->unbuf_send_op == op) {
@@ -455,9 +453,6 @@ static inline op_result_t send_unbuf(uintptr_t id, const eb_chan_op_t *op, eb_po
             /* The channel's in the process of receiving should move on to the next op */
             result = op_result_next;
         }
-    } else {
-        /* Otherwise, we should try the op again because it was in an intermittent state */
-        result = op_result_busy;
     }
     
     return result;
@@ -468,7 +463,7 @@ static inline op_result_t recv_unbuf(uintptr_t id, eb_chan_op_t *op, eb_port_t p
         assert(op->chan);
     
     eb_chan_t chan = op->chan;
-    op_result_t result = op_result_next;
+    op_result_t result = op_result_busy;
     
     /* Attempt to gain control of the channel's unbuf_state */
     if (CAS(unbuf_state_send, unbuf_state_busy, &chan->unbuf_state)) {
@@ -516,9 +511,6 @@ static inline op_result_t recv_unbuf(uintptr_t id, eb_chan_op_t *op, eb_port_t p
     } else if (CAS(unbuf_state_recv, unbuf_state_recv, &chan->unbuf_state)) {
         /* Someone's already receiving; tell the caller to move on to the next op. */
         result = op_result_next;
-    } else {
-        /* Otherwise, we should try the op again because it was in an intermittent state */
-        result = op_result_busy;
     }
     
     return result;
@@ -591,7 +583,7 @@ eb_chan_op_t *eb_chan_do(eb_chan_op_t *const ops[], size_t nops) {
         /* ## Fast path: loop randomly over our operations to see if one of them was able to send/receive.
            If not, we'll enter the slow path where we put our thread to sleep until we're signalled. */
         if (nops) {
-            static const size_t k_attempt_multiplier = 50;
+            static const size_t k_attempt_multiplier = 100;
             for (size_t i = 0; i < k_attempt_multiplier * nops; i++) {
                 // TODO: not using random() here speeds this up a lot, so we should generate random bits more efficiently
     //            result = try_op((uintptr_t)&result, ops[(random() % nops)], NULL);
