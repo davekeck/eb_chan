@@ -391,16 +391,14 @@ static inline op_result_t send_unbuf(uintptr_t id, const eb_chan_op_t *op, eb_po
             /* Verify that the channel isn't closed */
             eb_assert_or_bail(state != state_closed, "Illegal send on closed channel");
         
+        bool wakeup_recv = false;
         if (state == state_open) {
             /* We successfully gained control of state, so assign our fields. */
             chan->state = state_send;
             chan->unbuf_send_id = id;
             chan->unbuf_send_op = op;
             chan->unbuf_send_port = port;
-            OSSpinLockUnlock(&chan->lock);
-            
-            /* Wakeup the first recv now that we've relinquished the lock */
-            port_list_signal_first(chan->recvs, port);
+            wakeup_recv = true;
         } else if (state == state_send) {
             if (port && chan->unbuf_send_op == op) {
                 /* We own the send op that's in progress, so assign chan's unbuf_send_port */
@@ -410,8 +408,6 @@ static inline op_result_t send_unbuf(uintptr_t id, const eb_chan_op_t *op, eb_po
                 /* Assign the port */
                 chan->unbuf_send_port = port;
             }
-            
-            OSSpinLockUnlock(&chan->lock);
         } else if (state == state_recv) {
             /* Check the send op in progress to see if it's ours */
             if (chan->unbuf_send_op == op) {
@@ -423,10 +419,13 @@ static inline op_result_t send_unbuf(uintptr_t id, const eb_chan_op_t *op, eb_po
                 chan->state = state_send_done;
                 result = op_result_complete;
             }
-            
-            OSSpinLockUnlock(&chan->lock);
-        } else {
-            OSSpinLockUnlock(&chan->lock);
+        }
+        
+        OSSpinLockUnlock(&chan->lock);
+        
+        if (wakeup_recv) {
+            /* Wakeup the first recv now that we've relinquished the lock */
+            port_list_signal_first(chan->recvs, port);
         }
     } else {
         result = op_result_busy;
@@ -444,9 +443,8 @@ static inline op_result_t recv_unbuf(uintptr_t id, eb_chan_op_t *op, eb_port_t p
     
     if (OSSpinLockTry(&chan->lock)) {
         state_t state = chan->state;
+        bool wakeup_send = false;
         if (state == state_closed) {
-            OSSpinLockUnlock(&chan->lock);
-            
             /* Set our op's state signifying that we're returning the value due to a closed channel */
             op->open = false;
             op->val = NULL;
@@ -470,8 +468,7 @@ static inline op_result_t recv_unbuf(uintptr_t id, eb_chan_op_t *op, eb_port_t p
                 }
                 
                 /* Wait until the channel's state transitions to _done or to _cancelled. */
-                bool done = false;
-                while (!done) {
+                for (;;) {
                     OSSpinLockLock(&chan->lock);
                         if (chan->state == state_send_done) {
                             result = op_result_complete;
@@ -479,18 +476,21 @@ static inline op_result_t recv_unbuf(uintptr_t id, eb_chan_op_t *op, eb_port_t p
                         
                         if (chan->state == state_send_done || chan->state == state_send_cancelled) {
                             chan->state = state_open;
-                            done = true;
+                            wakeup_send = true;
+                            /* We're intentionally bypassing our loop's unlock because we unlock the channel
+                               outside the encompassing if-statement. */
+                            break;
                         }
                     OSSpinLockUnlock(&chan->lock);
                 }
-                
-                /* Signal the first port in 'sends' that isn't 'port' */
-                port_list_signal_first(chan->sends, port);
-            } else {
-                OSSpinLockUnlock(&chan->lock);
             }
-        } else {
-            OSSpinLockUnlock(&chan->lock);
+        }
+        
+        OSSpinLockUnlock(&chan->lock);
+        
+        if (wakeup_send) {
+            /* Signal the first port in 'sends' that isn't 'port' */
+            port_list_signal_first(chan->sends, port);
         }
     } else {
         result = op_result_busy;
