@@ -204,8 +204,8 @@ eb_chan_t eb_chan_alloc(size_t buf_cap) {
         eb_assert_or_recover(c, goto failed);
     bzero(c, sizeof(*c));
     
+    c->state = state_idle;
     c->open = true;
-    c->buf_cap = buf_cap;
     
     c->sends = port_list_alloc(k_init_buf_cap);
         eb_assert_or_recover(c->sends, goto failed);
@@ -214,12 +214,12 @@ eb_chan_t eb_chan_alloc(size_t buf_cap) {
     
     if (c->buf_cap) {
         /* ## Buffered */
+        c->buf_cap = buf_cap;
         c->buf_len = 0;
         c->buf = malloc(c->buf_cap * sizeof(*(c->buf)));
             eb_assert_or_recover(c->buf, goto failed);
     } else {
         /* ## Unbuffered */
-        c->state = state_idle;
         c->unbuf_send_id = 0;
         c->unbuf_send_op = NULL;
         c->unbuf_send_port = NULL;
