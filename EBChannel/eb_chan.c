@@ -154,6 +154,8 @@ enum {
 }; typedef int32_t state_t;
 
 struct eb_chan {
+    int32_t change_count;
+    
     state_t state;
     bool open;
     
@@ -289,7 +291,7 @@ typedef enum {
     op_result_busy,     /* The channel's busy and we should try the op again */
 } op_result_t;
 
-static inline op_result_t send_buf(uintptr_t id, const eb_chan_op_t *op, eb_port_t port) {
+static inline op_result_t send_buf(uintptr_t id, int32_t *op_change_count, const eb_chan_op_t *op, eb_port_t port, bool force) {
     abort();
     return op_result_next;
     
@@ -328,7 +330,7 @@ static inline op_result_t send_buf(uintptr_t id, const eb_chan_op_t *op, eb_port
 //    return result;
 }
 
-static inline op_result_t recv_buf(uintptr_t id, const eb_chan_op_t *op, eb_port_t port) {
+static inline op_result_t recv_buf(uintptr_t id, int32_t *op_change_count, const eb_chan_op_t *op, eb_port_t port, bool force) {
     abort();
     return op_result_next;
     
@@ -376,11 +378,16 @@ static inline op_result_t recv_buf(uintptr_t id, const eb_chan_op_t *op, eb_port
 //    return result;
 }
 
-static inline op_result_t send_unbuf(uintptr_t id, const eb_chan_op_t *op, eb_port_t port) {
+static inline op_result_t send_unbuf(uintptr_t id, int32_t *op_change_count, const eb_chan_op_t *op, eb_port_t port, bool force) {
+        assert(op_change_count);
         assert(op);
         assert(op->chan);
     
     eb_chan_t chan = op->chan;
+    if (!force && chan->change_count == *op_change_count) {
+        return op_result_next;
+    }
+    
     op_result_t result = op_result_busy;
     
     /* Attempt to gain control of the channel's state */
@@ -392,7 +399,9 @@ static inline op_result_t send_unbuf(uintptr_t id, const eb_chan_op_t *op, eb_po
         chan->unbuf_send_id = id;
         chan->unbuf_send_op = op;
         chan->unbuf_send_port = port;
+        *op_change_count = OSAtomicIncrement32(&chan->change_count);
         assert(CASB(state_busy, state_send, &chan->state));
+        
         /* Signal the first port in 'recvs' that isn't 'port' */
         port_list_signal_first(chan->recvs, port);
         /* We only started the send process, so tell the caller to move on to the next op. */
@@ -405,6 +414,7 @@ static inline op_result_t send_unbuf(uintptr_t id, const eb_chan_op_t *op, eb_po
             eb_assert_or_bail(chan->unbuf_send_id == id, "Send id invalid");
             /* Assign the port */
             chan->unbuf_send_port = port;
+            *op_change_count = OSAtomicIncrement32(&chan->change_count);
         }
         assert(CASB(state_busy, state_send, &chan->state));
         /* The channel's already sending so the caller should move on to the next op */
@@ -416,8 +426,9 @@ static inline op_result_t send_unbuf(uintptr_t id, const eb_chan_op_t *op, eb_po
             /* Verify that the _send_id matches our 'id' parameter. If this assertion fails, it means there's likely
                some static eb_chan_op_t being shared by multiple threads, which isn't allowed. */
             eb_assert_or_bail(chan->unbuf_send_id == id, "Send id invalid");
+            *op_change_count = OSAtomicIncrement32(&chan->change_count);
             /* A receiver is currently polling for chan's state to change, so update it to signal that we're done sending! */
-            assert(CAS(state_busy, state_send_done, &chan->state));
+            assert(CASB(state_busy, state_send_done, &chan->state));
             result = op_result_complete;
         } else {
             /* The send op in progress isn't ours, so ignore it and reset state back to _recv. */
@@ -430,13 +441,17 @@ static inline op_result_t send_unbuf(uintptr_t id, const eb_chan_op_t *op, eb_po
     return result;
 }
 
-static inline op_result_t recv_unbuf(uintptr_t id, eb_chan_op_t *op, eb_port_t port) {
+static inline op_result_t recv_unbuf(uintptr_t id, int32_t *op_change_count, eb_chan_op_t *op, eb_port_t port, bool force) {
+        assert(op_change_count);
         assert(op);
         assert(op->chan);
     
     eb_chan_t chan = op->chan;
-    op_result_t result = op_result_busy;
+    if (!force && chan->change_count == *op_change_count) {
+        return op_result_next;
+    }
     
+    op_result_t result = op_result_busy;
     if (CAS(state_idle, state_busy, &chan->state)) {
         if (chan->open) {
             /* Move on to the next op because this channel has nothing to receive */
@@ -456,7 +471,9 @@ static inline op_result_t recv_unbuf(uintptr_t id, eb_chan_op_t *op, eb_port_t p
             
             /* Get a reference to the sender that's in progress */
             eb_port_t wakeup_port = (chan->unbuf_send_port ? eb_port_retain(chan->unbuf_send_port) : NULL);
-            assert(CAS(state_busy, state_recv, &chan->state));
+            int32_t last_change_count = OSAtomicIncrement32(&chan->change_count);
+            *op_change_count = last_change_count;
+            assert(CASB(state_busy, state_recv, &chan->state));
             
             /* Wake up the sender */
             if (wakeup_port) {
@@ -472,12 +489,22 @@ static inline op_result_t recv_unbuf(uintptr_t id, eb_chan_op_t *op, eb_port_t p
 //                }
 //            }
             
+            while (*((volatile int32_t *)&chan->change_count) == last_change_count);
+            
             /* Poll until chan's state is either _done or _cancelled, and reset the state to _idle. */
             for (;;) {
-                if (CAS(state_send_done, state_idle, &chan->state)) {
+                if (CAS(state_send_done, state_busy, &chan->state)) {
+                    
+                    *op_change_count = OSAtomicIncrement32(&chan->change_count);
+                    assert(CAS(state_busy, state_idle, &chan->state));
+                    
                     result = op_result_complete;
                     break;
-                } else if (CAS(state_send_cancelled, state_idle, &chan->state)) {
+                } else if (CAS(state_send_cancelled, state_busy, &chan->state)) {
+                    
+                    *op_change_count = OSAtomicIncrement32(&chan->change_count);
+                    assert(CAS(state_busy, state_idle, &chan->state));
+                    
                     result = op_result_next;
                     break;
                 }
@@ -543,16 +570,16 @@ static inline bool cleanup_after_op(uintptr_t id, const eb_chan_op_t *op, eb_por
     return result;
 }
 
-static inline op_result_t try_op(uintptr_t id, eb_chan_op_t *op, eb_port_t port) {
+static inline op_result_t try_op(uintptr_t id, int32_t *op_change_count, eb_chan_op_t *op, eb_port_t port, bool force) {
         assert(op);
     eb_chan_t chan = op->chan;
     if (chan) {
         if (op->send) {
             /* ## Send */
-            return (chan->buf_cap ? send_buf(id, op, port) : send_unbuf(id, op, port));
+            return (chan->buf_cap ? send_buf(id, op_change_count, op, port, force) : send_unbuf(id, op_change_count, op, port, force));
         } else if (!op->send) {
             /* ## Receive */
-            return (chan->buf_cap ? recv_buf(id, op, port) : recv_unbuf(id, op, port));
+            return (chan->buf_cap ? recv_buf(id, op_change_count, op, port, force) : recv_unbuf(id, op_change_count, op, port, force));
         }
     }
     return op_result_next;
@@ -563,17 +590,24 @@ eb_chan_op_t *eb_chan_do(eb_chan_op_t *const ops[], size_t nops) {
     eb_port_t port = NULL;
     eb_chan_op_t *result = NULL;
     uintptr_t id = (uintptr_t)&result;
+    int32_t op_change_counts[nops];
+    for (size_t i = 0; i < nops; i++) {
+        op_change_counts[i] = INT32_MAX;
+    }
     
     for (;;) {
+        bool created_port = false;
+        
         /* ## Fast path: loop randomly over our operations to see if one of them was able to send/receive.
            If not, we'll enter the slow path where we put our thread to sleep until we're signalled. */
         if (nops) {
-            static const size_t k_attempt_multiplier = 100;
+            static const size_t k_attempt_multiplier = 50;
             for (size_t i = 0; i < k_attempt_multiplier * nops; i++) {
                 // TODO: not using random() here speeds this up a lot, so we should generate random bits more efficiently
     //            result = try_op((uintptr_t)&result, ops[(random() % nops)], NULL);
-                eb_chan_op_t *op = ops[(i % nops)];
-                op_result_t r = try_op(id, op, port);
+                size_t idx = (i % nops);
+                eb_chan_op_t *op = ops[idx];
+                op_result_t r = try_op(id, &op_change_counts[idx], op, port, false);
                 /* If the op completed, we need to exit! */
                 if (r == op_result_complete) {
                     result = op;
@@ -599,13 +633,15 @@ eb_chan_op_t *eb_chan_do(eb_chan_op_t *const ops[], size_t nops) {
                     port_list_add((op->send ? chan->sends : chan->recvs), port);
                 }
             }
+            
+            created_port = true;
         }
         
         // TODO: randomize iteration!
         for (size_t i = 0; i < nops; i++) {
             eb_chan_op_t *op = ops[i];
             op_result_t r;
-            while ((r = try_op(id, op, port)) == op_result_busy);
+            while ((r = try_op(id, &op_change_counts[i], op, port, created_port)) == op_result_busy);
             /* If the op completed, we need to exit! */
             if (r == op_result_complete) {
                 result = op;
@@ -649,10 +685,16 @@ eb_chan_op_t *eb_chan_try(eb_chan_op_t *const ops[], size_t nops) {
     // TODO: we need to call cleanup_after_op() here, because we may need to reset state
     eb_chan_op_t *result = NULL;
     uintptr_t id = (uintptr_t)&result;
+    
+    int32_t op_change_counts[nops];
+    for (size_t i = 0; i < nops; i++) {
+        op_change_counts[i] = INT32_MAX;
+    }
+    
     for (size_t i = 0; i < nops; i++) {
         eb_chan_op_t *op = ops[i];
         op_result_t r;
-        while ((r = try_op(id, op, NULL)) == op_result_busy);
+        while ((r = try_op(id, &op_change_counts[i], op, NULL, false)) == op_result_busy);
         /* If the op completed, we need to exit! */
         if (r == op_result_complete) {
             result = op;
