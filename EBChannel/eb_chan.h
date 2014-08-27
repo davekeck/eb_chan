@@ -6,7 +6,7 @@ typedef struct eb_chan *eb_chan_t;
 typedef struct {
     eb_chan_t chan;     /* The applicable channel, where NULL channels block forever */
     bool send;          /* true if sending, false if receiving */
-    bool open;          /* Valid only when receiving; true if the value was generated due to a successful send operation, false if the value was generated due to a closed channel. */
+    bool open;          /* Valid only when receiving; true if the recv op completed due to a successful send operation, false if due to a closed channel. */
     const void *val;    /* When sending: the value to send; when receiving and 'open' is true: the value that was received.  */
 } eb_chan_op_t;
 
