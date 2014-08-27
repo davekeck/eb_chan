@@ -238,22 +238,31 @@ void eb_chan_close(eb_chan_t c) {
     
     bool done = false;
     while (!done) {
+        eb_port_t wakeup_port = NULL;
         OSSpinLockLock(&c->lock);
             state_t state = c->state;
                 eb_assert_or_bail(state != state_closed, "Illegal close of already-closed channel.");
-                eb_assert_or_bail(state != state_send, "Illegal close of channel while send is in progress.");
-                // TODO: it's OK if the state's recv here right? the recv may have 'connected' first
-                eb_assert_or_bail(state != state_recv, "Illegal close of channel while send is in progress.");
+                eb_assert_or_bail(state != state_send && state != state_ack, "Illegal close of channel while send is in progress.");
             
             if (state == state_open) {
                 c->state = state_closed;
                 done = true;
+            } else if (state == state_recv) {
+                if (c->unbuf_port) {
+                    wakeup_port = eb_port_retain(c->unbuf_port);
+                }
             }
         OSSpinLockUnlock(&c->lock);
+        
+        /* Wake up the recv */
+        if (wakeup_port) {
+            eb_port_signal(wakeup_port);
+            eb_port_release(wakeup_port);
+            wakeup_port = NULL;
+        }
     }
     
-    /* Wake up the first sender/receiver */
-    port_list_signal_first(c->sends, NULL);
+    /* Wake up the first receiver. We don't bother to wake up senders here because it's illegal for the channel to have senders at this point anyway. */
     port_list_signal_first(c->recvs, NULL);
 }
 
@@ -580,32 +589,31 @@ static inline op_result_t recv_unbuf(uintptr_t id, eb_chan_op_t *op, eb_port_t p
     return result;
 }
 
-static inline void cleanup_after_op(uintptr_t id, const eb_chan_op_t *op, eb_port_t port) {
+static inline void cleanup_after_op(const eb_chan_op_t *op, eb_port_t port) {
         assert(op);
     eb_chan_t chan = op->chan;
     if (chan && !chan->buf_cap) {
         bool wakeup_send = false;
         bool wakeup_recv = false;
-        
         OSSpinLockLock(&chan->lock);
-            if (chan->unbuf_op == op) {
-                    /* Verify that the unbuf_id matches our 'id' parameter. If this assertion fails, it means there's likely
-                       one eb_chan_op_t being shared by multiple threads, which isn't allowed. */
-                    eb_assert_or_bail(chan->unbuf_id == id, "Send id invalid");
-                
-                state_t state = chan->state;
-                if (state == state_send) {
+            state_t state = chan->state;
+            if (state == state_send) {
+                if (chan->unbuf_op == op) {
                     /* 'op' was in the process of an unbuffered send on the channel, but no recv had arrived
                        yet, so reset state to _open. */
                     chan->state = state_open;
                     wakeup_send = true;
-                } else if (state == state_recv) {
+                }
+            } else if (state == state_recv) {
+                if (chan->unbuf_op == op) {
                     /* 'op' was in the process of an unbuffered recv on the channel, but no send had arrived
                        yet, so reset state to _open. */
                     chan->state = state_open;
                     wakeup_recv = true;
-                } else if (state == state_ack) {
-                    /* A counterpart acknowledged 'op' but a different op completed before 'op', so we're cancelling. */
+                }
+            } else if (state == state_ack) {
+                if (chan->unbuf_op == op) {
+                    /* A counterpart acknowledged 'op' but, but 'op' isn't the one that completed in our select() call, so we're cancelling. */
                     chan->state = state_cancelled;
                 }
             }
@@ -726,7 +734,7 @@ eb_chan_op_t *eb_chan_do(eb_chan_op_t *const ops[], size_t nops) {
         
         for (size_t i = 0; i < nops; i++) {
             if (cleanup_ops[i]) {
-                cleanup_after_op(id, ops[i], port);
+                cleanup_after_op(ops[i], port);
             }
         }
         
@@ -764,7 +772,7 @@ eb_chan_op_t *eb_chan_try(eb_chan_op_t *const ops[], size_t nops) {
     
     for (size_t i = 0; i < nops; i++) {
         if (cleanup_ops[i]) {
-            cleanup_after_op(id, ops[i], NULL);
+            cleanup_after_op(ops[i], NULL);
         }
     }
     
