@@ -151,8 +151,9 @@ enum {
     state_closed,
     state_send,
     state_recv,
-    state_send_done,
-    state_send_cancelled
+    state_ack,
+    state_done,
+    state_cancelled
 }; typedef int32_t state_t;
 
 struct eb_chan {
@@ -168,9 +169,9 @@ struct eb_chan {
     const void **buf;
     
     /* Unbuffered ivars */
-    uintptr_t unbuf_send_id;
-    const eb_chan_op_t *unbuf_send_op;
-    eb_port_t unbuf_send_port;
+    uintptr_t unbuf_id;
+    eb_chan_op_t *unbuf_op;
+    eb_port_t unbuf_port;
 };
 
 /* Channel allocation/deallocation */
@@ -197,9 +198,9 @@ eb_chan_t eb_chan_alloc(size_t buf_cap) {
             eb_assert_or_recover(c->buf, goto failed);
     } else {
         /* ## Unbuffered */
-        c->unbuf_send_id = 0;
-        c->unbuf_send_op = NULL;
-        c->unbuf_send_port = NULL;
+        c->unbuf_id = 0;
+        c->unbuf_op = NULL;
+        c->unbuf_port = NULL;
     }
     
     return c;
@@ -241,6 +242,7 @@ void eb_chan_close(eb_chan_t c) {
             state_t state = c->state;
                 eb_assert_or_bail(state != state_closed, "Illegal close of already-closed channel.");
                 eb_assert_or_bail(state != state_send, "Illegal close of channel while send is in progress.");
+                // TODO: it's OK if the state's recv here right? the recv may have 'connected' first
                 eb_assert_or_bail(state != state_recv, "Illegal close of channel while send is in progress.");
             
             if (state == state_open) {
@@ -379,7 +381,7 @@ static inline op_result_t recv_buf(uintptr_t id, const eb_chan_op_t *op, eb_port
 //    return result;
 }
 
-static inline op_result_t send_unbuf(uintptr_t id, const eb_chan_op_t *op, eb_port_t port) {
+static inline op_result_t send_unbuf(uintptr_t id, eb_chan_op_t *op, eb_port_t port) {
         assert(op);
         assert(op->chan);
     
@@ -391,40 +393,83 @@ static inline op_result_t send_unbuf(uintptr_t id, const eb_chan_op_t *op, eb_po
             /* Verify that the channel isn't closed */
             eb_assert_or_bail(state != state_closed, "Illegal send on closed channel");
         
+        bool wakeup_send = false;
         bool wakeup_recv = false;
         if (state == state_open) {
-            /* We successfully gained control of state, so assign our fields. */
             chan->state = state_send;
-            chan->unbuf_send_id = id;
-            chan->unbuf_send_op = op;
-            chan->unbuf_send_port = port;
+            chan->unbuf_id = id;
+            chan->unbuf_op = op;
+            chan->unbuf_port = port;
             wakeup_recv = true;
         } else if (state == state_send) {
-            if (port && chan->unbuf_send_op == op) {
-                /* We own the send op that's in progress, so assign chan's unbuf_send_port */
-                /* Verify that the _send_id matches our 'id' parameter. If this assertion fails, it means there's likely
-                   some static eb_chan_op_t being shared by multiple threads, which isn't allowed. */
-                eb_assert_or_bail(chan->unbuf_send_id == id, "Send id invalid");
+            if (port && chan->unbuf_op == op) {
+                /* We own the send op that's in progress, so assign chan's unbuf_port */
+                /* Verify that the unbuf_id matches our 'id' parameter. If this assertion fails, it means there's likely
+                   one eb_chan_op_t being shared by multiple threads, which isn't allowed. */
+                eb_assert_or_bail(chan->unbuf_id == id, "Send id invalid");
                 /* Assign the port */
-                chan->unbuf_send_port = port;
+                chan->unbuf_port = port;
             }
         } else if (state == state_recv) {
-            /* Check the send op in progress to see if it's ours */
-            if (chan->unbuf_send_op == op) {
-                /* This is our send op! */
-                /* Verify that the _send_id matches our 'id' parameter. If this assertion fails, it means there's likely
-                   some static eb_chan_op_t being shared by multiple threads, which isn't allowed. */
-                eb_assert_or_bail(chan->unbuf_send_id == id, "Send id invalid");
-                /* A receiver is currently polling for chan's state to change, so update it to signal that we're done sending! */
-                chan->state = state_send_done;
+            /* Verify that the recv isn't part of the same select() -- (we can't do unbuffered sends/recvs from the same select()) */
+            if (chan->unbuf_id != id) {
+                    /* Sanity check -- make sure the op is a recv */
+                    eb_assert_or_bail(!chan->unbuf_op->send, "Op isn't a recv as expected");
+                
+                chan->state = state_ack;
+                chan->unbuf_op->open = true;
+                chan->unbuf_op->val = op->val;
+                
+                eb_port_t wakeup_port = (chan->unbuf_port ? eb_port_retain(chan->unbuf_port) : NULL);
+                OSSpinLockUnlock(&chan->lock);
+                
+                /* Wake up the recv */
+                if (wakeup_port) {
+                    eb_port_signal(wakeup_port);
+                    eb_port_release(wakeup_port);
+                    wakeup_port = NULL;
+                }
+                
+                /* Wait until chan transitions to _done or _cancelled. */
+                for (;;) {
+//                    state_t state = *((volatile state_t *)&chan->state);
+//                    if (state == state_done || state == state_cancelled) {
+                        OSSpinLockLock(&chan->lock);
+                            if (chan->state == state_done) {
+                                result = op_result_complete;
+                            }
+                            
+                            if (chan->state == state_done || chan->state == state_cancelled) {
+                                chan->state = state_open;
+                                /* Wakeup a send since one of them can now proceed */
+                                wakeup_send = true;
+                                /* We're intentionally bypassing our loop's unlock because we unlock the channel
+                                   outside the encompassing if-statement. */
+                                break;
+                            }
+                        OSSpinLockUnlock(&chan->lock);
+//                    }
+                }
+            }
+        } else if (state == state_ack) {
+            if (chan->unbuf_op == op) {
+                /* A recv acknowledged our send! */
+                /* Verify that the unbuf_id matches our 'id' parameter. If this assertion fails, it means there's likely
+                   one eb_chan_op_t being shared by multiple threads, which isn't allowed. */
+                eb_assert_or_bail(chan->unbuf_id == id, "unbuf_id invalid");
+                /* A recv is polling for chan's state to change, so update it to signal that we're done sending! */
+                chan->state = state_done;
                 result = op_result_complete;
             }
         }
         
         OSSpinLockUnlock(&chan->lock);
         
+        if (wakeup_send) {
+            port_list_signal_first(chan->sends, port);
+        }
+        
         if (wakeup_recv) {
-            /* Wakeup the first recv now that we've relinquished the lock */
             port_list_signal_first(chan->recvs, port);
         }
     } else {
@@ -444,52 +489,83 @@ static inline op_result_t recv_unbuf(uintptr_t id, eb_chan_op_t *op, eb_port_t p
     if (OSSpinLockTry(&chan->lock)) {
         state_t state = chan->state;
         bool wakeup_send = false;
-        if (state == state_closed) {
+        if (state == state_open) {
+            chan->state = state_recv;
+            chan->unbuf_id = id;
+            chan->unbuf_op = op;
+            chan->unbuf_port = port;
+            wakeup_send = true;
+        } else if (state == state_closed) {
             /* Set our op's state signifying that we're returning the value due to a closed channel */
             op->open = false;
             op->val = NULL;
             /* We completed this op so set our return value! */
             result = op_result_complete;
-        } else if (chan->state == state_send) {
-            if (chan->unbuf_send_id != id) {
-                op->open = true;
-                op->val = chan->unbuf_send_op->val;
+        } else if (state == state_send) {
+            /* Verify that the send isn't part of the same select() -- (we can't do unbuffered sends/recvs from the same select()) */
+            if (chan->unbuf_id != id) {
+                    /* Sanity check -- make sure the op is a send */
+                    eb_assert_or_bail(chan->unbuf_op->send, "Op isn't a send as expected");
                 
-                /* Get a reference to the sender that's in progress */
-                eb_port_t wakeup_port = (chan->unbuf_send_port ? eb_port_retain(chan->unbuf_send_port) : NULL);
-                chan->state = state_recv;
+                chan->state = state_ack;
+                op->open = true;
+                op->val = chan->unbuf_op->val;
+                
+                eb_port_t wakeup_port = (chan->unbuf_port ? eb_port_retain(chan->unbuf_port) : NULL);
                 OSSpinLockUnlock(&chan->lock);
                 
-                /* Wake up the sender */
+                /* Wake up the send */
                 if (wakeup_port) {
                     eb_port_signal(wakeup_port);
                     eb_port_release(wakeup_port);
                     wakeup_port = NULL;
                 }
                 
-                /* Wait until the channel's state transitions to _done or to _cancelled. */
+                /* Wait until chan transitions to _done or _cancelled. */
                 for (;;) {
-                    OSSpinLockLock(&chan->lock);
-                        if (chan->state == state_send_done) {
-                            result = op_result_complete;
-                        }
-                        
-                        if (chan->state == state_send_done || chan->state == state_send_cancelled) {
-                            chan->state = state_open;
-                            wakeup_send = true;
-                            /* We're intentionally bypassing our loop's unlock because we unlock the channel
-                               outside the encompassing if-statement. */
-                            break;
-                        }
-                    OSSpinLockUnlock(&chan->lock);
+//                    state_t state = *((volatile state_t *)&chan->state);
+//                    if (state == state_done || state == state_cancelled) {
+                        OSSpinLockLock(&chan->lock);
+                            if (chan->state == state_done) {
+                                result = op_result_complete;
+                            }
+                            
+                            if (chan->state == state_done || chan->state == state_cancelled) {
+                                chan->state = state_open;
+                                /* Wakeup a send since one of them can now proceed */
+                                wakeup_send = true;
+                                /* We're intentionally bypassing our loop's unlock because we unlock the channel
+                                   outside the encompassing if-statement. */
+                                break;
+                            }
+                        OSSpinLockUnlock(&chan->lock);
+//                    }
                 }
+            }
+        } else if (state == state_recv) {
+            if (port && chan->unbuf_op == op) {
+                /* We own the recv op that's in progress, so assign chan's unbuf_port */
+                /* Verify that the _recv_id matches our 'id' parameter. If this assertion fails, it means there's likely
+                   one eb_chan_op_t being shared by multiple threads, which isn't allowed. */
+                eb_assert_or_bail(chan->unbuf_id == id, "unbuf_id invalid");
+                /* Assign the port */
+                chan->unbuf_port = port;
+            }
+        } else if (state == state_ack) {
+            if (chan->unbuf_op == op) {
+                /* A send acknowledged our recv! */
+                /* Verify that the unbuf_id matches our 'id' parameter. If this assertion fails, it means there's likely
+                   one eb_chan_op_t being shared by multiple threads, which isn't allowed. */
+                eb_assert_or_bail(chan->unbuf_id == id, "unbuf_id invalid");
+                /* A send is polling for chan's state to change, so update it to signal that we're done sending! */
+                chan->state = state_done;
+                result = op_result_complete;
             }
         }
         
         OSSpinLockUnlock(&chan->lock);
         
         if (wakeup_send) {
-            /* Signal the first port in 'sends' that isn't 'port' */
             port_list_signal_first(chan->sends, port);
         }
     } else {
@@ -502,33 +578,40 @@ static inline op_result_t recv_unbuf(uintptr_t id, eb_chan_op_t *op, eb_port_t p
 static inline void cleanup_after_op(uintptr_t id, const eb_chan_op_t *op, eb_port_t port) {
         assert(op);
     eb_chan_t chan = op->chan;
-    if (chan) {
-        if (op->send && !chan->buf_cap) {
-            bool wakeup_send = false;
-            OSSpinLockLock(&chan->lock);
-                if (chan->unbuf_send_op == op) {
-                    state_t state = chan->state;
-                    if (state == state_send) {
-                        /* 'op' was in the process of an unbuffered send on the channel, but no receiver had arrived
-                           yet, so reset state to _idle. */
-                        chan->state = state_open;
-                        wakeup_send = true;
-                    } else if (state == state_recv) {
-                        /* Verify that the _send_id matches our 'id' parameter. If this assertion fails, it means there's likely
-                           some static eb_chan_op_t being shared by multiple threads, which isn't allowed. */
-                        eb_assert_or_bail(chan->unbuf_send_id == id, "Send id invalid");
-                        /* 'op' was in the process of an unbuffered send on the channel, and a receiver is waiting on
-                           the send, so set state to _cancelled so that the receiver notices and stops waiting
-                           on the sender. */
-                        chan->state = state_send_cancelled;
-                    }
+    if (chan && !chan->buf_cap) {
+        bool wakeup_send = false;
+        bool wakeup_recv = false;
+        
+        OSSpinLockLock(&chan->lock);
+            if (chan->unbuf_op == op) {
+                    /* Verify that the unbuf_id matches our 'id' parameter. If this assertion fails, it means there's likely
+                       one eb_chan_op_t being shared by multiple threads, which isn't allowed. */
+                    eb_assert_or_bail(chan->unbuf_id == id, "Send id invalid");
+                
+                state_t state = chan->state;
+                if (state == state_send) {
+                    /* 'op' was in the process of an unbuffered send on the channel, but no recv had arrived
+                       yet, so reset state to _open. */
+                    chan->state = state_open;
+                    wakeup_send = true;
+                } else if (state == state_recv) {
+                    /* 'op' was in the process of an unbuffered recv on the channel, but no send had arrived
+                       yet, so reset state to _open. */
+                    chan->state = state_open;
+                    wakeup_recv = true;
+                } else if (state == state_ack) {
+                    /* A counterpart acknowledged 'op' but a different op completed before 'op', so we're cancelling. */
+                    chan->state = state_cancelled;
                 }
-            OSSpinLockUnlock(&chan->lock);
-            
-            if (wakeup_send) {
-                /* Signal chan's first 'sends' because one of them can now proceed */
-                port_list_signal_first(chan->sends, port);
             }
+        OSSpinLockUnlock(&chan->lock);
+        
+        if (wakeup_send) {
+            port_list_signal_first(chan->sends, port);
+        }
+        
+        if (wakeup_recv) {
+            port_list_signal_first(chan->recvs, port);
         }
     }
 }
@@ -558,7 +641,7 @@ eb_chan_op_t *eb_chan_do(eb_chan_op_t *const ops[], size_t nops) {
         /* ## Fast path: loop randomly over our operations to see if one of them was able to send/receive.
            If not, we'll enter the slow path where we put our thread to sleep until we're signalled. */
         if (nops) {
-            static const size_t k_attempt_multiplier = 100;
+            static const size_t k_attempt_multiplier = 500;
             for (size_t i = 0; i < k_attempt_multiplier * nops; i++) {
                 // TODO: not using random() here speeds this up a lot, so we should generate random bits more efficiently
     //            result = try_op((uintptr_t)&result, ops[(random() % nops)], NULL);
