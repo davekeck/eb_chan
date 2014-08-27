@@ -298,7 +298,7 @@ eb_chan_op_t eb_chan_recv(eb_chan_t c) {
 enum {
     op_result_complete,     /* The op completed and the caller should return */
     op_result_next,         /* The op couldn't make any progress and the caller should move on to the next op */
-    op_result_next_clean,   /* Same as _next, but signifies that _cleanup must be called for the op */
+    op_result_next_clean,   /* Same as _next, but signifies that cleanup_op() must be called for the op */
     op_result_busy,         /* The channel's busy and we should try the op again */
 }; typedef unsigned int op_result_t;
 
@@ -421,7 +421,7 @@ static inline op_result_t send_unbuf(uintptr_t id, eb_chan_op_t *op, eb_port_t p
                 result = op_result_next_clean;
             }
         } else if (state == state_recv) {
-            /* Verify that the recv isn't part of the same select() -- (we can't do unbuffered sends/recvs from the same select()) */
+            /* Verify that the recv isn't part of the same select() (we can't do unbuffered sends/recvs from the same select()) */
             if (c->unbuf_id != id) {
                     /* Sanity check -- make sure the op is a recv */
                     eb_assert_or_bail(!c->unbuf_op->send, "Op isn't a recv as expected");
@@ -513,7 +513,7 @@ static inline op_result_t recv_unbuf(uintptr_t id, eb_chan_op_t *op, eb_port_t p
             /* We completed this op so set our return value! */
             result = op_result_complete;
         } else if (state == state_send) {
-            /* Verify that the send isn't part of the same select() -- (we can't do unbuffered sends/recvs from the same select()) */
+            /* Verify that the send isn't part of the same select() (we can't do unbuffered sends/recvs from the same select()) */
             if (c->unbuf_id != id) {
                     /* Sanity check -- make sure the op is a send */
                     eb_assert_or_bail(c->unbuf_op->send, "Op isn't a send as expected");
