@@ -42,11 +42,11 @@ func main() {
     
     c := make(chan string, 0)
     
-    go thread(c)
-    go thread(c)
+    // go thread(c)
+    // go thread(c)
     
-    // go threadSend(c)
-    // go threadRecv(c)
+    go threadSend(c)
+    go threadRecv(c)
     
     time.Sleep(4 * time.Second)
     

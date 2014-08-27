@@ -558,7 +558,7 @@ eb_chan_op_t *eb_chan_do(eb_chan_op_t *const ops[], size_t nops) {
         /* ## Fast path: loop randomly over our operations to see if one of them was able to send/receive.
            If not, we'll enter the slow path where we put our thread to sleep until we're signalled. */
         if (nops) {
-            static const size_t k_attempt_multiplier = 50;
+            static const size_t k_attempt_multiplier = 100;
             for (size_t i = 0; i < k_attempt_multiplier * nops; i++) {
                 // TODO: not using random() here speeds this up a lot, so we should generate random bits more efficiently
     //            result = try_op((uintptr_t)&result, ops[(random() % nops)], NULL);
@@ -637,7 +637,7 @@ eb_chan_op_t *eb_chan_do(eb_chan_op_t *const ops[], size_t nops) {
 
 eb_chan_op_t *eb_chan_try(eb_chan_op_t *const ops[], size_t nops) {
     // TODO: randomize iteration!
-    // TODO: we need to call cleanup_after_op() here, because we may need to reset state
+    // TODO: as this is currently-implemented, unbuffered send/recvs will never complete right?
     eb_chan_op_t *result = NULL;
     uintptr_t id = (uintptr_t)&result;
     
@@ -651,5 +651,10 @@ eb_chan_op_t *eb_chan_try(eb_chan_op_t *const ops[], size_t nops) {
             break;
         }
     }
+    
+    for (size_t i = 0; i < nops; i++) {
+        cleanup_after_op(id, ops[i], NULL);
+    }
+    
     return result;
 }
