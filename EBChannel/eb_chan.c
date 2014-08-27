@@ -294,7 +294,7 @@ typedef enum {
     op_result_busy,     /* The channel's busy and we should try the op again */
 } op_result_t;
 
-static inline op_result_t send_buf(uintptr_t id, const eb_chan_op_t *op, eb_port_t port) {
+static inline op_result_t send_buf(uintptr_t id, const eb_chan_op_t *op, eb_port_t port, int *cleanup) {
     abort();
     return op_result_next;
     
@@ -333,7 +333,7 @@ static inline op_result_t send_buf(uintptr_t id, const eb_chan_op_t *op, eb_port
 //    return result;
 }
 
-static inline op_result_t recv_buf(uintptr_t id, const eb_chan_op_t *op, eb_port_t port) {
+static inline op_result_t recv_buf(uintptr_t id, const eb_chan_op_t *op, eb_port_t port, int *cleanup) {
     abort();
     return op_result_next;
     
@@ -381,14 +381,17 @@ static inline op_result_t recv_buf(uintptr_t id, const eb_chan_op_t *op, eb_port
 //    return result;
 }
 
-static inline op_result_t send_unbuf(uintptr_t id, eb_chan_op_t *op, eb_port_t port) {
+static inline op_result_t send_unbuf(uintptr_t id, eb_chan_op_t *op, eb_port_t port, int *cleanup) {
         assert(op);
         assert(op->chan);
+        assert(cleanup);
     
     eb_chan_t chan = op->chan;
     op_result_t result = op_result_next;
     
     if (OSSpinLockTry(&chan->lock)) {
+        *cleanup = false;
+        
         state_t state = chan->state;
             /* Verify that the channel isn't closed */
             eb_assert_or_bail(state != state_closed, "Illegal send on closed channel");
@@ -401,6 +404,7 @@ static inline op_result_t send_unbuf(uintptr_t id, eb_chan_op_t *op, eb_port_t p
             chan->unbuf_op = op;
             chan->unbuf_port = port;
             wakeup_recv = true;
+            *cleanup = true;
         } else if (state == state_send) {
             if (port && chan->unbuf_op == op) {
                 /* We own the send op that's in progress, so assign chan's unbuf_port */
@@ -409,6 +413,7 @@ static inline op_result_t send_unbuf(uintptr_t id, eb_chan_op_t *op, eb_port_t p
                 eb_assert_or_bail(chan->unbuf_id == id, "Send id invalid");
                 /* Assign the port */
                 chan->unbuf_port = port;
+                *cleanup = true;
             }
         } else if (state == state_recv) {
             /* Verify that the recv isn't part of the same select() -- (we can't do unbuffered sends/recvs from the same select()) */
@@ -479,14 +484,17 @@ static inline op_result_t send_unbuf(uintptr_t id, eb_chan_op_t *op, eb_port_t p
     return result;
 }
 
-static inline op_result_t recv_unbuf(uintptr_t id, eb_chan_op_t *op, eb_port_t port) {
+static inline op_result_t recv_unbuf(uintptr_t id, eb_chan_op_t *op, eb_port_t port, int *cleanup) {
         assert(op);
         assert(op->chan);
+        assert(cleanup);
     
     eb_chan_t chan = op->chan;
     op_result_t result = op_result_next;
     
     if (OSSpinLockTry(&chan->lock)) {
+        *cleanup = false;
+        
         state_t state = chan->state;
         bool wakeup_send = false;
         if (state == state_open) {
@@ -495,6 +503,7 @@ static inline op_result_t recv_unbuf(uintptr_t id, eb_chan_op_t *op, eb_port_t p
             chan->unbuf_op = op;
             chan->unbuf_port = port;
             wakeup_send = true;
+            *cleanup = true;
         } else if (state == state_closed) {
             /* Set our op's state signifying that we're returning the value due to a closed channel */
             op->open = false;
@@ -550,6 +559,7 @@ static inline op_result_t recv_unbuf(uintptr_t id, eb_chan_op_t *op, eb_port_t p
                 eb_assert_or_bail(chan->unbuf_id == id, "unbuf_id invalid");
                 /* Assign the port */
                 chan->unbuf_port = port;
+                *cleanup = true;
             }
         } else if (state == state_ack) {
             if (chan->unbuf_op == op) {
@@ -616,16 +626,16 @@ static inline void cleanup_after_op(uintptr_t id, const eb_chan_op_t *op, eb_por
     }
 }
 
-static inline op_result_t try_op(uintptr_t id, eb_chan_op_t *op, eb_port_t port) {
+static inline op_result_t try_op(uintptr_t id, eb_chan_op_t *op, eb_port_t port, int *cleanup) {
         assert(op);
     eb_chan_t chan = op->chan;
     if (chan) {
         if (op->send) {
             /* ## Send */
-            return (chan->buf_cap ? send_buf(id, op, port) : send_unbuf(id, op, port));
+            return (chan->buf_cap ? send_buf(id, op, port, cleanup) : send_unbuf(id, op, port, cleanup));
         } else if (!op->send) {
             /* ## Receive */
-            return (chan->buf_cap ? recv_buf(id, op, port) : recv_unbuf(id, op, port));
+            return (chan->buf_cap ? recv_buf(id, op, port, cleanup) : recv_unbuf(id, op, port, cleanup));
         }
     }
     return op_result_next;
@@ -636,6 +646,8 @@ eb_chan_op_t *eb_chan_do(eb_chan_op_t *const ops[], size_t nops) {
     eb_port_t port = NULL;
     eb_chan_op_t *result = NULL;
     uintptr_t id = (uintptr_t)&result;
+    int cleanup[nops];
+    bzero(cleanup, sizeof(cleanup));
     
     for (;;) {
         /* ## Fast path: loop randomly over our operations to see if one of them was able to send/receive.
@@ -647,7 +659,7 @@ eb_chan_op_t *eb_chan_do(eb_chan_op_t *const ops[], size_t nops) {
     //            result = try_op((uintptr_t)&result, ops[(random() % nops)], NULL);
                 size_t idx = (i % nops);
                 eb_chan_op_t *op = ops[idx];
-                op_result_t r = try_op(id, op, port);
+                op_result_t r = try_op(id, op, port, &cleanup[idx]);
                 /* If the op completed, we need to exit! */
                 if (r == op_result_complete) {
                     result = op;
@@ -679,7 +691,7 @@ eb_chan_op_t *eb_chan_do(eb_chan_op_t *const ops[], size_t nops) {
         for (size_t i = 0; i < nops; i++) {
             eb_chan_op_t *op = ops[i];
             op_result_t r;
-            while ((r = try_op(id, op, port)) == op_result_busy);
+            while ((r = try_op(id, op, port, &cleanup[i])) == op_result_busy);
             /* If the op completed, we need to exit! */
             if (r == op_result_complete) {
                 result = op;
@@ -706,7 +718,9 @@ eb_chan_op_t *eb_chan_do(eb_chan_op_t *const ops[], size_t nops) {
         }
         
         for (size_t i = 0; i < nops; i++) {
-            cleanup_after_op(id, ops[i], port);
+            if (cleanup[i]) {
+                cleanup_after_op(id, ops[i], port);
+            }
         }
         
         if (port) {
@@ -723,11 +737,13 @@ eb_chan_op_t *eb_chan_try(eb_chan_op_t *const ops[], size_t nops) {
     // TODO: as this is currently-implemented, unbuffered send/recvs will never complete right?
     eb_chan_op_t *result = NULL;
     uintptr_t id = (uintptr_t)&result;
+    int cleanup[nops];
+    bzero(cleanup, sizeof(cleanup));
     
     for (size_t i = 0; i < nops; i++) {
         eb_chan_op_t *op = ops[i];
         op_result_t r;
-        while ((r = try_op(id, op, NULL)) == op_result_busy);
+        while ((r = try_op(id, op, NULL, &cleanup[i])) == op_result_busy);
         /* If the op completed, we need to exit! */
         if (r == op_result_complete) {
             result = op;
@@ -736,7 +752,9 @@ eb_chan_op_t *eb_chan_try(eb_chan_op_t *const ops[], size_t nops) {
     }
     
     for (size_t i = 0; i < nops; i++) {
-        cleanup_after_op(id, ops[i], NULL);
+        if (cleanup[i]) {
+            cleanup_after_op(id, ops[i], NULL);
+        }
     }
     
     return result;
