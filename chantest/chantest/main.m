@@ -51,11 +51,10 @@ void *threadTrySend(void *a)
     eb_chan_op_t send = eb_chan_send(gChan, "sup g");
     eb_chan_op_t *const ops[] = {&send};
     for (NSUInteger i = 0; i < NTRIALS; i++) {
-        if (eb_chan_do(ops, (sizeof(ops) / sizeof(*ops))) == &send) {
+        if (eb_chan_try(ops, (sizeof(ops) / sizeof(*ops))) == &send) {
             NSLog(@"SENT");
         } else {
             NSLog(@"NOT SENT");
-            abort();
         }
     }
     return NULL;
