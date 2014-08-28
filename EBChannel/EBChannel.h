@@ -7,7 +7,7 @@
 @interface EBChannel : NSObject
 
 /* Creation */
-- (instancetype)initWithBufferSize: (NSUInteger)bufferSize;
+- (instancetype)initWithBufferCapacity: (NSUInteger)bufferCapacity;
 
 /* Methods */
 + (EBChannelOp *)do: (NSArray *)ops;
@@ -18,8 +18,8 @@
 - (void)close;
 
 /* Getters */
-- (NSUInteger)queueLength;
-- (NSUInteger)bufferSize;
+- (NSUInteger)bufferCapacity;
+- (NSUInteger)bufferLength;
 
 @end
 

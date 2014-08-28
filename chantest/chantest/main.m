@@ -23,7 +23,7 @@ void *threadTryRecv(void *a)
     eb_chan_op_t recv = eb_chan_recv(gChan);
     eb_chan_op_t *const ops[] = {&recv};
     for (NSUInteger i = 0; i < NTRIALS; i++) {
-        if (eb_chan_try(ops, (sizeof(ops) / sizeof(*ops))) == &recv) {
+        if (eb_chan_try(ops, (sizeof(ops) / sizeof(*ops))) == 0) {
             NSLog(@"RECEIVED");
         } else {
             NSLog(@"NOT RECEIVED");
@@ -51,7 +51,7 @@ void *threadTrySend(void *a)
     eb_chan_op_t send = eb_chan_send(gChan, "sup g");
     eb_chan_op_t *const ops[] = {&send};
     for (NSUInteger i = 0; i < NTRIALS; i++) {
-        if (eb_chan_try(ops, (sizeof(ops) / sizeof(*ops))) == &send) {
+        if (eb_chan_try(ops, (sizeof(ops) / sizeof(*ops))) == 0) {
             NSLog(@"SENT");
         } else {
             NSLog(@"NOT SENT");
@@ -65,7 +65,7 @@ void *threadSend(void *a)
     eb_chan_op_t send = eb_chan_send(gChan, "hallo");
     eb_chan_op_t *const ops[] = {&send};
     for (NSUInteger i = 0; i < NTRIALS; i++) {
-        assert(eb_chan_do(ops, (sizeof(ops) / sizeof(*ops))));
+        assert(eb_chan_do(ops, (sizeof(ops) / sizeof(*ops))) != SIZE_MAX);
     }
     return NULL;
 }
@@ -75,10 +75,10 @@ void *threadRecv(void *a)
     eb_chan_op_t recv = eb_chan_recv(gChan);
     eb_chan_op_t *const ops[] = {&recv};
     
-    assert(eb_chan_do(ops, (sizeof(ops) / sizeof(*ops))));
+    assert(eb_chan_do(ops, (sizeof(ops) / sizeof(*ops))) != SIZE_MAX);
     EBTime startTime = EBTimeCurrentTime();
     for (NSUInteger i = 1; i < NTRIALS; i++) {
-        assert(eb_chan_do(ops, (sizeof(ops) / sizeof(*ops))));
+        assert(eb_chan_do(ops, (sizeof(ops) / sizeof(*ops))) != SIZE_MAX);
     }
     
     NSLog(@"elapsed: %f (%ju iterations)", EBTimeElapsedSecondsSince(startTime), (uintmax_t)NTRIALS);
@@ -105,7 +105,7 @@ void *thread(void *a)
 
 int main(int argc, const char * argv[])
 {
-    gChan = eb_chan_alloc(0);
+    gChan = eb_chan_create(0);
     
     pthread_t thread1, thread2;
     

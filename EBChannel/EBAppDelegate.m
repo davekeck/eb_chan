@@ -7,7 +7,7 @@
 
 @implementation EBAppDelegate
 {
-    eb_chan_t _chan;
+    EBChannel *_chan;
 }
 
 //- (void)thread
@@ -33,22 +33,22 @@
 
 - (void)threadSend
 {
-    eb_chan_op_t send = eb_chan_send(_chan, "hallo");
-    eb_chan_op_t *const ops[] = {&send};
+    NSArray *ops = @[[_chan send: @"hallo"]];
+    assert([EBChannel do: ops]);
+    
     for (NSUInteger i = 0; i < NTRIALS; i++) {
-        assert(eb_chan_do(ops, (sizeof(ops) / sizeof(*ops))));
+        assert([EBChannel do: ops]);
     }
 }
 
 - (void)threadRecv
 {
-    eb_chan_op_t recv = eb_chan_recv(_chan);
-    eb_chan_op_t *const ops[] = {&recv};
+    NSArray *ops = @[[_chan recv]];
+    assert([EBChannel do: ops]);
     
-    assert(eb_chan_do(ops, (sizeof(ops) / sizeof(*ops))));
     EBTime startTime = EBTimeCurrentTime();
     for (NSUInteger i = 1; i < NTRIALS; i++) {
-        assert(eb_chan_do(ops, (sizeof(ops) / sizeof(*ops))));
+        assert([EBChannel do: ops]);
     }
     
     NSLog(@"elapsed: %f (%ju iterations)", EBTimeElapsedSecondsSince(startTime), (uintmax_t)NTRIALS);
@@ -57,7 +57,7 @@
 
 - (void)applicationDidFinishLaunching: (NSNotification *)aNotification
 {
-    _chan = eb_chan_create(0);
+    _chan = [[EBChannel alloc] initWithBufferCapacity: 0];
 //    [NSTimer scheduledTimerWithTimeInterval: 1 repeats: NO block:^(NSTimer *timer) {
 //        [NSThread detachNewThreadSelector: @selector(thread) toTarget: self withObject: nil];
 //        [NSThread detachNewThreadSelector: @selector(thread) toTarget: self withObject: nil];
