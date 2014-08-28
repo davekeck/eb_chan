@@ -10,9 +10,10 @@ typedef struct {
     const void *val;    /* When sending: the value to send; when receiving and 'open' is true: the value that was received.  */
 } eb_chan_op_t;
 
-/* Channel allocation/deallocation */
-eb_chan_t eb_chan_alloc(size_t buf_cap);
-void eb_chan_free(eb_chan_t c);
+/* Channel lifecycle */
+eb_chan_t eb_chan_create(size_t buf_cap);
+eb_chan_t eb_chan_retain(eb_chan_t c);
+void eb_chan_release(eb_chan_t c);
 
 /* Close a channel */
 void eb_chan_close(eb_chan_t c);

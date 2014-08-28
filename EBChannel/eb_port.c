@@ -25,7 +25,7 @@ static inline bool wait_on_port(eb_port_t p, bool block) {
 }
 
 static void eb_port_free(eb_port_t p) {
-    /* Intentionally allowing p==NULL */
+    /* Intentionally allowing p==NULL so that this function can be called from eb_port_create() */
     if (!p) {
         return;
     }

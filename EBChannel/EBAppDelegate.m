@@ -57,7 +57,7 @@
 
 - (void)applicationDidFinishLaunching: (NSNotification *)aNotification
 {
-    _chan = eb_chan_alloc(0);
+    _chan = eb_chan_create(0);
 //    [NSTimer scheduledTimerWithTimeInterval: 1 repeats: NO block:^(NSTimer *timer) {
 //        [NSThread detachNewThreadSelector: @selector(thread) toTarget: self withObject: nil];
 //        [NSThread detachNewThreadSelector: @selector(thread) toTarget: self withObject: nil];

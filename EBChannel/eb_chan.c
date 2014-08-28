@@ -156,6 +156,7 @@ enum {
 }; typedef int32_t state_t;
 
 struct eb_chan {
+    int32_t retain_count;
     OSSpinLock lock;
     state_t state;
     
@@ -174,13 +175,36 @@ struct eb_chan {
 };
 
 /* Channel allocation/deallocation */
-eb_chan_t eb_chan_alloc(size_t buf_cap) {
+static inline void eb_chan_free(eb_chan_t c) {
+    /* Intentionally allowing c==NULL so that this function can be called from eb_chan_create() */
+    if (!c) {
+        return;
+    }
+    
+    if (c->buf_cap) {
+        /* ## Buffered */
+        free(c->buf);
+        c->buf = NULL;
+    }
+    
+    port_list_free(c->recvs);
+    c->recvs = NULL;
+    
+    port_list_free(c->sends);
+    c->sends = NULL;
+    
+    free(c);
+    c = NULL;
+}
+
+eb_chan_t eb_chan_create(size_t buf_cap) {
     static const size_t k_init_buf_cap = 16;
     
     eb_chan_t c = malloc(sizeof(*c));
         eb_assert_or_recover(c, goto failed);
     bzero(c, sizeof(*c));
     
+    c->retain_count = 1;
     c->lock = OS_SPINLOCK_INIT;
     c->state = state_open;
     
@@ -209,26 +233,17 @@ eb_chan_t eb_chan_alloc(size_t buf_cap) {
     }
 }
 
-void eb_chan_free(eb_chan_t c) {
-    /* Intentionally allowing c==NULL */
-    if (!c) {
-        return;
+eb_chan_t eb_chan_retain(eb_chan_t c) {
+    assert(c);
+    OSAtomicIncrement32(&c->retain_count);
+    return c;
+}
+
+void eb_chan_release(eb_chan_t c) {
+    assert(c);
+    if (!OSAtomicDecrement32(&c->retain_count)) {
+        eb_chan_free(c);
     }
-    
-    if (c->buf_cap) {
-        /* ## Buffered */
-        free(c->buf);
-        c->buf = NULL;
-    }
-    
-    port_list_free(c->recvs);
-    c->recvs = NULL;
-    
-    port_list_free(c->sends);
-    c->sends = NULL;
-    
-    free(c);
-    c = NULL;
 }
 
 /* Close a channel */
