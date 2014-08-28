@@ -8,6 +8,7 @@
 #include "eb_port.h"
 
 // TODO: update comments
+// TODO: standardize assertion indentation
 
 //#define OSSpinLock int32_t
 //#define OS_SPINLOCK_INIT 0
@@ -303,90 +304,84 @@ enum {
 }; typedef unsigned int op_result_t;
 
 static inline op_result_t send_buf(uintptr_t id, const eb_chan_op_t *op, eb_port_t port) {
-    abort();
-    return op_result_next;
+        assert(op);
+        assert(op->chan);
     
-//        assert(op);
-//        assert(op->chan);
-//    
-//    eb_chan_t c = op->chan;
-//    bool result = false;
-//    if (SpinLock(&c->lock, port != NULL)) {
-//        eb_assert_or_bail(chan->open, "Can't send on closed channel.");
-//        port_list_t wakeup_ports = NULL;
-//        if (c->buf_len < c->buf_cap) {
-//            /* ## Sending, buffered, channel open, buffer has space */
-//            /* Add the value to the buffer */
-//            c->buf[c->buf_len] = op->val;
-//            c->buf_len++;
-//            /* Notify the channel's recvs if our buffer went from empty to non-empty */
-//            if (c->buf_len == 1) {
-//                /* Copy the channel's recvs so that we can signal them after we relinquish the lock, to notify
-//                   them that we've added to the buffer. */
-//                wakeup_ports = port_list_stack_copy(c->recvs);
-//            }
-//            /* Set our flag signifying that we completed this op. */
-//            result = true;
-//        }
-//        SpinUnlock(&c->lock);
-//        
-//        /* Signal every port in wakeup_ports */
-//        if (wakeup_ports) {
-//            port_list_signal(wakeup_ports, port);
-//            port_list_stack_free(wakeup_ports);
-//            wakeup_ports = NULL;
-//        }
-//    }
-//    
-//    return result;
+    eb_chan_t c = op->chan;
+    op_result_t result = op_result_next;
+    
+    if (OSSpinLockTry(&c->lock)) {
+        /* Verify that the channel is open */
+        eb_assert_or_bail(c->state == state_open, "Illegal send on non-open channel");
+        
+        bool wakeup_recv = false;
+        if (c->buf_len < c->buf_cap) {
+            /* ## Sending, buffered, channel open, buffer has space */
+            /* Notify the channel's recvs if our buffer is going from empty to non-empty */
+            wakeup_recv = (!c->buf_len);
+            /* Add the value to the buffer */
+            c->buf[c->buf_len] = op->val;
+            c->buf_len++;
+            /* Set our flag signifying that we completed this op. */
+            result = op_result_complete;
+        }
+        
+        OSSpinLockUnlock(&c->lock);
+        
+        if (wakeup_recv) {
+            port_list_signal_first(c->recvs, port);
+        }
+    } else {
+        result = op_result_busy;
+    }
+    
+    return result;
 }
 
-static inline op_result_t recv_buf(uintptr_t id, const eb_chan_op_t *op, eb_port_t port) {
-    abort();
-    return op_result_next;
+static inline op_result_t recv_buf(uintptr_t id, eb_chan_op_t *op, eb_port_t port) {
+        assert(op);
+        assert(op->chan);
     
-//        assert(op);
-//        assert(op->chan);
-//    
-//    eb_chan_t c = op->chan;
-//    bool result = false;
-//    if (SpinLock(&c->lock, port != NULL)) {
-//        port_list_t wakeup_ports = NULL;
-//        if (c->buf_len) {
-//            /* ## Receiving, buffered, buffer non-empty */
-//            /* Set our op's state signifying that we received a value */
-//            op->open = true;
-//            op->val = chan->buf[0];
-//            /* Update chan's buffer */
-//            c->buf_len--;
-//            memmove(&c->buf[0], &c->buf[1], c->buf_len * sizeof(*(c->buf)));
-//            /* Notify the channel's sends if our buffer went from full to not-full */
-//            if (c->buf_len == c->buf_cap-1) {
-//                /* Copy the channel's sends so that we can signal them after we relinquish the lock, to notify
-//                   them that we've removed from the buffer. */
-//                wakeup_ports = port_list_stack_copy(c->sends);
-//            }
-//            /* Set our flag signifying that we completed this op. */
-//            result = true;
-//        } else if (!chan->open) {
-//            /* ## Receiving, buffered, buffer empty, channel closed */
-//            /* Set our op's state signifying that it completed because the channel's closed */
-//            op->open = false;
-//            op->val = NULL;
-//            /* Set our flag signifying that we completed this op. */
-//            result = true;
-//        }
-//        SpinUnlock(&c->lock);
-//        
-//        /* Signal every port in wakeup_ports */
-//        if (wakeup_ports) {
-//            port_list_signal(wakeup_ports, port);
-//            port_list_stack_free(wakeup_ports);
-//            wakeup_ports = NULL;
-//        }
-//    }
-//    
-//    return result;
+    eb_chan_t c = op->chan;
+    op_result_t result = op_result_next;
+    
+    if (OSSpinLockTry(&c->lock)) {
+        state_t state = c->state;
+        /* Sanity-check the channel's state */
+        eb_assert_or_bail(state == state_open || state == state_closed, "Invalid channel state");
+        
+        bool wakeup_send = false;
+        if (c->buf_len) {
+            /* ## Receiving, buffered, buffer non-empty */
+            /* Notify the channel's sends if our buffer is going from full to not-full */
+            wakeup_send = (c->buf_len == c->buf_cap);
+            /* Set our op's state signifying that we received a value */
+            op->open = true;
+            op->val = c->buf[0];
+            /* Update chan's buffer */
+            c->buf_len--;
+            memmove(&c->buf[0], &c->buf[1], c->buf_len * sizeof(*(c->buf)));
+            /* Set our flag signifying that we completed this op. */
+            result = op_result_complete;
+        } else if (state == state_closed) {
+            /* ## Receiving, buffered, buffer empty, channel closed */
+            /* Set our op's state signifying that it completed because the channel's closed */
+            op->open = false;
+            op->val = NULL;
+            /* We completed this op so set our return value! */
+            result = op_result_complete;
+        }
+        
+        OSSpinLockUnlock(&c->lock);
+        
+        if (wakeup_send) {
+            port_list_signal_first(c->sends, port);
+        }
+    } else {
+        result = op_result_busy;
+    }
+    
+    return result;
 }
 
 static inline op_result_t send_unbuf(uintptr_t id, eb_chan_op_t *op, eb_port_t port) {
