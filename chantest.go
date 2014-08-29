@@ -18,7 +18,7 @@ func thread(c chan string) {
         }
     }
     fmt.Printf("elapsed (%v): %f\n", NTRIALS, time.Since(start).Seconds())
-    // os.Exit(0)
+    os.Exit(0)
 }
 
 func threadSend(c chan string) {
@@ -40,13 +40,13 @@ func threadRecv(c chan string) {
 func main() {
     runtime.GOMAXPROCS(2)
     
-    c := make(chan string, 0)
+    c := make(chan string, 10)
     
-    // go thread(c)
-    // go thread(c)
+    go thread(c)
+    go thread(c)
     
-    go threadSend(c)
-    go threadRecv(c)
+    // go threadSend(c)
+    // go threadRecv(c)
     
     time.Sleep(4 * time.Second)
     

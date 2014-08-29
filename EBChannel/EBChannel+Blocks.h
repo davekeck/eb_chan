@@ -6,8 +6,8 @@ typedef void(^EBChannelHandler)(id obj);
 @interface EBChannel (Blocks)
 
 /* Methods */
-+ (EBChannelOp *)default;
 + (void)select: (NSArray *)opsAndHandlers;
++ (EBChannelOp *)default;
 
 @end
 

@@ -105,7 +105,7 @@ void *thread(void *a)
 
 int main(int argc, const char * argv[])
 {
-    gChan = eb_chan_create(0);
+    gChan = eb_chan_create(10);
     
     pthread_t thread1, thread2;
     
@@ -115,11 +115,11 @@ int main(int argc, const char * argv[])
 //    pthread_create(&thread1, NULL, threadDoRecv, NULL);
 //    pthread_create(&thread2, NULL, threadTrySend, NULL);
     
-    pthread_create(&thread1, NULL, threadSend, NULL);
-    pthread_create(&thread2, NULL, threadRecv, NULL);
+//    pthread_create(&thread1, NULL, threadSend, NULL);
+//    pthread_create(&thread2, NULL, threadRecv, NULL);
     
-//    pthread_create(&thread1, NULL, thread, NULL);
-//    pthread_create(&thread2, NULL, thread, NULL);
+    pthread_create(&thread1, NULL, thread, NULL);
+    pthread_create(&thread2, NULL, thread, NULL);
     
     for (;;) {
         sleep(-1);

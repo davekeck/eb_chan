@@ -1,7 +1,11 @@
 #import <Foundation/Foundation.h>
+#import "eb_chan.h"
 
-@interface EBChannelOp : NSObject
-- (id)obj; /* For a receive operation, nil signifies that the channel was closed. */
+@interface EBChannelOp : NSObject {
+    @public
+    eb_chan_op_t _op;
+}
+- (id)obj; /* The object received/sent. For a receive operation, nil signifies that the channel was closed. */
 @end
 
 @interface EBChannel : NSObject

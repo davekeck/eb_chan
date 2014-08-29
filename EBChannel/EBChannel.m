@@ -7,10 +7,7 @@
 #import "eb_chan.h"
 #import "eb_assert.h"
 
-@implementation EBChannelOp {
-    @public
-    eb_chan_op_t _op;
-}
+@implementation EBChannelOp
 
 - (instancetype)initWithChannel: (eb_chan_t)chan send: (BOOL)send obj: (id)obj {
         NSParameterAssert(chan);
@@ -31,6 +28,10 @@
     _op.val = nil;
     
     [super dealloc];
+}
+
+- (eb_chan_op_t *)op {
+    return &_op;
 }
 
 - (id)obj {
@@ -72,7 +73,7 @@ NS_INLINE EBChannelOp *doOps(NSArray *opsArray, BOOL block) {
     eb_chan_op_t *ops[nops];
     for (NSUInteger i = 0; i < nops; i++) {
         /* Reset every recv op's object */
-        eb_chan_op_t *op = &((EBChannelOp *)opsArray[i])->_op;;
+        eb_chan_op_t *op = &((EBChannelOp *)opsArray[i])->_op;
         if (!op->send) {
             [(id)op->val release];
             op->val = nil;
@@ -92,7 +93,7 @@ NS_INLINE EBChannelOp *doOps(NSArray *opsArray, BOOL block) {
         }
         
         for (EBChannelOp *op in opsArray) {
-            if (&op->_op == r) {
+            if (r == &op->_op) {
                 result = op;
                 break;
             }

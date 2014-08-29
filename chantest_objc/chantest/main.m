@@ -88,36 +88,47 @@ void *threadRecv(void *a)
     return NULL;
 }
 
+//void *thread(void *a)
+//{
+//    @autoreleasepool {
+//        NSArray *ops = @[[gChan send: nil], [gChan recv]];
+//        assert([EBChannel do: ops]);
+//        
+//        EBTime startTime = EBTimeCurrentTime();
+//        for (NSUInteger i = 0; i < NTRIALS; i++) {
+//            assert([EBChannel do: ops]);
+//        }
+//        NSLog(@"elapsed: %f (%ju iterations)", EBTimeElapsedSecondsSince(startTime), (uintmax_t)NTRIALS);
+//        exit(0);
+//    }
+//    return NULL;
+//}
+
 void *thread(void *a)
 {
     @autoreleasepool {
         __block NSUInteger i = 0;
         EBTime startTime = EBTimeCurrentTime();
-        EBChannelOp *send = [gChan send: @"hallo"];
-        EBChannelOp *recv = [gChan recv];
-        EBChannelOp *defl = [EBChannel default];
+        NSArray *a = @[
+            [gChan send: @"hallo"], ^{
+//                    NSLog(@"sent");
+            },
+            
+            [gChan recv], ^{
+                i++;
+                if (i == NTRIALS) {
+                    NSLog(@"elapsed: %f (%ju iterations)", EBTimeElapsedSecondsSince(startTime), (uintmax_t)NTRIALS);
+                    exit(0);
+                } else {
+//                        NSLog(@"recv");
+                }
+            },
+        ];
         
         for (;;) {
-            @autoreleasepool {
-                [EBChannel select: @[
-                    recv, ^{
-                        i++;
-                        if (i == NTRIALS) {
-                            NSLog(@"elapsed: %f (%ju iterations)", EBTimeElapsedSecondsSince(startTime), (uintmax_t)NTRIALS);
-                            exit(0);
-                        } else {
-    //                        NSLog(@"recv");
-                        }
-                    },
-                    
-                    send, ^{
-    //                    NSLog(@"sent");
-                    },
-                    
-    //                defl, ^{
-    //                    NSLog(@"default");
-    //                }
-                ]];
+//            @autoreleasepool
+            {
+                [EBChannel select: a];
             }
         }
     }
