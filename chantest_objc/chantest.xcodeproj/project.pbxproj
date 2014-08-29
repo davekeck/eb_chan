@@ -15,7 +15,7 @@
 		55501D2219A969990028A9FE /* eb_chan.c in Sources */ = {isa = PBXBuildFile; fileRef = 55501D1F19A969990028A9FE /* eb_chan.c */; };
 		55501D3119A96A140028A9FE /* libEBFoundation.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 55501D2919A969F50028A9FE /* libEBFoundation.a */; };
 		55CD9F7819AFD98B00225A7C /* EBChannel.m in Sources */ = {isa = PBXBuildFile; fileRef = 55CD9F7719AFD98B00225A7C /* EBChannel.m */; settings = {COMPILER_FLAGS = "-fno-objc-arc"; }; };
-		55CD9F8119B0085D00225A7C /* EBChannel+Blocks.m in Sources */ = {isa = PBXBuildFile; fileRef = 55CD9F8019B0085D00225A7C /* EBChannel+Blocks.m */; };
+		55CD9F8119B0085D00225A7C /* EBChannel+Blocks.m in Sources */ = {isa = PBXBuildFile; fileRef = 55CD9F8019B0085D00225A7C /* EBChannel+Blocks.m */; settings = {COMPILER_FLAGS = "-fno-objc-arc"; }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */

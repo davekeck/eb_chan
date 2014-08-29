@@ -213,7 +213,7 @@ eb_chan_t eb_chan_create(size_t buf_cap) {
     c->recvs = port_list_alloc(k_init_buf_cap);
         eb_assert_or_recover(c->recvs, goto failed);
     
-    if (c->buf_cap) {
+    if (buf_cap) {
         /* ## Buffered */
         c->buf_cap = buf_cap;
         c->buf_len = 0;
@@ -644,7 +644,7 @@ static inline op_result_t try_op(uintptr_t id, eb_chan_op_t *op, eb_port_t port)
         if (op->send) {
             /* ## Send */
             return (c->buf_cap ? send_buf(id, op, port) : send_unbuf(id, op, port));
-        } else if (!op->send) {
+        } else {
             /* ## Receive */
             return (c->buf_cap ? recv_buf(id, op, port) : recv_unbuf(id, op, port));
         }

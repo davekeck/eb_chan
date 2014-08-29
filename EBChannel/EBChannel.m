@@ -5,6 +5,7 @@
 #import "EBChannel.h"
 #import <EBFoundation/EBFoundation.h>
 #import "eb_chan.h"
+#import "eb_assert.h"
 
 @implementation EBChannelOp {
     @public
@@ -79,22 +80,28 @@ NS_INLINE EBChannelOp *doOps(NSArray *opsArray, BOOL block) {
         ops[i] = op;
     }
     
-    eb_chan_op_t *result = (block ? eb_chan_do(ops, nops) : eb_chan_try(ops, nops));
-        EBAssertOrRecover(!block || result, return nil);
+    eb_chan_op_t *r = (block ? eb_chan_do(ops, nops) : eb_chan_try(ops, nops));
+        /* Either we're non-blocking and it doesn't matter whether an op completed, or we're blocking and an op did complete */
+        EBAssertOrRecover(!block || r, return nil);
     
-    if (result->send) {
-        /* Send ops retain the object on behalf of the receiver */
-        [(id)result->val retain];
-    }
-    
-    for (EBChannelOp *op in opsArray) {
-        if (&op->_op == result) {
-            return op;
+    EBChannelOp *result = nil;
+    if (r) {
+        if (r->send) {
+            /* Send ops retain the object on behalf of the receiver */
+            [(id)r->val retain];
         }
+        
+        for (EBChannelOp *op in opsArray) {
+            if (&op->_op == r) {
+                result = op;
+                break;
+            }
+        }
+        
+        eb_assert_or_bail(result, "Couldn't find op!");
     }
     
-    EBRaise(@"Couldn't find op!");
-    return nil;
+    return result;
 }
 
 + (EBChannelOp *)do: (NSArray *)ops {

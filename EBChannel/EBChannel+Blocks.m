@@ -27,17 +27,22 @@
     /* Create our array of only ops, and also determine whether there's a default
        case (and therefore whether we should use do() or try()) */
     NSMutableArray *ops = [NSMutableArray arrayWithCapacity: nops];
-    BOOL block = NO;
+    BOOL block = YES;
     for (NSUInteger i = 0; i < nops; i++) {
         EBChannelOp *op = opsAndHandlers[i*2];
-        [ops addObject: op];
         if (op == defaultOp) {
-            block = YES;
+            block = NO;
+        } else {
+            [ops addObject: op];
         }
     }
     
     EBChannelOp *r = (block ? [self do: ops] : [self try: ops]);
         EBAssertOrRecover(!block || r, return);
+    
+    if (!r) {
+        r = defaultOp;
+    }
     
     for (NSUInteger i = 0; i < nops; i++) {
         EBChannelOp *op = opsAndHandlers[i*2];

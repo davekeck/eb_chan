@@ -2,6 +2,7 @@
 #import <EBFoundation/EBFoundation.h>
 #import <pthread.h>
 #import "EBChannel.h"
+#import "EBChannel+Blocks.h"
 
 #define NTRIALS 1000000
 
@@ -87,9 +88,45 @@ void *threadRecv(void *a)
     return NULL;
 }
 
+void *thread(void *a)
+{
+    @autoreleasepool {
+        __block NSUInteger i = 0;
+        EBTime startTime = EBTimeCurrentTime();
+        EBChannelOp *send = [gChan send: @"hallo"];
+        EBChannelOp *recv = [gChan recv];
+        EBChannelOp *defl = [EBChannel default];
+        
+        for (;;) {
+            @autoreleasepool {
+                [EBChannel select: @[
+                    recv, ^{
+                        i++;
+                        if (i == NTRIALS) {
+                            NSLog(@"elapsed: %f (%ju iterations)", EBTimeElapsedSecondsSince(startTime), (uintmax_t)NTRIALS);
+                            exit(0);
+                        } else {
+    //                        NSLog(@"recv");
+                        }
+                    },
+                    
+                    send, ^{
+    //                    NSLog(@"sent");
+                    },
+                    
+    //                defl, ^{
+    //                    NSLog(@"default");
+    //                }
+                ]];
+            }
+        }
+    }
+    return NULL;
+}
+
 int main(int argc, const char * argv[])
 {
-    gChan = [[EBChannel alloc] initWithBufferCapacity: 0];
+    gChan = [[EBChannel alloc] initWithBufferCapacity: 10];
     
     pthread_t thread1, thread2;
     
@@ -99,11 +136,11 @@ int main(int argc, const char * argv[])
 //    pthread_create(&thread1, NULL, threadDoRecv, NULL);
 //    pthread_create(&thread2, NULL, threadTrySend, NULL);
     
-    pthread_create(&thread1, NULL, threadSend, NULL);
-    pthread_create(&thread2, NULL, threadRecv, NULL);
+//    pthread_create(&thread1, NULL, threadSend, NULL);
+//    pthread_create(&thread2, NULL, threadRecv, NULL);
     
-//    pthread_create(&thread1, NULL, thread, NULL);
-//    pthread_create(&thread2, NULL, thread, NULL);
+    pthread_create(&thread1, NULL, thread, NULL);
+    pthread_create(&thread2, NULL, thread, NULL);
     
     for (;;) {
         sleep(-1);
