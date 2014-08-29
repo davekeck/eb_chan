@@ -15,6 +15,7 @@
 		55501D2219A969990028A9FE /* eb_chan.c in Sources */ = {isa = PBXBuildFile; fileRef = 55501D1F19A969990028A9FE /* eb_chan.c */; };
 		55501D3119A96A140028A9FE /* libEBFoundation.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 55501D2919A969F50028A9FE /* libEBFoundation.a */; };
 		55CD9F7819AFD98B00225A7C /* EBChannel.m in Sources */ = {isa = PBXBuildFile; fileRef = 55CD9F7719AFD98B00225A7C /* EBChannel.m */; settings = {COMPILER_FLAGS = "-fno-objc-arc"; }; };
+		55CD9F8119B0085D00225A7C /* EBChannel+Blocks.m in Sources */ = {isa = PBXBuildFile; fileRef = 55CD9F8019B0085D00225A7C /* EBChannel+Blocks.m */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -69,6 +70,8 @@
 		55501D2319A969F50028A9FE /* EBFoundation.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = EBFoundation.xcodeproj; path = "../../Open-source Stuff/EBFoundation/EBFoundation.xcodeproj"; sourceTree = "<group>"; };
 		55CD9F7619AFD98B00225A7C /* EBChannel.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = EBChannel.h; path = ../../EBChannel/EBChannel.h; sourceTree = "<group>"; };
 		55CD9F7719AFD98B00225A7C /* EBChannel.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = EBChannel.m; path = ../../EBChannel/EBChannel.m; sourceTree = "<group>"; };
+		55CD9F7F19B0085D00225A7C /* EBChannel+Blocks.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = "EBChannel+Blocks.h"; path = "../../EBChannel/EBChannel+Blocks.h"; sourceTree = "<group>"; };
+		55CD9F8019B0085D00225A7C /* EBChannel+Blocks.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = "EBChannel+Blocks.m"; path = "../../EBChannel/EBChannel+Blocks.m"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -121,6 +124,8 @@
 				55501D1F19A969990028A9FE /* eb_chan.c */,
 				55CD9F7619AFD98B00225A7C /* EBChannel.h */,
 				55CD9F7719AFD98B00225A7C /* EBChannel.m */,
+				55CD9F7F19B0085D00225A7C /* EBChannel+Blocks.h */,
+				55CD9F8019B0085D00225A7C /* EBChannel+Blocks.m */,
 				55501D0F19A969750028A9FE /* main.m */,
 				55501D1319A969750028A9FE /* chantest.1 */,
 				55501D1119A969750028A9FE /* Supporting Files */,
@@ -220,6 +225,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				55CD9F8119B0085D00225A7C /* EBChannel+Blocks.m in Sources */,
 				55501D2019A969990028A9FE /* eb_assert.c in Sources */,
 				55CD9F7819AFD98B00225A7C /* EBChannel.m in Sources */,
 				55501D1019A969750028A9FE /* main.m in Sources */,
