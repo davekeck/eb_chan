@@ -1,5 +1,5 @@
 #if __has_feature(objc_arc)
-  #error For performance, EBChannel must be compiled with ARC disabled. (Use the -fno-objc-arc compiler flag for this file.)
+  #error For performance, EBChannel must be compiled with ARC disabled. (To do so, use the -fno-objc-arc compiler flag for this file.)
 #endif
 
 #import "EBChannel.h"
@@ -8,7 +8,6 @@
 
 @implementation EBChannelOp {
     @public
-    id _obj;
     eb_chan_op_t _op;
 }
 
@@ -19,24 +18,22 @@
         return nil;
     }
     
-    _obj = [obj retain];
-    
     _op.chan = chan;
     _op.send = send;
-    _op.val = _obj;
+    _op.val = [obj retain];
     
     return self;
 }
 
 - (void)dealloc {
-    [_obj release];
-    _obj = nil;
+    [(id)_op.val release];
+    _op.val = nil;
     
     [super dealloc];
 }
 
 - (id)obj {
-    return _obj;
+    return _op.val;
 }
 
 @end
@@ -67,48 +64,45 @@
 }
 
 #pragma mark - Methods -
-+ (EBChannelOp *)do: (NSArray *)opsArray {
-        NSParameterAssert(opsArray);
+NS_INLINE EBChannelOp *doOps(NSArray *opsArray, BOOL block) {
+        NSCParameterAssert(opsArray);
     
     size_t nops = [opsArray count];
     eb_chan_op_t *ops[nops];
     for (NSUInteger i = 0; i < nops; i++) {
-        ops[i] = &((EBChannelOp *)opsArray[i])->_op;
+        /* Reset every recv op's object */
+        eb_chan_op_t *op = &((EBChannelOp *)opsArray[i])->_op;;
+        if (!op->send) {
+            [(id)op->val release];
+            op->val = nil;
+        }
+        ops[i] = op;
     }
     
-    size_t r = eb_chan_do(ops, nops);
-        EBAssertOrRecover(r < nops, return nil);
+    eb_chan_op_t *result = (block ? eb_chan_do(ops, nops) : eb_chan_try(ops, nops));
+        EBAssertOrRecover(!block || result, return nil);
     
-    EBChannelOp *op = opsArray[r];
-    if (op->_op.send) {
-        /* ## Send op completed */
-        /* Retain the object on behalf of the receiver */
-        [op->_obj retain];
-    } else {
-        /* ## Recv op completed */
-        /* Assign our op's obj ivar (it was retained on our behalf by the send side), and release the existing obj if necessary */
-        [op->_obj release];
-        op->_obj = op->_op.val;
+    if (result->send) {
+        /* Send ops retain the object on behalf of the receiver */
+        [(id)result->val retain];
     }
     
-    return op;
+    for (EBChannelOp *op in opsArray) {
+        if (&op->_op == result) {
+            return op;
+        }
+    }
+    
+    EBRaise(@"Couldn't find op!");
+    return nil;
 }
 
-+ (EBChannelOp *)try: (NSArray *)opsArray {
-        NSParameterAssert(opsArray);
-    size_t nops = [opsArray count];
-    eb_chan_op_t *ops[nops];
-    for (NSUInteger i = 0; i < nops; i++) {
-        ops[i] = &((EBChannelOp *)opsArray[i])->_op;
-    }
-    
-    size_t r = eb_chan_try(ops, nops);
-    if (r == SIZE_MAX) {
-        return nil;
-    }
-    
-        EBAssertOrRecover(r < nops, return nil);
-    return opsArray[r];
++ (EBChannelOp *)do: (NSArray *)ops {
+    return doOps(ops, YES);
+}
+
++ (EBChannelOp *)try: (NSArray *)ops {
+    return doOps(ops, NO);
 }
 
 - (EBChannelOp *)send: (id)obj {

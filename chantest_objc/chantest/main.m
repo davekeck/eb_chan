@@ -60,12 +60,11 @@ static EBChannel *gChan = nil;
 void *threadSend(void *a)
 {
     @autoreleasepool {
-//        NSArray *ops = @[[gChan send: nil]];
-//        assert([EBChannel do: ops]);
+        NSArray *ops = @[[gChan send: nil]];
+        assert([EBChannel do: ops]);
         
         for (NSUInteger i = 0; i < NTRIALS; i++) {
-            EBChannelOp *send = [gChan send: @(i)];
-            assert([EBChannel do: @[send]]);
+            assert([EBChannel do: ops]);
         }
     }
     return NULL;
@@ -80,9 +79,6 @@ void *threadRecv(void *a)
         EBTime startTime = EBTimeCurrentTime();
         for (NSUInteger i = 0; i < NTRIALS; i++) {
             assert([EBChannel do: ops]);
-            if (i == NTRIALS - 1) {
-                NSLog(@"%@", [((EBChannelOp *)ops[0])obj]);
-            }
         }
         
         NSLog(@"elapsed: %f (%ju iterations)", EBTimeElapsedSecondsSince(startTime), (uintmax_t)NTRIALS);

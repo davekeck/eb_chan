@@ -10,21 +10,21 @@
 // TODO: update comments
 // TODO: standardize assertion indentation
 
-//#define OSSpinLock int32_t
-//#define OS_SPINLOCK_INIT 0
-//
-//#define OSSpinLockTry(l) ({                                \
-//    OSAtomicCompareAndSwap32(false, true, l);              \
-//})
-//
-//#define OSSpinLockLock(l) ({                                \
-//    while (!OSAtomicCompareAndSwap32(false, true, l));      \
-//    true;                                           \
-//})
-//
-//#define OSSpinLockUnlock(l) ({                                  \
-//    assert(OSAtomicCompareAndSwap32Barrier(true, false, l));    \
-//})
+#define OSSpinLock int32_t
+#define OS_SPINLOCK_INIT 0
+
+#define OSSpinLockTry(l) ({                                \
+    OSAtomicCompareAndSwap32(false, true, l);              \
+})
+
+#define OSSpinLockLock(l) ({                                \
+    while (!OSAtomicCompareAndSwap32(false, true, l));      \
+    true;                                           \
+})
+
+#define OSSpinLockUnlock(l) ({                                  \
+    assert(OSAtomicCompareAndSwap32Barrier(true, false, l));    \
+})
 
 typedef struct {
     OSSpinLock lock;
@@ -652,10 +652,10 @@ static inline op_result_t try_op(uintptr_t id, eb_chan_op_t *op, eb_port_t port)
     return op_result_next;
 }
 
-size_t eb_chan_do(eb_chan_op_t *const ops[], size_t nops) {
+eb_chan_op_t *eb_chan_do(eb_chan_op_t *const ops[], size_t nops) {
         assert(ops);
     eb_port_t port = NULL;
-    size_t result = SIZE_MAX;
+    eb_chan_op_t *result = NULL;
     uintptr_t id = (uintptr_t)&result;
     bool cleanup_ops[nops];
     bzero(cleanup_ops, sizeof(cleanup_ops));
@@ -681,7 +681,7 @@ size_t eb_chan_do(eb_chan_op_t *const ops[], size_t nops) {
                 
                 /* If the op completed, we need to exit! */
                 if (r == op_result_complete) {
-                    result = idx;
+                    result = op;
                     goto cleanup;
                 }
             }
@@ -718,7 +718,7 @@ size_t eb_chan_do(eb_chan_op_t *const ops[], size_t nops) {
             
             /* If the op completed, we need to exit! */
             if (r == op_result_complete) {
-                result = i;
+                result = op;
                 goto cleanup;
             }
         }
@@ -756,9 +756,9 @@ size_t eb_chan_do(eb_chan_op_t *const ops[], size_t nops) {
     return result;
 }
 
-size_t eb_chan_try(eb_chan_op_t *const ops[], size_t nops) {
+eb_chan_op_t *eb_chan_try(eb_chan_op_t *const ops[], size_t nops) {
     // TODO: randomize iteration!
-    size_t result = SIZE_MAX;
+    eb_chan_op_t *result = NULL;
     uintptr_t id = (uintptr_t)&result;
     bool cleanup_ops[nops];
     bzero(cleanup_ops, sizeof(cleanup_ops));
@@ -774,7 +774,7 @@ size_t eb_chan_try(eb_chan_op_t *const ops[], size_t nops) {
         
         /* If the op completed, we need to exit! */
         if (r == op_result_complete) {
-            result = i;
+            result = op;
             break;
         }
     }

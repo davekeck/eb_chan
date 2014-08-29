@@ -26,8 +26,8 @@ size_t eb_chan_get_buf_len(eb_chan_t c);
 eb_chan_op_t eb_chan_send(eb_chan_t c, const void *val);
 eb_chan_op_t eb_chan_recv(eb_chan_t c);
 
-/* ## Performing operations on a channel */
-/* Together, _do() and _try() implement Go's select() functionality (depending on whether there's a 'default' case) */
-/* These functions return the index of the operation that completed, or SIZE_MAX if none completed (only in the case of _try()) */ 
-size_t eb_chan_do(eb_chan_op_t *const ops[], size_t nops);
-size_t eb_chan_try(eb_chan_op_t *const ops[], size_t nops);
+/* ## Performing ops on a channel */
+/* Together, _do() and _try() implement Go's select() functionality; where _do() is select() without a 'default' case, and _try() is select() with a 'default' case. */
+/* _try() returns NULL if no op could complete */
+eb_chan_op_t *eb_chan_do(eb_chan_op_t *const ops[], size_t nops);
+eb_chan_op_t *eb_chan_try(eb_chan_op_t *const ops[], size_t nops);
