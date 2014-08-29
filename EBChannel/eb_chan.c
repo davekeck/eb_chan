@@ -10,21 +10,21 @@
 // TODO: update comments
 // TODO: standardize assertion indentation
 
-#define OSSpinLock int32_t
-#define OS_SPINLOCK_INIT 0
-
-#define OSSpinLockTry(l) ({                                \
-    OSAtomicCompareAndSwap32(false, true, l);              \
-})
-
-#define OSSpinLockLock(l) ({                                \
-    while (!OSAtomicCompareAndSwap32(false, true, l));      \
-    true;                                           \
-})
-
-#define OSSpinLockUnlock(l) ({                                  \
-    assert(OSAtomicCompareAndSwap32Barrier(true, false, l));    \
-})
+//#define OSSpinLock int32_t
+//#define OS_SPINLOCK_INIT 0
+//
+//#define OSSpinLockTry(l) ({                                \
+//    OSAtomicCompareAndSwap32(false, true, l);              \
+//})
+//
+//#define OSSpinLockLock(l) ({                                \
+//    while (!OSAtomicCompareAndSwap32(false, true, l));      \
+//    true;                                           \
+//})
+//
+//#define OSSpinLockUnlock(l) ({                                  \
+//    assert(OSAtomicCompareAndSwap32Barrier(true, false, l));    \
+//})
 
 typedef struct {
     OSSpinLock lock;

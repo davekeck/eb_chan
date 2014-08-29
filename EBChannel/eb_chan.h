@@ -27,7 +27,7 @@ eb_chan_op_t eb_chan_send(eb_chan_t c, const void *val);
 eb_chan_op_t eb_chan_recv(eb_chan_t c);
 
 /* ## Performing ops on a channel */
-/* Together, _do() and _try() implement Go's select() functionality; where _do() is select() without a 'default' case, and _try() is select() with a 'default' case. */
+/* _do() and _try() implement Go's select() functionality, where _do() is like select() without a 'default' case, and _try() is like select() with a 'default' case. */
 /* _try() returns NULL if no op could complete */
 eb_chan_op_t *eb_chan_do(eb_chan_op_t *const ops[], size_t nops);
 eb_chan_op_t *eb_chan_try(eb_chan_op_t *const ops[], size_t nops);

@@ -1,0 +1,8 @@
+Go channels as a C library (plus Obj-C wrapper)
+
+Go channels for C apps 
+
+Go channels implemented in C
+
+Show HN: Go channels implemented in C (plus Obj-C wrapper)
+

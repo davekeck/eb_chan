@@ -1,3 +1,7 @@
-- only notify the first port in sends/recvs. then, when removing ports from the lists, notify the head.
+- randomize op iteration
+
+? combine try() and do() into a single function that takes a timeout parameter? clock_alarm()/sem_timedwait() can be called to deliver a message on the port
+
 - add linux support
-- support sending in-line data of constant length
+
+? support sending in-line data of constant length
