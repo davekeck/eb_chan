@@ -40,7 +40,7 @@ func threadRecv(c chan string) {
 func main() {
     runtime.GOMAXPROCS(2)
     
-    c := make(chan string, 10)
+    c := make(chan string, 100)
     
     go thread(c)
     go thread(c)

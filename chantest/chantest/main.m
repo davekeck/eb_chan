@@ -5,12 +5,12 @@
 
 #define NTRIALS 1000000
 
-eb_chan_t gChan = NULL;
+eb_chan gChan = NULL;
 
 void *threadDoSend(void *a)
 {
-    eb_chan_op_t send = eb_chan_send(gChan, "halla");
-    eb_chan_op_t *const ops[] = {&send};
+    eb_chan_op send = eb_chan_send(gChan, "halla");
+    eb_chan_op *const ops[] = {&send};
     for (NSUInteger i = 0; i < NTRIALS; i++) {
         assert(eb_chan_do(ops, (sizeof(ops) / sizeof(*ops))));
         NSLog(@"SENT");
@@ -20,10 +20,10 @@ void *threadDoSend(void *a)
 
 void *threadTryRecv(void *a)
 {
-    eb_chan_op_t recv = eb_chan_recv(gChan);
-    eb_chan_op_t *const ops[] = {&recv};
+    eb_chan_op recv = eb_chan_recv(gChan);
+    eb_chan_op *const ops[] = {&recv};
     for (NSUInteger i = 0; i < NTRIALS; i++) {
-        if (eb_chan_try(ops, (sizeof(ops) / sizeof(*ops))) == 0) {
+        if (eb_chanry(ops, (sizeof(ops) / sizeof(*ops))) == 0) {
             NSLog(@"RECEIVED");
         } else {
             NSLog(@"NOT RECEIVED");
@@ -37,8 +37,8 @@ void *threadTryRecv(void *a)
 
 void *threadDoRecv(void *a)
 {
-    eb_chan_op_t recv = eb_chan_recv(gChan);
-    eb_chan_op_t *const ops[] = {&recv};
+    eb_chan_op recv = eb_chan_recv(gChan);
+    eb_chan_op *const ops[] = {&recv};
     for (NSUInteger i = 0; i < NTRIALS; i++) {
         assert(eb_chan_do(ops, (sizeof(ops) / sizeof(*ops))));
         NSLog(@"RECEIVED");
@@ -48,10 +48,10 @@ void *threadDoRecv(void *a)
 
 void *threadTrySend(void *a)
 {
-    eb_chan_op_t send = eb_chan_send(gChan, "sup g");
-    eb_chan_op_t *const ops[] = {&send};
+    eb_chan_op send = eb_chan_send(gChan, "sup g");
+    eb_chan_op *const ops[] = {&send};
     for (NSUInteger i = 0; i < NTRIALS; i++) {
-        if (eb_chan_try(ops, (sizeof(ops) / sizeof(*ops))) == 0) {
+        if (eb_chanry(ops, (sizeof(ops) / sizeof(*ops))) == 0) {
             NSLog(@"SENT");
         } else {
             NSLog(@"NOT SENT");
@@ -62,8 +62,8 @@ void *threadTrySend(void *a)
 
 void *threadSend(void *a)
 {
-    eb_chan_op_t send = eb_chan_send(gChan, "hallo");
-    eb_chan_op_t *const ops[] = {&send};
+    eb_chan_op send = eb_chan_send(gChan, "hallo");
+    eb_chan_op *const ops[] = {&send};
     for (NSUInteger i = 0; i < NTRIALS; i++) {
         assert(eb_chan_do(ops, (sizeof(ops) / sizeof(*ops))));
     }
@@ -72,8 +72,8 @@ void *threadSend(void *a)
 
 void *threadRecv(void *a)
 {
-    eb_chan_op_t recv = eb_chan_recv(gChan);
-    eb_chan_op_t *const ops[] = {&recv};
+    eb_chan_op recv = eb_chan_recv(gChan);
+    eb_chan_op *const ops[] = {&recv};
     
     assert(eb_chan_do(ops, (sizeof(ops) / sizeof(*ops))));
     EBTime startTime = EBTimeCurrentTime();
@@ -88,9 +88,9 @@ void *threadRecv(void *a)
 
 void *thread(void *a)
 {
-    eb_chan_op_t send = eb_chan_send(gChan, "hallo");
-    eb_chan_op_t recv = eb_chan_recv(gChan);
-    eb_chan_op_t *const ops[] = {&send, &recv};
+    eb_chan_op send = eb_chan_send(gChan, "hallo");
+    eb_chan_op recv = eb_chan_recv(gChan);
+    eb_chan_op *const ops[] = {&send, &recv};
     
     assert(eb_chan_do(ops, (sizeof(ops) / sizeof(*ops))));
     EBTime startTime = EBTimeCurrentTime();
@@ -105,7 +105,7 @@ void *thread(void *a)
 
 int main(int argc, const char * argv[])
 {
-    gChan = eb_chan_create(10);
+    gChan = eb_chan_create(0);
     
     pthread_t thread1, thread2;
     
@@ -115,11 +115,11 @@ int main(int argc, const char * argv[])
 //    pthread_create(&thread1, NULL, threadDoRecv, NULL);
 //    pthread_create(&thread2, NULL, threadTrySend, NULL);
     
-//    pthread_create(&thread1, NULL, threadSend, NULL);
-//    pthread_create(&thread2, NULL, threadRecv, NULL);
+    pthread_create(&thread1, NULL, threadSend, NULL);
+    pthread_create(&thread2, NULL, threadRecv, NULL);
     
-    pthread_create(&thread1, NULL, thread, NULL);
-    pthread_create(&thread2, NULL, thread, NULL);
+//    pthread_create(&thread1, NULL, thread, NULL);
+//    pthread_create(&thread2, NULL, thread, NULL);
     
     for (;;) {
         sleep(-1);

@@ -1,21 +1,21 @@
 #include "eb_port.h"
 #include <stdlib.h>
 #include <assert.h>
-#include <libkern/OSAtomic.h>
 #include <mach/mach.h>
 #include "eb_assert.h"
+#include "eb_atomic.h"
 
 #define PORT_POOL_CAP 0x10
-static OSSpinLock g_port_pool_lock = OS_SPINLOCK_INIT;
-static eb_port_t g_port_pool[PORT_POOL_CAP];
+static eb_spinlock g_port_pool_lock = EB_SPINLOCK_INIT;
+static eb_port g_port_pool[PORT_POOL_CAP];
 static size_t g_port_pool_len = 0;
 
 struct eb_port {
-    int32_t retain_count;
+    eb_atomic_int retain_count;
     mach_port_t port;
 };
 
-static inline bool wait_on_port(eb_port_t p, bool block) {
+static inline bool wait_on_port(eb_port p, bool block) {
     assert(p);
     /* Wait indefinitely for a message to come on our port */
     mach_msg_empty_rcv_t m;
@@ -24,7 +24,7 @@ static inline bool wait_on_port(eb_port_t p, bool block) {
     return (r == MACH_MSG_SUCCESS);
 }
 
-static void eb_port_free(eb_port_t p) {
+static void eb_port_free(eb_port p) {
     /* Intentionally allowing p==NULL so that this function can be called from eb_port_create() */
     if (!p) {
         return;
@@ -34,22 +34,22 @@ static void eb_port_free(eb_port_t p) {
     if (p->port != MACH_PORT_NULL) {
         /* Determine whether we should clear the port's buffer because we're going to try adding the port to our pool. */
         bool clear_buffer = false;
-        OSSpinLockLock(&g_port_pool_lock);
+        eb_spinlock_lock(&g_port_pool_lock);
             clear_buffer = (g_port_pool_len < PORT_POOL_CAP);
-        OSSpinLockUnlock(&g_port_pool_lock);
+        eb_spinlock_unlock(&g_port_pool_lock);
         
         if (clear_buffer) {
             while (wait_on_port(p, false));
         }
         
         /* Now that the buffer's empty, add the port to the pool as long as it'll still fit. */
-        OSSpinLockLock(&g_port_pool_lock);
+        eb_spinlock_lock(&g_port_pool_lock);
             if (g_port_pool_len < PORT_POOL_CAP) {
                 g_port_pool[g_port_pool_len] = p;
                 g_port_pool_len++;
                 added_to_pool = true;
             }
-        OSSpinLockUnlock(&g_port_pool_lock);
+        eb_spinlock_unlock(&g_port_pool_lock);
         
         /* If we couldn't add the port to the pool, destroy the underlying mach port. */
         if (!added_to_pool) {
@@ -64,15 +64,15 @@ static void eb_port_free(eb_port_t p) {
     }
 }
 
-eb_port_t eb_port_create() {
-    eb_port_t p = NULL;
+eb_port eb_port_create() {
+    eb_port p = NULL;
     /* First try to pop a port out of the pool */
-    OSSpinLockLock(&g_port_pool_lock);
+    eb_spinlock_lock(&g_port_pool_lock);
         if (g_port_pool_len) {
             g_port_pool_len--;
             p = g_port_pool[g_port_pool_len];
         }
-    OSSpinLockUnlock(&g_port_pool_lock);
+    eb_spinlock_unlock(&g_port_pool_lock);
     
     if (p) {
         /* We successfully popped a port out of the pool */
@@ -99,20 +99,20 @@ eb_port_t eb_port_create() {
     }
 }
 
-eb_port_t eb_port_retain(eb_port_t p) {
+eb_port eb_port_retain(eb_port p) {
     assert(p);
-    OSAtomicIncrement32(&p->retain_count);
+    eb_atomic_int_add(&p->retain_count, 1);
     return p;
 }
 
-void eb_port_release(eb_port_t p) {
+void eb_port_release(eb_port p) {
     assert(p);
-    if (!OSAtomicDecrement32(&p->retain_count)) {
+    if (eb_atomic_int_add(&p->retain_count, -1) == 1) {
         eb_port_free(p);
     }
 }
 
-void eb_port_signal(eb_port_t p) {
+void eb_port_signal(eb_port p) {
     assert(p);
     /* Send a message to our port, but don't block if the buffer's full. */
     mach_msg_empty_send_t m = {
@@ -128,6 +128,6 @@ void eb_port_signal(eb_port_t p) {
         eb_assert_or_recover(r == MACH_MSG_SUCCESS || r == MACH_SEND_TIMED_OUT, eb_no_op);
 }
 
-void eb_port_wait(eb_port_t p) {
+void eb_port_wait(eb_port p) {
     wait_on_port(p, true);
 }
