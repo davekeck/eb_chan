@@ -1,7 +1,6 @@
+- add linux support
 - randomize op iteration
 
-? combine try() and do() into a single function that takes a timeout parameter? clock_alarm()/sem_timedwait() can be called to deliver a message on the port
-
-- add linux support
+- combine try() and do() into a single function that uses a timeout parameter. (clock_alarm()/sem_timedwait() can be called to deliver a message on the port)
 
 ? support sending in-line data of constant length

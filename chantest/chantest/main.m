@@ -23,7 +23,7 @@ void *threadTryRecv(void *a)
     eb_chan_op recv = eb_chan_recv(gChan);
     eb_chan_op *const ops[] = {&recv};
     for (NSUInteger i = 0; i < NTRIALS; i++) {
-        if (eb_chanry(ops, (sizeof(ops) / sizeof(*ops))) == 0) {
+        if (eb_chan_try(ops, (sizeof(ops) / sizeof(*ops))) == 0) {
             NSLog(@"RECEIVED");
         } else {
             NSLog(@"NOT RECEIVED");
@@ -51,7 +51,7 @@ void *threadTrySend(void *a)
     eb_chan_op send = eb_chan_send(gChan, "sup g");
     eb_chan_op *const ops[] = {&send};
     for (NSUInteger i = 0; i < NTRIALS; i++) {
-        if (eb_chanry(ops, (sizeof(ops) / sizeof(*ops))) == 0) {
+        if (eb_chan_try(ops, (sizeof(ops) / sizeof(*ops))) == 0) {
             NSLog(@"SENT");
         } else {
             NSLog(@"NOT SENT");
