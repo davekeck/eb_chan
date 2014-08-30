@@ -10,6 +10,7 @@
 // TODO: update comments
 // TODO: standardize assertion indentation
 
+#pragma mark - Types -
 typedef struct {
     eb_spinlock lock;
     size_t cap;
@@ -161,7 +162,7 @@ struct eb_chan {
     eb_port unbuf_port;
 };
 
-/* Channel allocation/deallocation */
+#pragma mark - Channel creation/lifecycle -
 static inline void eb_chan_free(eb_chan c) {
     /* Intentionally allowing c==NULL so that this function can be called from eb_chan_create() */
     if (!c) {
@@ -237,7 +238,7 @@ void eb_chan_release(eb_chan c) {
     }
 }
 
-/* Close a channel */
+#pragma mark - Channel closing -
 void eb_chan_close(eb_chan c) {
     assert(c);
     
@@ -271,7 +272,7 @@ void eb_chan_close(eb_chan c) {
     port_list_signal_first(c->recvs, NULL);
 }
 
-/* Getters */
+#pragma mark - Getters -
 size_t eb_chan_get_buf_cap(eb_chan c) {
     assert(c);
     return c->buf_cap;
@@ -292,16 +293,15 @@ size_t eb_chan_get_buf_len(eb_chan c) {
     return r;
 }
 
-/* Op-making convenience functions */
-eb_chan_op eb_chan_send(eb_chan c, const void *val) {
+#pragma mark - Multiple operations -
+eb_chan_op eb_chan_send_op(eb_chan c, const void *val) {
     return (eb_chan_op){.chan = c, .send = true, .open = false, .val = val};
 }
 
-eb_chan_op eb_chan_recv(eb_chan c) {
+eb_chan_op eb_chan_recv_op(eb_chan c) {
     return (eb_chan_op){.chan = c, .send = false, .open = false, .val = NULL};
 }
 
-/* Performing operations on a channel */
 enum {
     op_result_complete,     /* The op completed and the caller should return */
     op_result_next,         /* The op couldn't make any progress and the caller should move on to the next op */
@@ -643,7 +643,7 @@ static inline op_result try_op(uintptr_t id, eb_chan_op *op, eb_port port) {
     return op_result_next;
 }
 
-eb_chan_op *eb_chan_do(eb_chan_op *const ops[], size_t nops) {
+eb_chan_op *eb_chan_do(eb_chan_op *const ops[], size_t nops, eb_chan_timeout timeout) {
         assert(ops);
     eb_port port = NULL;
     eb_chan_op *result = NULL;
@@ -741,38 +741,6 @@ eb_chan_op *eb_chan_do(eb_chan_op *const ops[], size_t nops) {
         if (port) {
             eb_port_release(port);
             port = NULL;
-        }
-    }
-    
-    return result;
-}
-
-eb_chan_op *eb_chan_try(eb_chan_op *const ops[], size_t nops) {
-    // TODO: randomize iteration!
-    eb_chan_op *result = NULL;
-    uintptr_t id = (uintptr_t)&result;
-    bool cleanup_ops[nops];
-    bzero(cleanup_ops, sizeof(cleanup_ops));
-    
-    for (size_t i = 0; i < nops; i++) {
-        eb_chan_op *op = ops[i];
-        op_result r;
-        while ((r = try_op(id, op, NULL)) == op_result_busy);
-        
-        /* Update cleanup_ops. Note that we don't need to consider _busy because we waited until
-           the operation returned something other than _busy. */
-        cleanup_ops[i] = (r == op_result_next_clean);
-        
-        /* If the op completed, we need to exit! */
-        if (r == op_result_complete) {
-            result = op;
-            break;
-        }
-    }
-    
-    for (size_t i = 0; i < nops; i++) {
-        if (cleanup_ops[i]) {
-            cleanup_op(ops[i], NULL);
         }
     }
     
