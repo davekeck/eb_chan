@@ -1,11 +1,15 @@
-#if __MACH__
-
 #include "eb_port.h"
 #include <stdlib.h>
 #include <assert.h>
 #include <mach/mach.h>
+#include <semaphore.h>
+#include <time.h>
+#include <errno.h>
 #include "eb_assert.h"
 #include "eb_atomic.h"
+
+#define DARWIN __MACH__
+#define LINUX __linux__
 
 #define PORT_POOL_CAP 0x10
 static eb_spinlock g_port_pool_lock = EB_SPINLOCK_INIT;
@@ -14,7 +18,12 @@ static size_t g_port_pool_len = 0;
 
 struct eb_port {
     eb_atomic_int retain_count;
+#if DARWIN
     semaphore_t sem;
+#elif LINUX
+    sem_t sem;
+#endif
+    bool sem_valid;
 };
 
 static void eb_port_free(eb_port p) {
@@ -24,7 +33,7 @@ static void eb_port_free(eb_port p) {
     }
     
     bool added_to_pool = false;
-    if (p->sem != MACH_PORT_NULL) {
+    if (p->sem_valid) {
         /* Determine whether we should clear the port's buffer because we're going to try adding the port to our pool. */
         bool clear_buffer = false;
         eb_spinlock_lock(&g_port_pool_lock);
@@ -46,8 +55,15 @@ static void eb_port_free(eb_port p) {
         
         /* If we couldn't add the port to the pool, destroy the underlying mach port. */
         if (!added_to_pool) {
-            semaphore_destroy(mach_task_self(), p->sem);
-            p->sem = MACH_PORT_NULL;
+#if DARWIN
+            kern_return_t r = semaphore_destroy(mach_task_self(), p->sem);
+                eb_assert_or_recover(r == KERN_SUCCESS, eb_no_op);
+#elif LINUX
+            int r = sem_destroy(&p->sem);
+                eb_assert_or_recover(!r, eb_no_op);
+#endif
+            
+            p->sem_valid = false;
         }
     }
     
@@ -76,11 +92,17 @@ eb_port eb_port_create() {
             eb_assert_or_recover(p, goto failed);
         bzero(p, sizeof(*p));
         
+#if DARWIN
         /* Create the semaphore */
         kern_return_t r = semaphore_create(mach_task_self(), &p->sem, SYNC_POLICY_FIFO, 0);
             eb_assert_or_recover(r == KERN_SUCCESS, goto failed);
+#elif LINUX
+        int r = sem_init(&p->sem, 0, 0);
+            eb_assert_or_recover(!r,  goto failed);
+#endif
     }
     
+    p->sem_valid = true;
     p->retain_count = 1;
     return p;
     failed: {
@@ -104,30 +126,68 @@ void eb_port_release(eb_port p) {
 
 void eb_port_signal(eb_port p) {
     assert(p);
+    
+#if DARWIN
     kern_return_t r = semaphore_signal(p->sem);
         eb_assert_or_recover(r == KERN_SUCCESS, eb_no_op);
+#elif LINUX
+    int r = sem_post(&p->sem);
+        eb_assert_or_recover(!r, eb_no_op);
+#endif
 }
 
 bool eb_port_wait(eb_port p, eb_timeout timeout) {
     assert(p);
     
-    kern_return_t r = KERN_SUCCESS;
     if (!timeout) {
         /* Non-blocking */
-        r = semaphore_timedwait(p->sem, (mach_timespec_t){0, 0});
+#if DARWIN
+        kern_return_t r = semaphore_timedwait(p->sem, (mach_timespec_t){0, 0});
             eb_assert_or_recover(r == KERN_SUCCESS || r == KERN_OPERATION_TIMED_OUT, eb_no_op);
+        return (r == KERN_SUCCESS);
+#elif LINUX
+        int r = 0;
+        while ((r = sem_trywait(&p->sem)) == -1 && errno == EINTR);
+            eb_assert_or_recover(!r || (r == -1 && errno == EAGAIN), eb_no_op);
+        return !r;
+#endif
     } else if (timeout == eb_timeout_never) {
         /* Blocking */
-        r = semaphore_wait(p->sem);
+#if DARWIN
+        kern_return_t r = semaphore_wait(p->sem);
             eb_assert_or_recover(r == KERN_SUCCESS, eb_no_op);
-    } else {
-        /* Timeout */
-        mach_timespec_t t = {.tv_sec = (unsigned int)(timeout / NSEC_PER_SEC), .tv_nsec = (clock_res_t)(timeout % NSEC_PER_SEC)};
-        r = semaphore_timedwait(p->sem, t);
-            eb_assert_or_recover(r == KERN_SUCCESS || r == KERN_OPERATION_TIMED_OUT, eb_no_op);
+        return (r == KERN_SUCCESS);
+#elif LINUX
+        int r = 0;
+        while ((r = sem_wait(&p->sem)) == -1 && errno == EINTR);
+            eb_assert_or_recover(!r, eb_no_op);
+        return !r;
+#endif
     }
     
+    /* Actual timeout */
+#if DARWIN
+    mach_timespec_t ts = {.tv_sec = (unsigned int)(timeout / NSEC_PER_SEC), .tv_nsec = (clock_res_t)(timeout % NSEC_PER_SEC)};
+    kern_return_t r = semaphore_timedwait(p->sem, ts);
+        eb_assert_or_recover(r == KERN_SUCCESS || r == KERN_OPERATION_TIMED_OUT, eb_no_op);
     return (r == KERN_SUCCESS);
-}
-
+#elif LINUX
+    for (;;) {
+        struct timespec ts;
+        int r = clock_gettime(CLOCK_REALTIME, &ts);
+            eb_assert_or_recover(!r, return false);
+        ts.tv_sec += (timeout / NSEC_PER_SEC);
+        ts.tv_nsec += (timeout % NSEC_PER_SEC);
+        r = sem_timedwait(&p->sem, &ts);
+            eb_assert_or_recover(!r || (r == -1 && (errno == ETIMEDOUT || errno == EINTR)), return false);
+        
+        if (!r) {
+            return true;
+        } else if (r == -1 && errno == ETIMEDOUT) {
+            return false;
+        }
+    }
+    
+    return false;
 #endif
+}
