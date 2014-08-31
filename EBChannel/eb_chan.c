@@ -645,6 +645,7 @@ static inline op_result try_op(uintptr_t id, eb_chan_op *op, eb_sem sem) {
 
 eb_chan_op *eb_chan_do(eb_chan_op *const ops[], size_t nops, eb_timeout timeout) {
     // TODO: make timeout work!
+    // TODO: randomize iteration by shuffling input array once (upon entry)
         assert(ops);
     eb_sem sem = NULL;
     eb_chan_op *result = NULL;
@@ -669,7 +670,6 @@ eb_chan_op *eb_chan_do(eb_chan_op *const ops[], size_t nops, eb_timeout timeout)
         if (nops) {
             static const size_t k_attempt_multiplier = 50;
             for (size_t i = 0; i < k_attempt_multiplier * nops; i++) {
-                // TODO: not using random() here speeds this up a lot, so we should generate random bits more efficiently
                 size_t idx = (i % nops);
                 eb_chan_op *op = ops[idx];
                 op_result r = try_op(id, op, sem);
@@ -709,7 +709,6 @@ eb_chan_op *eb_chan_do(eb_chan_op *const ops[], size_t nops, eb_timeout timeout)
             }
         }
         
-        // TODO: randomize iteration!
         for (size_t i = 0; i < nops; i++) {
             eb_chan_op *op = ops[i];
             op_result r;
