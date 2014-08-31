@@ -13,7 +13,7 @@ void *threadDoSend(void *a)
     eb_chan_op send = eb_chan_send_op(gChan, "halla");
     eb_chan_op *const ops[] = {&send};
     for (NSUInteger i = 0; i < NTRIALS; i++) {
-        assert(eb_chan_do(ops, (sizeof(ops) / sizeof(*ops)), eb_chan_timeout_never));
+        assert(eb_chan_do(ops, (sizeof(ops) / sizeof(*ops)), eb_timeout_never));
         NSLog(@"SENT");
     }
     return NULL;
@@ -41,7 +41,7 @@ void *threadDoRecv(void *a)
     eb_chan_op recv = eb_chan_recv_op(gChan);
     eb_chan_op *const ops[] = {&recv};
     for (NSUInteger i = 0; i < NTRIALS; i++) {
-        assert(eb_chan_do(ops, (sizeof(ops) / sizeof(*ops)), eb_chan_timeout_never));
+        assert(eb_chan_do(ops, (sizeof(ops) / sizeof(*ops)), eb_timeout_never));
         NSLog(@"RECEIVED");
     }
     return NULL;
@@ -64,14 +64,14 @@ void *threadTrySend(void *a)
 void *threadSend(void *a)
 {
 //    for (NSUInteger i = 0; i < NTRIALS; i++) {
-//        assert(eb_chan_send(gChan, "hallo", eb_chan_timeout_never));
+//        assert(eb_chan_send(gChan, "hallo", eb_timeout_never));
 //    }
 //    return NULL;
     
     eb_chan_op send = eb_chan_send_op(gChan, "hallo");
     eb_chan_op *const ops[] = {&send};
     for (NSUInteger i = 0; i < NTRIALS; i++) {
-        assert(eb_chan_do(ops, (sizeof(ops) / sizeof(*ops)), eb_chan_timeout_never));
+        assert(eb_chan_do(ops, (sizeof(ops) / sizeof(*ops)), eb_timeout_never));
     }
     return NULL;
     
@@ -79,10 +79,10 @@ void *threadSend(void *a)
 
 void *threadRecv(void *a)
 {
-//    assert(eb_chan_recv(gChan, NULL, eb_chan_timeout_never));
+//    assert(eb_chan_recv(gChan, NULL, eb_timeout_never));
 //    EBTime startTime = EBTimeCurrentTime();
 //    for (NSUInteger i = 1; i < NTRIALS; i++) {
-//        assert(eb_chan_recv(gChan, NULL, eb_chan_timeout_never));
+//        assert(eb_chan_recv(gChan, NULL, eb_timeout_never));
 //    }
 //    NSLog(@"elapsed: %f (%ju iterations)", EBTimeElapsedSecondsSince(startTime), (uintmax_t)NTRIALS);
 //    exit(0);
@@ -91,10 +91,10 @@ void *threadRecv(void *a)
     eb_chan_op recv = eb_chan_recv_op(gChan);
     eb_chan_op *const ops[] = {&recv};
     
-    assert(eb_chan_do(ops, (sizeof(ops) / sizeof(*ops)), eb_chan_timeout_never));
+    assert(eb_chan_do(ops, (sizeof(ops) / sizeof(*ops)), eb_timeout_never));
     EBTime startTime = EBTimeCurrentTime();
     for (NSUInteger i = 1; i < NTRIALS; i++) {
-        assert(eb_chan_do(ops, (sizeof(ops) / sizeof(*ops)), eb_chan_timeout_never));
+        assert(eb_chan_do(ops, (sizeof(ops) / sizeof(*ops)), eb_timeout_never));
     }
     
     NSLog(@"elapsed: %f (%ju iterations)", EBTimeElapsedSecondsSince(startTime), (uintmax_t)NTRIALS);
@@ -108,10 +108,10 @@ void *thread(void *a)
     eb_chan_op recv = eb_chan_recv_op(gChan);
     eb_chan_op *const ops[] = {&send, &recv};
     
-    assert(eb_chan_do(ops, (sizeof(ops) / sizeof(*ops)), eb_chan_timeout_never));
+    assert(eb_chan_do(ops, (sizeof(ops) / sizeof(*ops)), eb_timeout_never));
     EBTime startTime = EBTimeCurrentTime();
     for (NSUInteger i = 1; i < NTRIALS; i++) {
-        assert(eb_chan_do(ops, (sizeof(ops) / sizeof(*ops)), eb_chan_timeout_never));
+        assert(eb_chan_do(ops, (sizeof(ops) / sizeof(*ops)), eb_timeout_never));
     }
     
     NSLog(@"elapsed: %f (%ju iterations)", EBTimeElapsedSecondsSince(startTime), (uintmax_t)NTRIALS);

@@ -643,7 +643,8 @@ static inline op_result try_op(uintptr_t id, eb_chan_op *op, eb_port port) {
     return op_result_next;
 }
 
-eb_chan_op *eb_chan_do(eb_chan_op *const ops[], size_t nops, eb_chan_timeout timeout) {
+eb_chan_op *eb_chan_do(eb_chan_op *const ops[], size_t nops, eb_timeout timeout) {
+    // TODO: make timeout work!
         assert(ops);
     eb_port port = NULL;
     eb_chan_op *result = NULL;
@@ -715,7 +716,7 @@ eb_chan_op *eb_chan_do(eb_chan_op *const ops[], size_t nops, eb_chan_timeout tim
         }
         
         /* Put our thread to sleep until someone alerts us of an event */
-        eb_port_wait(port);
+        eb_port_wait(port, timeout);
     }
     
     /* Cleanup! */

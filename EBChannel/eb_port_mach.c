@@ -1,3 +1,5 @@
+#if __MACH__
+
 #include "eb_port.h"
 #include <stdlib.h>
 #include <assert.h>
@@ -12,17 +14,8 @@ static size_t g_port_pool_len = 0;
 
 struct eb_port {
     eb_atomic_int retain_count;
-    mach_port_t port;
+    semaphore_t sem;
 };
-
-static inline bool wait_on_port(eb_port p, bool block) {
-    assert(p);
-    /* Wait indefinitely for a message to come on our port */
-    mach_msg_empty_rcv_t m;
-    mach_msg_return_t r = mach_msg(&m.header, (MACH_RCV_MSG | (block ? 0 : MACH_RCV_TIMEOUT)), 0, sizeof(m), p->port, MACH_MSG_TIMEOUT_NONE, MACH_PORT_NULL);
-        eb_assert_or_recover(r == MACH_MSG_SUCCESS || r == MACH_RCV_TIMED_OUT, eb_no_op);
-    return (r == MACH_MSG_SUCCESS);
-}
 
 static void eb_port_free(eb_port p) {
     /* Intentionally allowing p==NULL so that this function can be called from eb_port_create() */
@@ -31,7 +24,7 @@ static void eb_port_free(eb_port p) {
     }
     
     bool added_to_pool = false;
-    if (p->port != MACH_PORT_NULL) {
+    if (p->sem != MACH_PORT_NULL) {
         /* Determine whether we should clear the port's buffer because we're going to try adding the port to our pool. */
         bool clear_buffer = false;
         eb_spinlock_lock(&g_port_pool_lock);
@@ -39,7 +32,7 @@ static void eb_port_free(eb_port p) {
         eb_spinlock_unlock(&g_port_pool_lock);
         
         if (clear_buffer) {
-            while (wait_on_port(p, false));
+            while (eb_port_wait(p, eb_timeout_now));
         }
         
         /* Now that the buffer's empty, add the port to the pool as long as it'll still fit. */
@@ -53,8 +46,8 @@ static void eb_port_free(eb_port p) {
         
         /* If we couldn't add the port to the pool, destroy the underlying mach port. */
         if (!added_to_pool) {
-            mach_port_destroy(mach_task_self(), p->port);
-            p->port = MACH_PORT_NULL;
+            semaphore_destroy(mach_task_self(), p->sem);
+            p->sem = MACH_PORT_NULL;
         }
     }
     
@@ -83,11 +76,8 @@ eb_port eb_port_create() {
             eb_assert_or_recover(p, goto failed);
         bzero(p, sizeof(*p));
         
-        /* Create our receive right and insert a send right. */
-        kern_return_t r = mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &p->port);
-            eb_assert_or_recover(r == KERN_SUCCESS, goto failed);
-        /* Insert a send right */
-        r = mach_port_insert_right(mach_task_self(), p->port, p->port, MACH_MSG_TYPE_MAKE_SEND);
+        /* Create the semaphore */
+        kern_return_t r = semaphore_create(mach_task_self(), &p->sem, SYNC_POLICY_FIFO, 0);
             eb_assert_or_recover(r == KERN_SUCCESS, goto failed);
     }
     
@@ -114,20 +104,30 @@ void eb_port_release(eb_port p) {
 
 void eb_port_signal(eb_port p) {
     assert(p);
-    /* Send a message to our port, but don't block if the buffer's full. */
-    mach_msg_empty_send_t m = {
-        .header = {
-            .msgh_bits = MACH_MSGH_BITS(MACH_MSGH_BITS_REMOTE(MACH_MSG_TYPE_COPY_SEND), MACH_MSGH_BITS_LOCAL(MACH_MSGH_BITS_ZERO)),
-            .msgh_size = sizeof(m),
-            .msgh_remote_port = p->port,
-            .msgh_local_port = MACH_PORT_NULL,
-            .msgh_id = 0,
-        }
-    };
-    mach_msg_return_t r = mach_msg(&m.header, MACH_SEND_MSG | MACH_SEND_TIMEOUT, sizeof(m), 0, MACH_PORT_NULL, 0, MACH_PORT_NULL);
-        eb_assert_or_recover(r == MACH_MSG_SUCCESS || r == MACH_SEND_TIMED_OUT, eb_no_op);
+    kern_return_t r = semaphore_signal(p->sem);
+        eb_assert_or_recover(r == KERN_SUCCESS, eb_no_op);
 }
 
-void eb_port_wait(eb_port p) {
-    wait_on_port(p, true);
+bool eb_port_wait(eb_port p, eb_timeout timeout) {
+    assert(p);
+    
+    kern_return_t r = KERN_SUCCESS;
+    if (!timeout) {
+        /* Non-blocking */
+        r = semaphore_timedwait(p->sem, (mach_timespec_t){0, 0});
+            eb_assert_or_recover(r == KERN_SUCCESS || r == KERN_OPERATION_TIMED_OUT, eb_no_op);
+    } else if (timeout == eb_timeout_never) {
+        /* Blocking */
+        r = semaphore_wait(p->sem);
+            eb_assert_or_recover(r == KERN_SUCCESS, eb_no_op);
+    } else {
+        /* Timeout */
+        mach_timespec_t t = {.tv_sec = (unsigned int)(timeout / NSEC_PER_SEC), .tv_nsec = (clock_res_t)(timeout % NSEC_PER_SEC)};
+        r = semaphore_timedwait(p->sem, t);
+            eb_assert_or_recover(r == KERN_SUCCESS || r == KERN_OPERATION_TIMED_OUT, eb_no_op);
+    }
+    
+    return (r == KERN_SUCCESS);
 }
+
+#endif
