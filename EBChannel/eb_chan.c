@@ -653,17 +653,15 @@ eb_chan_op *eb_chan_do(eb_chan_op *const ops[], size_t nops, eb_timeout timeout)
     bzero(cleanup_ops, sizeof(cleanup_ops));
     
     /* ## Shuffle our input array */
-    eb_chan_op *rops[nops];
-    memcpy(rops, ops, nops * sizeof(*ops));
     /* No need to shuffle arrays that have 0 or 1 elements */
-    if (nops > 1) {
-        for (size_t i = 0; i < nops; i++) {
-            size_t ridx = random() % nops;
-            eb_chan_op *tmp = rops[ridx];
-            rops[ridx] = rops[i];
-            rops[i] = tmp;
-        }
-    }
+//    if (nops > 1) {
+//        for (size_t i = 0; i < nops; i++) {
+//            size_t ridx = random() % nops;
+//            eb_chan_op *tmp = ops[ridx];
+//            ops[ridx] = ops[i];
+//            ops[i] = tmp;
+//        }
+//    }
     
     for (;;) {
         /* ## Fast path: loop randomly over our operations to see if one of them was able to send/receive.
@@ -672,7 +670,7 @@ eb_chan_op *eb_chan_do(eb_chan_op *const ops[], size_t nops, eb_timeout timeout)
             static const size_t k_attempt_multiplier = 50;
             for (size_t i = 0; i < k_attempt_multiplier * nops; i++) {
                 // TODO: not using random() here speeds this up a lot, so we should generate random bits more efficiently
-                size_t idx = (i % nops);//(random() % nops);
+                size_t idx = (i % nops);
                 eb_chan_op *op = ops[idx];
                 op_result r = try_op(id, op, sem);
                 
