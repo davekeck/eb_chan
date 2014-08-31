@@ -652,6 +652,19 @@ eb_chan_op *eb_chan_do(eb_chan_op *const ops[], size_t nops, eb_timeout timeout)
     bool cleanup_ops[nops];
     bzero(cleanup_ops, sizeof(cleanup_ops));
     
+    /* ## Shuffle our input array */
+    eb_chan_op *rops[nops];
+    memcpy(rops, ops, nops * sizeof(*ops));
+    /* No need to shuffle arrays that have 0 or 1 elements */
+    if (nops > 1) {
+        for (size_t i = 0; i < nops; i++) {
+            size_t ridx = random() % nops;
+            eb_chan_op *tmp = rops[ridx];
+            rops[ridx] = rops[i];
+            rops[i] = tmp;
+        }
+    }
+    
     for (;;) {
         /* ## Fast path: loop randomly over our operations to see if one of them was able to send/receive.
            If not, we'll enter the slow path where we put our thread to sleep until we're signalled. */
