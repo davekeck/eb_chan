@@ -4,7 +4,7 @@
 #include <stdio.h>
 #include <strings.h>
 #include "eb_assert.h"
-#include "eb_port.h"
+#include "eb_sem.h"
 #include "eb_atomic.h"
 
 // TODO: update comments
@@ -15,52 +15,52 @@ typedef struct {
     eb_spinlock lock;
     size_t cap;
     size_t len;
-    eb_port *ports;
-} *port_list;
+    eb_sem *sems;
+} *sem_list;
 
-static inline void port_list_free(port_list l);
+static inline void sem_list_free(sem_list l);
 
 /* Creates a new empty list */
-static inline port_list port_list_alloc(size_t cap) {
+static inline sem_list sem_list_alloc(size_t cap) {
     assert(cap > 0);
     
-    port_list result = malloc(sizeof(*result));
+    sem_list result = malloc(sizeof(*result));
         eb_assert_or_recover(result, goto failed);
     
     result->lock = 0;
     result->cap = cap;
     result->len = 0;
-    result->ports = malloc(cap * sizeof(*(result->ports)));
-        eb_assert_or_recover(result->ports, goto failed);
+    result->sems = malloc(cap * sizeof(*(result->sems)));
+        eb_assert_or_recover(result->sems, goto failed);
     
     return result;
     failed: {
-        port_list_free(result);
+        sem_list_free(result);
         return NULL;
     }
 }
 
-/* Releases every port in the list, and frees the list itself */
-static inline void port_list_free(port_list l) {
+/* Releases every semaphore in the list, and frees the list itself */
+static inline void sem_list_free(sem_list l) {
     /* Intentionally allowing l==NULL */
     if (!l) {
         return;
     }
     
-    /* Release each port in our list */
+    /* Release each semaphore in our list */
     for (size_t i = 0; i < l->len; i++) {
-        eb_port_release(l->ports[i]);
+        eb_sem_release(l->sems[i]);
     }
     
-    free(l->ports);
-    l->ports = NULL;
+    free(l->sems);
+    l->sems = NULL;
     
     free(l);
     l = NULL;
 }
 
-/* Add a port to the end of the list, expanding the buffer as necessary */
-static inline void port_list_add(port_list l, const eb_port p) {
+/* Add a semaphore to the end of the list, expanding the buffer as necessary */
+static inline void sem_list_add(sem_list l, const eb_sem p) {
     assert(l);
     assert(p);
     
@@ -72,20 +72,20 @@ static inline void port_list_add(port_list l, const eb_port p) {
         if (l->len == l->cap) {
             l->cap *= 2;
             // TODO: bad idea to call realloc() inside of a spinlock, but how should we fix it?
-            // having our ports stored in a statically-sized array would arbitrarily limit us
-            // to a certain number of ports, and that would suck.
-            l->ports = realloc(l->ports, l->cap * sizeof(*(l->ports)));
+            // having our semaphores stored in a statically-sized array would arbitrarily limit us
+            // to a certain number of semaphores, and that would suck...
+            l->sems = realloc(l->sems, l->cap * sizeof(*(l->sems)));
             // TODO: handle allocation failures better
-            eb_assert_or_recover(l->ports, return);
+            eb_assert_or_recover(l->sems, return);
         }
         
-        l->ports[l->len] = eb_port_retain(p);
+        l->sems[l->len] = eb_sem_retain(p);
         l->len++;
     eb_spinlock_unlock(&l->lock);
 }
 
-/* Remove the first occurence of 'p' in the list. Returns whether a port was actually removed. */
-static inline bool port_list_rm(port_list l, eb_port p) {
+/* Remove the first occurence of 'p' in the list. Returns whether a semaphore was actually removed. */
+static inline bool sem_list_rm(sem_list l, eb_sem p) {
     assert(l);
     assert(p);
     
@@ -94,13 +94,13 @@ static inline bool port_list_rm(port_list l, eb_port p) {
         /* Sanity-check that the list's length is less than its capacity */
         eb_assert_or_bail(l->len <= l->cap, "Sanity-check failed");
         
-        /* Search for first occurence of the given port. If we find it, release it and move the last port in the list into the hole. */
+        /* Search for first occurence of the given semaphore. If we find it, release it and move the last semaphore in the list into the hole. */
         for (size_t i = 0; i < l->len; i++) {
-            if (l->ports[i] == p) {
-                /* Release the port */
-                eb_port_release(l->ports[i]);
-                /* Move the last element in the port list into the now-vacant spot */
-                l->ports[i] = l->ports[l->len-1];
+            if (l->sems[i] == p) {
+                /* Release the semaphore */
+                eb_sem_release(l->sems[i]);
+                /* Move the last element in the semaphore list into the now-vacant spot */
+                l->sems[i] = l->sems[l->len-1];
                 /* Decrement the buffer length */
                 l->len--;
                 result = true;
@@ -111,24 +111,24 @@ static inline bool port_list_rm(port_list l, eb_port p) {
     return result;
 }
 
-/* Signal the first port in the list that isn't 'ignore' */
-// TODO: we may want to randomize the port that we pick out of the list?
-static inline void port_list_signal_first(const port_list l, eb_port ignore) {
+/* Signal the first semaphore in the list that isn't 'ignore' */
+// TODO: we may want to randomize the semaphore that we pick out of the list?
+static inline void sem_list_signal_first(const sem_list l, eb_sem ignore) {
     assert(l);
     
-    eb_port p = NULL;
+    eb_sem p = NULL;
     eb_spinlock_lock(&l->lock);
         for (size_t i = 0; i < l->len; i++) {
-            if (l->ports[i] != ignore) {
-                p = eb_port_retain(l->ports[i]);
+            if (l->sems[i] != ignore) {
+                p = eb_sem_retain(l->sems[i]);
                 break;
             }
         }
     eb_spinlock_unlock(&l->lock);
     
     if (p) {
-        eb_port_signal(p);
-        eb_port_release(p);
+        eb_sem_signal(p);
+        eb_sem_release(p);
         p = NULL;
     }
 }
@@ -148,8 +148,8 @@ struct eb_chan {
     eb_spinlock lock;
     chanstate state;
     
-    port_list sends;
-    port_list recvs;
+    sem_list sends;
+    sem_list recvs;
     
     /* Buffered ivars */
     size_t buf_cap;
@@ -159,7 +159,7 @@ struct eb_chan {
     /* Unbuffered ivars */
     uintptr_t unbuf_id;
     eb_chan_op *unbuf_op;
-    eb_port unbuf_port;
+    eb_sem unbuf_sem;
 };
 
 #pragma mark - Channel creation/lifecycle -
@@ -175,10 +175,10 @@ static inline void eb_chan_free(eb_chan c) {
         c->buf = NULL;
     }
     
-    port_list_free(c->recvs);
+    sem_list_free(c->recvs);
     c->recvs = NULL;
     
-    port_list_free(c->sends);
+    sem_list_free(c->sends);
     c->sends = NULL;
     
     free(c);
@@ -196,9 +196,9 @@ eb_chan eb_chan_create(size_t buf_cap) {
     c->lock = 0;
     c->state = chanstate_open;
     
-    c->sends = port_list_alloc(k_init_buf_cap);
+    c->sends = sem_list_alloc(k_init_buf_cap);
         eb_assert_or_recover(c->sends, goto failed);
-    c->recvs = port_list_alloc(k_init_buf_cap);
+    c->recvs = sem_list_alloc(k_init_buf_cap);
         eb_assert_or_recover(c->recvs, goto failed);
     
     if (buf_cap) {
@@ -211,7 +211,7 @@ eb_chan eb_chan_create(size_t buf_cap) {
         /* ## Unbuffered */
         c->unbuf_id = 0;
         c->unbuf_op = NULL;
-        c->unbuf_port = NULL;
+        c->unbuf_sem = NULL;
     }
     
     /* Issue a memory barrier since we didn't have the lock acquired for our set up (and this channel could theoretically
@@ -244,7 +244,7 @@ void eb_chan_close(eb_chan c) {
     
     bool done = false;
     while (!done) {
-        eb_port wakeup_port = NULL;
+        eb_sem wakeup_sem = NULL;
         eb_spinlock_lock(&c->lock);
             chanstate state = c->state;
                 eb_assert_or_bail(state != chanstate_closed, "Illegal close of already-closed channel.");
@@ -254,22 +254,22 @@ void eb_chan_close(eb_chan c) {
                 c->state = chanstate_closed;
                 done = true;
             } else if (state == chanstate_recv) {
-                if (c->unbuf_port) {
-                    wakeup_port = eb_port_retain(c->unbuf_port);
+                if (c->unbuf_sem) {
+                    wakeup_sem = eb_sem_retain(c->unbuf_sem);
                 }
             }
         eb_spinlock_unlock(&c->lock);
         
         /* Wake up the recv */
-        if (wakeup_port) {
-            eb_port_signal(wakeup_port);
-            eb_port_release(wakeup_port);
-            wakeup_port = NULL;
+        if (wakeup_sem) {
+            eb_sem_signal(wakeup_sem);
+            eb_sem_release(wakeup_sem);
+            wakeup_sem = NULL;
         }
     }
     
     /* Wake up the first receiver. We don't bother to wake up senders here because it's illegal for the channel to have senders at this point anyway. */
-    port_list_signal_first(c->recvs, NULL);
+    sem_list_signal_first(c->recvs, NULL);
 }
 
 #pragma mark - Getters -
@@ -309,7 +309,7 @@ enum {
     op_result_busy,         /* The channel's busy and we should try the op again */
 }; typedef unsigned int op_result;
 
-static inline op_result send_buf(uintptr_t id, const eb_chan_op *op, eb_port port) {
+static inline op_result send_buf(uintptr_t id, const eb_chan_op *op, eb_sem sem) {
         assert(op);
         assert(op->chan);
     
@@ -335,7 +335,7 @@ static inline op_result send_buf(uintptr_t id, const eb_chan_op *op, eb_port por
         eb_spinlock_unlock(&c->lock);
         
         if (wakeup_recv) {
-            port_list_signal_first(c->recvs, port);
+            sem_list_signal_first(c->recvs, sem);
         }
     } else {
         result = op_result_busy;
@@ -344,7 +344,7 @@ static inline op_result send_buf(uintptr_t id, const eb_chan_op *op, eb_port por
     return result;
 }
 
-static inline op_result recv_buf(uintptr_t id, eb_chan_op *op, eb_port port) {
+static inline op_result recv_buf(uintptr_t id, eb_chan_op *op, eb_sem sem) {
         assert(op);
         assert(op->chan);
     
@@ -381,7 +381,7 @@ static inline op_result recv_buf(uintptr_t id, eb_chan_op *op, eb_port port) {
         eb_spinlock_unlock(&c->lock);
         
         if (wakeup_send) {
-            port_list_signal_first(c->sends, port);
+            sem_list_signal_first(c->sends, sem);
         }
     } else {
         result = op_result_busy;
@@ -390,7 +390,7 @@ static inline op_result recv_buf(uintptr_t id, eb_chan_op *op, eb_port port) {
     return result;
 }
 
-static inline op_result send_unbuf(uintptr_t id, eb_chan_op *op, eb_port port) {
+static inline op_result send_unbuf(uintptr_t id, eb_chan_op *op, eb_sem sem) {
         assert(op);
         assert(op->chan);
     
@@ -408,17 +408,17 @@ static inline op_result send_unbuf(uintptr_t id, eb_chan_op *op, eb_port port) {
             c->state = chanstate_send;
             c->unbuf_id = id;
             c->unbuf_op = op;
-            c->unbuf_port = port;
+            c->unbuf_sem = sem;
             wakeup_recv = true;
             result = op_result_next_clean;
         } else if (state == chanstate_send) {
             if (c->unbuf_op == op) {
-                /* We own the send op that's in progress, so assign chan's unbuf_port */
+                /* We own the send op that's in progress, so assign chan's unbuf_sem */
                 /* Verify that the unbuf_id matches our 'id' parameter. If this assertion fails, it means there's likely
                    one eb_chan_op being shared by multiple threads, which isn't allowed. */
                 eb_assert_or_bail(c->unbuf_id == id, "Send id invalid");
-                /* Assign the port */
-                c->unbuf_port = port;
+                /* Assign the semaphore */
+                c->unbuf_sem = sem;
                 result = op_result_next_clean;
             }
         } else if (state == chanstate_recv) {
@@ -431,14 +431,14 @@ static inline op_result send_unbuf(uintptr_t id, eb_chan_op *op, eb_port port) {
                 c->unbuf_op->open = true;
                 c->unbuf_op->val = op->val;
                 
-                eb_port wakeup_port = (c->unbuf_port ? eb_port_retain(c->unbuf_port) : NULL);
+                eb_sem wakeup_sem = (c->unbuf_sem ? eb_sem_retain(c->unbuf_sem) : NULL);
                 eb_spinlock_unlock(&c->lock);
                 
                 /* Wake up the recv */
-                if (wakeup_port) {
-                    eb_port_signal(wakeup_port);
-                    eb_port_release(wakeup_port);
-                    wakeup_port = NULL;
+                if (wakeup_sem) {
+                    eb_sem_signal(wakeup_sem);
+                    eb_sem_release(wakeup_sem);
+                    wakeup_sem = NULL;
                 }
                 
                 /* Wait until chan transitions to _done or _cancelled. */
@@ -477,11 +477,11 @@ static inline op_result send_unbuf(uintptr_t id, eb_chan_op *op, eb_port port) {
         eb_spinlock_unlock(&c->lock);
         
         if (wakeup_send) {
-            port_list_signal_first(c->sends, port);
+            sem_list_signal_first(c->sends, sem);
         }
         
         if (wakeup_recv) {
-            port_list_signal_first(c->recvs, port);
+            sem_list_signal_first(c->recvs, sem);
         }
     } else {
         result = op_result_busy;
@@ -490,7 +490,7 @@ static inline op_result send_unbuf(uintptr_t id, eb_chan_op *op, eb_port port) {
     return result;
 }
 
-static inline op_result recv_unbuf(uintptr_t id, eb_chan_op *op, eb_port port) {
+static inline op_result recv_unbuf(uintptr_t id, eb_chan_op *op, eb_sem sem) {
         assert(op);
         assert(op->chan);
     
@@ -504,7 +504,7 @@ static inline op_result recv_unbuf(uintptr_t id, eb_chan_op *op, eb_port port) {
             c->state = chanstate_recv;
             c->unbuf_id = id;
             c->unbuf_op = op;
-            c->unbuf_port = port;
+            c->unbuf_sem = sem;
             wakeup_send = true;
             result = op_result_next_clean;
         } else if (state == chanstate_closed) {
@@ -523,14 +523,14 @@ static inline op_result recv_unbuf(uintptr_t id, eb_chan_op *op, eb_port port) {
                 op->open = true;
                 op->val = c->unbuf_op->val;
                 
-                eb_port wakeup_port = (c->unbuf_port ? eb_port_retain(c->unbuf_port) : NULL);
+                eb_sem wakeup_sem = (c->unbuf_sem ? eb_sem_retain(c->unbuf_sem) : NULL);
                 eb_spinlock_unlock(&c->lock);
                 
                 /* Wake up the send */
-                if (wakeup_port) {
-                    eb_port_signal(wakeup_port);
-                    eb_port_release(wakeup_port);
-                    wakeup_port = NULL;
+                if (wakeup_sem) {
+                    eb_sem_signal(wakeup_sem);
+                    eb_sem_release(wakeup_sem);
+                    wakeup_sem = NULL;
                 }
                 
                 /* Wait until chan transitions to _done or _cancelled. */
@@ -556,12 +556,12 @@ static inline op_result recv_unbuf(uintptr_t id, eb_chan_op *op, eb_port port) {
             }
         } else if (state == chanstate_recv) {
             if (c->unbuf_op == op) {
-                /* We own the recv op that's in progress, so assign chan's unbuf_port */
+                /* We own the recv op that's in progress, so assign chan's unbuf_sem */
                 /* Verify that the _recv_id matches our 'id' parameter. If this assertion fails, it means there's likely
                    one eb_chan_op being shared by multiple threads, which isn't allowed. */
                 eb_assert_or_bail(c->unbuf_id == id, "unbuf_id invalid");
-                /* Assign the port */
-                c->unbuf_port = port;
+                /* Assign the semaphore */
+                c->unbuf_sem = sem;
                 result = op_result_next_clean;
             }
         } else if (state == chanstate_ack) {
@@ -579,7 +579,7 @@ static inline op_result recv_unbuf(uintptr_t id, eb_chan_op *op, eb_port port) {
         eb_spinlock_unlock(&c->lock);
         
         if (wakeup_send) {
-            port_list_signal_first(c->sends, port);
+            sem_list_signal_first(c->sends, sem);
         }
     } else {
         result = op_result_busy;
@@ -588,7 +588,7 @@ static inline op_result recv_unbuf(uintptr_t id, eb_chan_op *op, eb_port port) {
     return result;
 }
 
-static inline void cleanup_op(const eb_chan_op *op, eb_port port) {
+static inline void cleanup_op(const eb_chan_op *op, eb_sem sem) {
         assert(op);
     eb_chan c = op->chan;
     if (c && !c->buf_cap) {
@@ -619,25 +619,25 @@ static inline void cleanup_op(const eb_chan_op *op, eb_port port) {
         eb_spinlock_unlock(&c->lock);
         
         if (wakeup_send) {
-            port_list_signal_first(c->sends, port);
+            sem_list_signal_first(c->sends, sem);
         }
         
         if (wakeup_recv) {
-            port_list_signal_first(c->recvs, port);
+            sem_list_signal_first(c->recvs, sem);
         }
     }
 }
 
-static inline op_result try_op(uintptr_t id, eb_chan_op *op, eb_port port) {
+static inline op_result try_op(uintptr_t id, eb_chan_op *op, eb_sem sem) {
         assert(op);
     eb_chan c = op->chan;
     if (c) {
         if (op->send) {
             /* ## Send */
-            return (c->buf_cap ? send_buf(id, op, port) : send_unbuf(id, op, port));
+            return (c->buf_cap ? send_buf(id, op, sem) : send_unbuf(id, op, sem));
         } else {
             /* ## Receive */
-            return (c->buf_cap ? recv_buf(id, op, port) : recv_unbuf(id, op, port));
+            return (c->buf_cap ? recv_buf(id, op, sem) : recv_unbuf(id, op, sem));
         }
     }
     return op_result_next;
@@ -646,7 +646,7 @@ static inline op_result try_op(uintptr_t id, eb_chan_op *op, eb_port port) {
 eb_chan_op *eb_chan_do(eb_chan_op *const ops[], size_t nops, eb_timeout timeout) {
     // TODO: make timeout work!
         assert(ops);
-    eb_port port = NULL;
+    eb_sem sem = NULL;
     eb_chan_op *result = NULL;
     uintptr_t id = (uintptr_t)&result;
     bool cleanup_ops[nops];
@@ -661,7 +661,7 @@ eb_chan_op *eb_chan_do(eb_chan_op *const ops[], size_t nops, eb_timeout timeout)
                 // TODO: not using random() here speeds this up a lot, so we should generate random bits more efficiently
                 size_t idx = (i % nops);//(random() % nops);
                 eb_chan_op *op = ops[idx];
-                op_result r = try_op(id, op, port);
+                op_result r = try_op(id, op, sem);
                 
                 /* Update cleanup_ops. In the case of _busy, we can't update cleanup_ops, because its semantics imply
                    that no information could be garnered from the channel. */
@@ -680,20 +680,20 @@ eb_chan_op *eb_chan_do(eb_chan_op *const ops[], size_t nops, eb_timeout timeout)
         }
         
         /* ## Slow path: we weren't able to find an operation that could send/receive, so we'll create a
-           port to receive notifications on and put this thread to sleep until someone wakes us up. */
-        if (!port) {
-            /* Create our port that we'll attach to channels so that we can be notified when events occur. */
-            port = eb_port_create();
-                eb_assert_or_recover(port, goto cleanup);
+           semaphore to receive notifications on and put this thread to sleep until someone wakes us up. */
+        if (!sem) {
+            /* Create our semaphore that we'll attach to channels so that we can be notified when events occur. */
+            sem = eb_sem_create();
+                eb_assert_or_recover(sem, goto cleanup);
             
-            /* Register our port for the appropriate notifications on every channel. */
-            /* This adds 'port' to the channel's sends/recvs (depending on the op), which we clean up at the
+            /* Register our semaphore for the appropriate notifications on every channel. */
+            /* This adds 'sem' to the channel's sends/recvs (depending on the op), which we clean up at the
                end of this function. */
             for (size_t i = 0; i < nops; i++) {
                 eb_chan_op *op = ops[i];
                 eb_chan c = op->chan;
                 if (c) {
-                    port_list_add((op->send ? c->sends : c->recvs), port);
+                    sem_list_add((op->send ? c->sends : c->recvs), sem);
                 }
             }
         }
@@ -702,7 +702,7 @@ eb_chan_op *eb_chan_do(eb_chan_op *const ops[], size_t nops, eb_timeout timeout)
         for (size_t i = 0; i < nops; i++) {
             eb_chan_op *op = ops[i];
             op_result r;
-            while ((r = try_op(id, op, port)) == op_result_busy);
+            while ((r = try_op(id, op, sem)) == op_result_busy);
             
             /* Update cleanup_ops. Note that we don't need to consider _busy because we waited until
                the operation returned something other than _busy. */
@@ -716,32 +716,32 @@ eb_chan_op *eb_chan_do(eb_chan_op *const ops[], size_t nops, eb_timeout timeout)
         }
         
         /* Put our thread to sleep until someone alerts us of an event */
-        eb_port_wait(port, timeout);
+        eb_sem_wait(sem, timeout);
     }
     
     /* Cleanup! */
     cleanup: {
-        if (port) {
+        if (sem) {
             for (size_t i = 0; i < nops; i++) {
                 eb_chan_op *op = ops[i];
                 eb_chan c = op->chan;
                 if (c) {
-                    port_list ports = (op->send ? c->sends : c->recvs);
-                    port_list_rm(ports, port);
-                    port_list_signal_first(ports, port);
+                    sem_list sems = (op->send ? c->sends : c->recvs);
+                    sem_list_rm(sems, sem);
+                    sem_list_signal_first(sems, sem);
                 }
             }
         }
         
         for (size_t i = 0; i < nops; i++) {
             if (cleanup_ops[i]) {
-                cleanup_op(ops[i], port);
+                cleanup_op(ops[i], sem);
             }
         }
         
-        if (port) {
-            eb_port_release(port);
-            port = NULL;
+        if (sem) {
+            eb_sem_release(sem);
+            sem = NULL;
         }
     }
     

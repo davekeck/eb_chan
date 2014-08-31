@@ -1,4 +1,4 @@
-#include "eb_port.h"
+#include "eb_sem.h"
 #include <stdlib.h>
 #include <assert.h>
 #include <mach/mach.h>
@@ -11,12 +11,12 @@
 #define DARWIN __MACH__
 #define LINUX __linux__
 
-#define PORT_POOL_CAP 0x10
-static eb_spinlock g_port_pool_lock = EB_SPINLOCK_INIT;
-static eb_port g_port_pool[PORT_POOL_CAP];
-static size_t g_port_pool_len = 0;
+#define SEM_POOL_CAP 0x10
+static eb_spinlock g_sem_pool_lock = EB_SPINLOCK_INIT;
+static eb_sem g_sem_pool[SEM_POOL_CAP];
+static size_t g_sem_pool_len = 0;
 
-struct eb_port {
+struct eb_sem {
     eb_atomic_int retain_count;
 #if DARWIN
     semaphore_t sem;
@@ -26,34 +26,34 @@ struct eb_port {
     bool sem_valid;
 };
 
-static void eb_port_free(eb_port p) {
-    /* Intentionally allowing p==NULL so that this function can be called from eb_port_create() */
+static void eb_sem_free(eb_sem p) {
+    /* Intentionally allowing p==NULL so that this function can be called from eb_sem_create() */
     if (!p) {
         return;
     }
     
     bool added_to_pool = false;
     if (p->sem_valid) {
-        /* Determine whether we should clear the port's buffer because we're going to try adding the port to our pool. */
+        /* Determine whether we should clear the semaphore's buffer because we're going to try adding the semaphore to our pool. */
         bool clear_buffer = false;
-        eb_spinlock_lock(&g_port_pool_lock);
-            clear_buffer = (g_port_pool_len < PORT_POOL_CAP);
-        eb_spinlock_unlock(&g_port_pool_lock);
+        eb_spinlock_lock(&g_sem_pool_lock);
+            clear_buffer = (g_sem_pool_len < SEM_POOL_CAP);
+        eb_spinlock_unlock(&g_sem_pool_lock);
         
         if (clear_buffer) {
-            while (eb_port_wait(p, eb_timeout_now));
+            while (eb_sem_wait(p, eb_timeout_now));
         }
         
-        /* Now that the buffer's empty, add the port to the pool as long as it'll still fit. */
-        eb_spinlock_lock(&g_port_pool_lock);
-            if (g_port_pool_len < PORT_POOL_CAP) {
-                g_port_pool[g_port_pool_len] = p;
-                g_port_pool_len++;
+        /* Now that the buffer's empty, add the semaphore to the pool as long as it'll still fit. */
+        eb_spinlock_lock(&g_sem_pool_lock);
+            if (g_sem_pool_len < SEM_POOL_CAP) {
+                g_sem_pool[g_sem_pool_len] = p;
+                g_sem_pool_len++;
                 added_to_pool = true;
             }
-        eb_spinlock_unlock(&g_port_pool_lock);
+        eb_spinlock_unlock(&g_sem_pool_lock);
         
-        /* If we couldn't add the port to the pool, destroy the underlying mach port. */
+        /* If we couldn't add the semaphore to the pool, destroy the underlying semaphore. */
         if (!added_to_pool) {
 #if DARWIN
             kern_return_t r = semaphore_destroy(mach_task_self(), p->sem);
@@ -73,21 +73,21 @@ static void eb_port_free(eb_port p) {
     }
 }
 
-eb_port eb_port_create() {
-    eb_port p = NULL;
-    /* First try to pop a port out of the pool */
-    eb_spinlock_lock(&g_port_pool_lock);
-        if (g_port_pool_len) {
-            g_port_pool_len--;
-            p = g_port_pool[g_port_pool_len];
+eb_sem eb_sem_create() {
+    eb_sem p = NULL;
+    /* First try to pop a semaphore out of the pool */
+    eb_spinlock_lock(&g_sem_pool_lock);
+        if (g_sem_pool_len) {
+            g_sem_pool_len--;
+            p = g_sem_pool[g_sem_pool_len];
         }
-    eb_spinlock_unlock(&g_port_pool_lock);
+    eb_spinlock_unlock(&g_sem_pool_lock);
     
     if (p) {
-        /* We successfully popped a port out of the pool */
+        /* We successfully popped a semaphore out of the pool */
         eb_assert_or_bail(!p->retain_count, "Sanity-check failed");
     } else {
-        /* We couldn't get a port out of the pool */
+        /* We couldn't get a semaphore out of the pool */
         p = malloc(sizeof(*p));
             eb_assert_or_recover(p, goto failed);
         bzero(p, sizeof(*p));
@@ -106,25 +106,25 @@ eb_port eb_port_create() {
     p->retain_count = 1;
     return p;
     failed: {
-        eb_port_free(p);
+        eb_sem_free(p);
         return NULL;
     }
 }
 
-eb_port eb_port_retain(eb_port p) {
+eb_sem eb_sem_retain(eb_sem p) {
     assert(p);
     eb_atomic_int_add(&p->retain_count, 1);
     return p;
 }
 
-void eb_port_release(eb_port p) {
+void eb_sem_release(eb_sem p) {
     assert(p);
     if (eb_atomic_int_add(&p->retain_count, -1) == 1) {
-        eb_port_free(p);
+        eb_sem_free(p);
     }
 }
 
-void eb_port_signal(eb_port p) {
+void eb_sem_signal(eb_sem p) {
     assert(p);
     
 #if DARWIN
@@ -136,7 +136,7 @@ void eb_port_signal(eb_port p) {
 #endif
 }
 
-bool eb_port_wait(eb_port p, eb_timeout timeout) {
+bool eb_sem_wait(eb_sem p, eb_timeout timeout) {
     assert(p);
     
     if (!timeout) {
