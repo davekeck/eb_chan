@@ -172,22 +172,22 @@ bool eb_sem_wait(eb_sem p, eb_timeout timeout) {
         eb_assert_or_recover(r == KERN_SUCCESS || r == KERN_OPERATION_TIMED_OUT, eb_no_op);
     return (r == KERN_SUCCESS);
 #elif LINUX
+    bool result = false;
     for (;;) {
         struct timespec ts;
         int r = clock_gettime(CLOCK_REALTIME, &ts);
-            eb_assert_or_recover(!r, return false);
+            eb_assert_or_recover(!r, break);
         ts.tv_sec += (timeout / NSEC_PER_SEC);
         ts.tv_nsec += (timeout % NSEC_PER_SEC);
         r = sem_timedwait(&p->sem, &ts);
-            eb_assert_or_recover(!r || (r == -1 && (errno == ETIMEDOUT || errno == EINTR)), return false);
+            eb_assert_or_recover(!r || (r == -1 && (errno == ETIMEDOUT || errno == EINTR)), break);
         
-        if (!r) {
-            return true;
-        } else if (r == -1 && errno == ETIMEDOUT) {
-            return false;
+        if (!r || (r == -1 && errno == ETIMEDOUT)) {
+            result = (!r);
+            break;
         }
     }
     
-    return false;
+    return result;
 #endif
 }

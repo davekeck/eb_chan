@@ -116,11 +116,11 @@
 				55501D1A19A969990028A9FE /* eb_assert.h */,
 				55501D1B19A969990028A9FE /* eb_assert.c */,
 				5509F36B19B18E8100BD98D3 /* eb_atomic.h */,
-				5519201419B2D7EB00868CBD /* eb_timeout.h */,
 				55501D1E19A969990028A9FE /* eb_chan.h */,
 				55501D1F19A969990028A9FE /* eb_chan.c */,
 				55501D1C19A969990028A9FE /* eb_sem.h */,
 				5519200F19B2D6BE00868CBD /* eb_sem.c */,
+				5519201419B2D7EB00868CBD /* eb_timeout.h */,
 				55501D0F19A969750028A9FE /* main.m */,
 				55501D1119A969750028A9FE /* Supporting Files */,
 			);
