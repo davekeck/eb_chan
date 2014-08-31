@@ -309,7 +309,7 @@ enum {
     op_result_busy,         /* The channel's busy and we should try the op again */
 }; typedef unsigned int op_result;
 
-static inline op_result send_buf(uintptr_t id, const eb_chan_op *op, eb_sem sem) {
+static inline op_result send_buf(uintptr_t id, const eb_chan_op *op, eb_sem sem, eb_timeout timeout) {
         assert(op);
         assert(op->chan);
     
@@ -344,7 +344,7 @@ static inline op_result send_buf(uintptr_t id, const eb_chan_op *op, eb_sem sem)
     return result;
 }
 
-static inline op_result recv_buf(uintptr_t id, eb_chan_op *op, eb_sem sem) {
+static inline op_result recv_buf(uintptr_t id, eb_chan_op *op, eb_sem sem, eb_timeout timeout) {
         assert(op);
         assert(op->chan);
     
@@ -390,7 +390,7 @@ static inline op_result recv_buf(uintptr_t id, eb_chan_op *op, eb_sem sem) {
     return result;
 }
 
-static inline op_result send_unbuf(uintptr_t id, eb_chan_op *op, eb_sem sem) {
+static inline op_result send_unbuf(uintptr_t id, eb_chan_op *op, eb_sem sem, eb_timeout timeout) {
         assert(op);
         assert(op->chan);
     
@@ -404,14 +404,14 @@ static inline op_result send_unbuf(uintptr_t id, eb_chan_op *op, eb_sem sem) {
         
         bool wakeup_send = false;
         bool wakeup_recv = false;
-        if (state == chanstate_open) {
+        if (state == chanstate_open && timeout > 0) {
             c->state = chanstate_send;
             c->unbuf_id = id;
             c->unbuf_op = op;
             c->unbuf_sem = sem;
             wakeup_recv = true;
             result = op_result_next_clean;
-        } else if (state == chanstate_send) {
+        } else if (state == chanstate_send && timeout > 0) {
             if (c->unbuf_op == op) {
                 /* We own the send op that's in progress, so assign chan's unbuf_sem */
                 /* Verify that the unbuf_id matches our 'id' parameter. If this assertion fails, it means there's likely
@@ -490,7 +490,7 @@ static inline op_result send_unbuf(uintptr_t id, eb_chan_op *op, eb_sem sem) {
     return result;
 }
 
-static inline op_result recv_unbuf(uintptr_t id, eb_chan_op *op, eb_sem sem) {
+static inline op_result recv_unbuf(uintptr_t id, eb_chan_op *op, eb_sem sem, eb_timeout timeout) {
         assert(op);
         assert(op->chan);
     
@@ -500,7 +500,7 @@ static inline op_result recv_unbuf(uintptr_t id, eb_chan_op *op, eb_sem sem) {
     if (eb_spinlock_try(&c->lock)) {
         chanstate state = c->state;
         bool wakeup_send = false;
-        if (state == chanstate_open) {
+        if (state == chanstate_open && timeout > 0) {
             c->state = chanstate_recv;
             c->unbuf_id = id;
             c->unbuf_op = op;
@@ -554,7 +554,7 @@ static inline op_result recv_unbuf(uintptr_t id, eb_chan_op *op, eb_sem sem) {
                     }
                 }
             }
-        } else if (state == chanstate_recv) {
+        } else if (state == chanstate_recv && timeout > 0) {
             if (c->unbuf_op == op) {
                 /* We own the recv op that's in progress, so assign chan's unbuf_sem */
                 /* Verify that the _recv_id matches our 'id' parameter. If this assertion fails, it means there's likely
@@ -628,16 +628,16 @@ static inline void cleanup_op(const eb_chan_op *op, eb_sem sem) {
     }
 }
 
-static inline op_result try_op(uintptr_t id, eb_chan_op *op, eb_sem sem) {
+static inline op_result try_op(uintptr_t id, eb_chan_op *op, eb_sem sem, eb_timeout timeout) {
         assert(op);
     eb_chan c = op->chan;
     if (c) {
         if (op->send) {
             /* ## Send */
-            return (c->buf_cap ? send_buf(id, op, sem) : send_unbuf(id, op, sem));
+            return (c->buf_cap ? send_buf(id, op, sem, timeout) : send_unbuf(id, op, sem, timeout));
         } else {
             /* ## Receive */
-            return (c->buf_cap ? recv_buf(id, op, sem) : recv_unbuf(id, op, sem));
+            return (c->buf_cap ? recv_buf(id, op, sem, timeout) : recv_unbuf(id, op, sem, timeout));
         }
     }
     return op_result_next;
@@ -665,14 +665,14 @@ eb_chan_op *eb_chan_do(eb_chan_op *const ops[], size_t nops, eb_timeout timeout)
 //    }
     
     for (;;) {
-        /* ## Fast path: loop randomly over our operations to see if one of them was able to send/receive.
-           If not, we'll enter the slow path where we put our thread to sleep until we're signalled. */
+        /* ## Fast path: loop over our operations to see if one of them was able to send/receive. (If not,
+           we'll enter the slow path where we put our thread to sleep until we're signalled.) */
         if (nops) {
-            static const size_t k_attempt_multiplier = 50;
+            const size_t k_attempt_multiplier = (timeout > 0 ? 50 : 1);
             for (size_t i = 0; i < k_attempt_multiplier * nops; i++) {
                 size_t idx = (i % nops);
                 eb_chan_op *op = ops[idx];
-                op_result r = try_op(id, op, sem);
+                op_result r = try_op(id, op, sem, timeout);
                 
                 /* Update cleanup_ops. In the case of _busy, we can't update cleanup_ops, because its semantics imply
                    that no information could be garnered from the channel. */
@@ -688,6 +688,11 @@ eb_chan_op *eb_chan_do(eb_chan_op *const ops[], size_t nops, eb_timeout timeout)
                     goto cleanup;
                 }
             }
+        }
+        
+        /* If we're polling and we get to this point, no operations could complete, so it's time to return. */
+        if (timeout == 0) {
+            goto cleanup;
         }
         
         /* ## Slow path: we weren't able to find an operation that could send/receive, so we'll create a
@@ -712,7 +717,7 @@ eb_chan_op *eb_chan_do(eb_chan_op *const ops[], size_t nops, eb_timeout timeout)
         for (size_t i = 0; i < nops; i++) {
             eb_chan_op *op = ops[i];
             op_result r;
-            while ((r = try_op(id, op, sem)) == op_result_busy);
+            while ((r = try_op(id, op, sem, timeout)) == op_result_busy);
             
             /* Update cleanup_ops. Note that we don't need to consider _busy because we waited until
                the operation returned something other than _busy. */
