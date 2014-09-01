@@ -144,7 +144,7 @@ enum {
 }; typedef int32_t chanstate;
 
 struct eb_chan {
-    eb_atomic_int retain_count;
+    unsigned int retain_count;
     eb_spinlock lock;
     chanstate state;
     
@@ -227,13 +227,13 @@ eb_chan eb_chan_create(size_t buf_cap) {
 
 eb_chan eb_chan_retain(eb_chan c) {
     assert(c);
-    eb_atomic_int_add(&c->retain_count, 1);
+    eb_atomic_add(&c->retain_count, 1);
     return c;
 }
 
 void eb_chan_release(eb_chan c) {
     assert(c);
-    if (eb_atomic_int_add(&c->retain_count, -1) == 1) {
+    if (eb_atomic_add(&c->retain_count, -1) == 1) {
         eb_chan_free(c);
     }
 }

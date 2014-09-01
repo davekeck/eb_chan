@@ -17,7 +17,7 @@ static eb_sem g_sem_pool[SEM_POOL_CAP];
 static size_t g_sem_pool_len = 0;
 
 struct eb_sem {
-    eb_atomic_int retain_count;
+    unsigned int retain_count;
 #if DARWIN
     semaphore_t sem;
 #elif LINUX
@@ -113,13 +113,13 @@ eb_sem eb_sem_create() {
 
 eb_sem eb_sem_retain(eb_sem p) {
     assert(p);
-    eb_atomic_int_add(&p->retain_count, 1);
+    eb_atomic_add(&p->retain_count, 1);
     return p;
 }
 
 void eb_sem_release(eb_sem p) {
     assert(p);
-    if (eb_atomic_int_add(&p->retain_count, -1) == 1) {
+    if (eb_atomic_add(&p->retain_count, -1) == 1) {
         eb_sem_free(p);
     }
 }
