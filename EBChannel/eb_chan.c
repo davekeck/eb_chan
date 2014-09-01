@@ -669,6 +669,7 @@ eb_chan_op *eb_chan_do(eb_chan_op *const ops[], size_t nops, eb_nsecs timeout) {
         /* ## Fast path: loop over our operations to see if one of them was able to send/receive. (If not,
            we'll enter the slow path where we put our thread to sleep until we're signalled.) */
         if (nops) {
+            // TODO: this won't actually work for the poll case because we allow our ops to return _busy. If, for example, they all returned _busy in the first iteration, we'll wind up returning NULL when one of the ops may have been complete-able!
             const size_t k_attempt_multiplier = (timeout != eb_nsecs_zero ? 50 : 1);
             for (size_t i = 0; i < k_attempt_multiplier * nops; i++) {
                 size_t idx = (i % nops);
