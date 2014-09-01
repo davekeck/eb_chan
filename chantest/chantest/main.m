@@ -144,13 +144,13 @@ int main(int argc, const char * argv[])
 //    pthread_create(&thread1, NULL, threadDoRecv, NULL);
 //    pthread_create(&thread2, NULL, threadTrySend, NULL);
     
-//    pthread_create(&thread1, NULL, threadSend, NULL);
-//    pthread_create(&thread2, NULL, threadRecv, NULL);
+    pthread_create(&thread1, NULL, threadSend, NULL);
+    pthread_create(&thread2, NULL, threadRecv, NULL);
     
 //    pthread_create(&thread1, NULL, thread, NULL);
 //    pthread_create(&thread2, NULL, thread, NULL);
     
-    pthread_create(&thread1, NULL, threadTest, NULL);
+//    pthread_create(&thread1, NULL, threadTest, NULL);
     
     for (;;) {
         sleep(-1);

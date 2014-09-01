@@ -172,18 +172,34 @@ bool eb_sem_wait(eb_sem p, eb_nsecs timeout) {
         eb_assert_or_recover(r == KERN_SUCCESS || r == KERN_OPERATION_TIMED_OUT, eb_no_op);
     return (r == KERN_SUCCESS);
 #elif LINUX
+    eb_nsecs start_time = eb_time_now();
+    eb_nsecs remaining_timeout = timeout;
     bool result = false;
     for (;;) {
+        /* Because sem_timedwait() uses the system's _REALTIME clock instead of the _MONOTONIC clock, we'll time out when
+           the system's time changes. For that reason, we check for the timeout case ourself (instead of relying on errno
+           after calling sem_timedwait()) condition ourself, using our own monotonic clock APIs (eb_time_now()), and
+           restart sem_timedwait() if we determine independently that we haven't timed-out. */
         struct timespec ts;
         int r = clock_gettime(CLOCK_REALTIME, &ts);
             eb_assert_or_recover(!r, break);
-        ts.tv_sec += (timeout / NSEC_PER_SEC);
-        ts.tv_nsec += (timeout % NSEC_PER_SEC);
+        ts.tv_sec += (remaining_timeout / NSEC_PER_SEC);
+        ts.tv_nsec += (remaining_timeout % NSEC_PER_SEC);
         r = sem_timedwait(&p->sem, &ts);
+            /* The allowed return cases are: success (r==0), timed-out (r==-1, errno==ETIMEDOUT), (r==-1, errno==EINTR) */
             eb_assert_or_recover(!r || (r == -1 && (errno == ETIMEDOUT || errno == EINTR)), break);
         
-        if (!r || (r == -1 && errno == ETIMEDOUT)) {
-            result = (!r);
+        /* If we acquired the semaphore, set our flag and break! */
+        if (!r) {
+            result = true;
+            break;
+        }
+        
+        /* Determine whether we timed-out, and if not, update 'remaining_timeout' with the amount of time to go. */
+        eb_nsecs elapsed = eb_time_now() - start_time;
+        if (elapsed < timeout) {
+            remaining_timeout = timeout - elapsed;
+        } else {
             break;
         }
     }

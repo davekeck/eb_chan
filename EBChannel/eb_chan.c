@@ -664,61 +664,8 @@ eb_chan_op *eb_chan_do(eb_chan_op *const ops[], size_t nops, eb_nsecs timeout) {
 //        }
 //    }
     
-    eb_time start_time = (timeout != eb_nsecs_zero && timeout != eb_nsecs_forever ? eb_time_now() : 0);
-    for (;;) {
-        /* ## Fast path: loop over our operations to see if one of them was able to send/receive. (If not,
-           we'll enter the slow path where we put our thread to sleep until we're signalled.) */
-        if (nops) {
-            // TODO: this won't actually work for the poll case because we allow our ops to return _busy. If, for example, they all returned _busy in the first iteration, we'll wind up returning NULL when one of the ops may have been complete-able!
-            const size_t k_attempt_multiplier = (timeout != eb_nsecs_zero ? 50 : 1);
-            for (size_t i = 0; i < k_attempt_multiplier * nops; i++) {
-                size_t idx = (i % nops);
-                eb_chan_op *op = ops[idx];
-                op_result r = try_op(id, op, sem, timeout);
-                
-                /* Update cleanup_ops. In the case of _busy, we can't update cleanup_ops, because its semantics imply
-                   that no information could be garnered from the channel. */
-                if (r == op_result_next_clean) {
-                    cleanup_ops[idx] = true;
-                } else if (r != op_result_busy) {
-                    cleanup_ops[idx] = false;
-                }
-                
-                /* If the op completed, we need to exit! */
-                if (r == op_result_complete) {
-                    result = op;
-                    goto cleanup;
-                }
-            }
-        }
-        
-        /* If we're polling and we get to this point, no operations could complete, so it's time to return. */
-        if (timeout == eb_nsecs_zero) {
-            goto cleanup;
-        }
-        
-        /* ## Slow path: we weren't able to find an operation that could send/receive, so we'll create a
-           semaphore to receive notifications on and put this thread to sleep until someone wakes us up. */
-        if (!sem) {
-            /* Create our semaphore that we'll attach to channels so that we can be notified when events occur. */
-            sem = eb_sem_create();
-                eb_assert_or_recover(sem, goto cleanup);
-            
-            /* Register our semaphore for the appropriate notifications on every channel. */
-            /* This adds 'sem' to the channel's sends/recvs (depending on the op), which we clean up at the
-               end of this function. */
-            for (size_t i = 0; i < nops; i++) {
-                eb_chan_op *op = ops[i];
-                eb_chan c = op->chan;
-                if (c) {
-                    sem_list_add((op->send ? c->sends : c->recvs), sem);
-                }
-            }
-        }
-        
-        /* Before we go to sleep, call try_op() for every op until we get a non-busy return value. This way we'll ensure
-           that no op is actually able to be performed, and we'll also ensure that 'sem' is registered as the 'unbuf_sem'
-           for the necessary channels. */
+    if (timeout == eb_nsecs_zero) {
+        /* ## timeout == 0: try every op exactly once; if none of them can proceed, return NULL. */
         for (size_t i = 0; i < nops; i++) {
             eb_chan_op *op = ops[i];
             op_result r;
@@ -734,19 +681,88 @@ eb_chan_op *eb_chan_do(eb_chan_op *const ops[], size_t nops, eb_nsecs timeout) {
                 goto cleanup;
             }
         }
-        
-        /* If we have a timeout, determine how much time has elapsed, because we may have timed-out. */
-        eb_nsecs elapsed = 0;
-        if (timeout != eb_nsecs_zero && timeout != eb_nsecs_forever) {
-            elapsed = eb_time_nsecs_between(start_time, eb_time_now());
-            /* Check if we timed-out */
-            if (elapsed >= timeout) {
-                goto cleanup;
+    } else {
+        /* ## timeout != 0 */
+        eb_nsecs start_time = (timeout != eb_nsecs_forever ? eb_time_now() : 0);
+        for (;;) {
+            /* ## Fast path: loop over our operations to see if one of them was able to send/receive. (If not,
+               we'll enter the slow path where we put our thread to sleep until we're signalled.) */
+            if (nops) {
+                const size_t k_attempt_multiplier = 50;
+                for (size_t i = 0; i < k_attempt_multiplier * nops; i++) {
+                    size_t idx = (i % nops);
+                    eb_chan_op *op = ops[idx];
+                    op_result r = try_op(id, op, sem, timeout);
+                    
+                    /* Update cleanup_ops. In the case of _busy, we can't update cleanup_ops, because its semantics imply
+                       that no information could be garnered from the channel. */
+                    if (r == op_result_next_clean) {
+                        cleanup_ops[idx] = true;
+                    } else if (r != op_result_busy) {
+                        cleanup_ops[idx] = false;
+                    }
+                    
+                    /* If the op completed, we need to exit! */
+                    if (r == op_result_complete) {
+                        result = op;
+                        goto cleanup;
+                    }
+                }
             }
+            
+            /* ## Slow path: we weren't able to find an operation that could send/receive, so we'll create a
+               semaphore to receive notifications on and put this thread to sleep until someone wakes us up. */
+            if (!sem) {
+                /* Create our semaphore that we'll attach to channels so that we can be notified when events occur. */
+                sem = eb_sem_create();
+                    eb_assert_or_recover(sem, goto cleanup);
+                
+                /* Register our semaphore for the appropriate notifications on every channel. */
+                /* This adds 'sem' to the channel's sends/recvs (depending on the op), which we clean up at the
+                   end of this function. */
+                for (size_t i = 0; i < nops; i++) {
+                    eb_chan_op *op = ops[i];
+                    eb_chan c = op->chan;
+                    if (c) {
+                        sem_list_add((op->send ? c->sends : c->recvs), sem);
+                    }
+                }
+            }
+            
+            /* Before we go to sleep, call try_op() for every op until we get a non-busy return value. This way we'll ensure
+               that no op is actually able to be performed, and we'll also ensure that 'sem' is registered as the 'unbuf_sem'
+               for the necessary channels. */
+            for (size_t i = 0; i < nops; i++) {
+                eb_chan_op *op = ops[i];
+                op_result r;
+                while ((r = try_op(id, op, sem, timeout)) == op_result_busy);
+                
+                /* Update cleanup_ops. Note that we don't need to consider _busy because we waited until
+                   the operation returned something other than _busy. */
+                cleanup_ops[i] = (r == op_result_next_clean);
+                
+                /* If the op completed, we need to exit! */
+                if (r == op_result_complete) {
+                    result = op;
+                    goto cleanup;
+                }
+            }
+            
+            eb_nsecs wait_timeout = eb_nsecs_forever;
+            if (timeout != eb_nsecs_forever) {
+                /* If we have a timeout, determine how much time has elapsed, because we may have timed-out. */
+                eb_nsecs elapsed = eb_time_now() - start_time;
+                /* Check if we timed-out */
+                if (elapsed < timeout) {
+                    wait_timeout = timeout - elapsed;
+                } else {
+                    goto cleanup;
+                }
+            }
+            
+            /* Put our thread to sleep until someone alerts us of an event */
+            eb_sem_wait(sem, wait_timeout);
         }
-        
-        /* Put our thread to sleep until someone alerts us of an event */
-        eb_sem_wait(sem, timeout - elapsed);
     }
     
     /* Cleanup! */
