@@ -154,6 +154,7 @@ struct eb_chan {
     /* Buffered ivars */
     size_t buf_cap;
     size_t buf_len;
+    size_t buf_idx;
     const void **buf;
     
     /* Unbuffered ivars */
@@ -205,6 +206,7 @@ eb_chan eb_chan_create(size_t buf_cap) {
         /* ## Buffered */
         c->buf_cap = buf_cap;
         c->buf_len = 0;
+        c->buf_idx = 0;
         c->buf = malloc(c->buf_cap * sizeof(*(c->buf)));
             eb_assert_or_recover(c->buf, goto failed);
     } else {
@@ -326,7 +328,8 @@ static inline op_result send_buf(uintptr_t id, const eb_chan_op *op, eb_sem sem,
             /* Notify the channel's recvs if our buffer is going from empty to non-empty */
             wakeup_recv = (!c->buf_len);
             /* Add the value to the buffer */
-            c->buf[c->buf_len] = op->val;
+            size_t idx = (c->buf_idx + c->buf_len) % c->buf_cap;
+            c->buf[idx] = op->val;
             c->buf_len++;
             /* Set our flag signifying that we completed this op. */
             result = op_result_complete;
@@ -363,10 +366,10 @@ static inline op_result recv_buf(uintptr_t id, eb_chan_op *op, eb_sem sem, eb_ns
             wakeup_send = (c->buf_len == c->buf_cap);
             /* Set our op's state signifying that we received a value */
             op->open = true;
-            op->val = c->buf[0];
+            op->val = c->buf[c->buf_idx];
             /* Update chan's buffer */
             c->buf_len--;
-            memmove(&c->buf[0], &c->buf[1], c->buf_len * sizeof(*(c->buf)));
+            c->buf_idx = (c->buf_idx + 1) % c->buf_cap;
             /* Set our flag signifying that we completed this op. */
             result = op_result_complete;
         } else if (state == chanstate_closed) {
