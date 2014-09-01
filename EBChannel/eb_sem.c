@@ -41,7 +41,7 @@ static void eb_sem_free(eb_sem p) {
         eb_spinlock_unlock(&g_sem_pool_lock);
         
         if (clear_buffer) {
-            while (eb_sem_wait(p, eb_timeout_now));
+            while (eb_sem_wait(p, eb_nsecs_zero));
         }
         
         /* Now that the buffer's empty, add the semaphore to the pool as long as it'll still fit. */
@@ -136,10 +136,10 @@ void eb_sem_signal(eb_sem p) {
 #endif
 }
 
-bool eb_sem_wait(eb_sem p, eb_timeout timeout) {
+bool eb_sem_wait(eb_sem p, eb_nsecs timeout) {
     assert(p);
     
-    if (!timeout) {
+    if (timeout == eb_nsecs_zero) {
         /* Non-blocking */
 #if DARWIN
         kern_return_t r = semaphore_timedwait(p->sem, (mach_timespec_t){0, 0});
@@ -151,7 +151,7 @@ bool eb_sem_wait(eb_sem p, eb_timeout timeout) {
             eb_assert_or_recover(!r || (r == -1 && errno == EAGAIN), eb_no_op);
         return !r;
 #endif
-    } else if (timeout == eb_timeout_never) {
+    } else if (timeout == eb_nsecs_forever) {
         /* Blocking */
 #if DARWIN
         kern_return_t r = semaphore_wait(p->sem);

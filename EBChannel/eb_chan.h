@@ -1,6 +1,6 @@
 #include <stddef.h>
 #include <stdbool.h>
-#include "eb_timeout.h"
+#include "eb_time.h"
 
 /* ## Types */
 typedef struct eb_chan *eb_chan;
@@ -26,4 +26,4 @@ size_t eb_chan_get_buf_len(eb_chan c);
 /* ## Performing operations */
 eb_chan_op eb_chan_send_op(eb_chan c, const void *val);
 eb_chan_op eb_chan_recv_op(eb_chan c);
-eb_chan_op *eb_chan_do(eb_chan_op *const ops[], size_t nops, eb_timeout timeout);
+eb_chan_op *eb_chan_do(eb_chan_op *const ops[], size_t nops, eb_nsecs timeout);

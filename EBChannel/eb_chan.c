@@ -309,7 +309,7 @@ enum {
     op_result_busy,         /* The channel's busy and we should try the op again */
 }; typedef unsigned int op_result;
 
-static inline op_result send_buf(uintptr_t id, const eb_chan_op *op, eb_sem sem, eb_timeout timeout) {
+static inline op_result send_buf(uintptr_t id, const eb_chan_op *op, eb_sem sem, eb_nsecs timeout) {
         assert(op);
         assert(op->chan);
     
@@ -344,7 +344,7 @@ static inline op_result send_buf(uintptr_t id, const eb_chan_op *op, eb_sem sem,
     return result;
 }
 
-static inline op_result recv_buf(uintptr_t id, eb_chan_op *op, eb_sem sem, eb_timeout timeout) {
+static inline op_result recv_buf(uintptr_t id, eb_chan_op *op, eb_sem sem, eb_nsecs timeout) {
         assert(op);
         assert(op->chan);
     
@@ -390,7 +390,7 @@ static inline op_result recv_buf(uintptr_t id, eb_chan_op *op, eb_sem sem, eb_ti
     return result;
 }
 
-static inline op_result send_unbuf(uintptr_t id, eb_chan_op *op, eb_sem sem, eb_timeout timeout) {
+static inline op_result send_unbuf(uintptr_t id, eb_chan_op *op, eb_sem sem, eb_nsecs timeout) {
         assert(op);
         assert(op->chan);
     
@@ -490,7 +490,7 @@ static inline op_result send_unbuf(uintptr_t id, eb_chan_op *op, eb_sem sem, eb_
     return result;
 }
 
-static inline op_result recv_unbuf(uintptr_t id, eb_chan_op *op, eb_sem sem, eb_timeout timeout) {
+static inline op_result recv_unbuf(uintptr_t id, eb_chan_op *op, eb_sem sem, eb_nsecs timeout) {
         assert(op);
         assert(op->chan);
     
@@ -628,7 +628,7 @@ static inline void cleanup_op(const eb_chan_op *op, eb_sem sem) {
     }
 }
 
-static inline op_result try_op(uintptr_t id, eb_chan_op *op, eb_sem sem, eb_timeout timeout) {
+static inline op_result try_op(uintptr_t id, eb_chan_op *op, eb_sem sem, eb_nsecs timeout) {
         assert(op);
     eb_chan c = op->chan;
     if (c) {
@@ -643,7 +643,7 @@ static inline op_result try_op(uintptr_t id, eb_chan_op *op, eb_sem sem, eb_time
     return op_result_next;
 }
 
-eb_chan_op *eb_chan_do(eb_chan_op *const ops[], size_t nops, eb_timeout timeout) {
+eb_chan_op *eb_chan_do(eb_chan_op *const ops[], size_t nops, eb_nsecs timeout) {
     // TODO: make timeout work!
     // TODO: randomize iteration by shuffling input array once (upon entry)
         assert(ops);
@@ -664,11 +664,12 @@ eb_chan_op *eb_chan_do(eb_chan_op *const ops[], size_t nops, eb_timeout timeout)
 //        }
 //    }
     
+    eb_time start_time = (timeout != eb_nsecs_zero && timeout != eb_nsecs_forever ? eb_time_now() : 0);
     for (;;) {
         /* ## Fast path: loop over our operations to see if one of them was able to send/receive. (If not,
            we'll enter the slow path where we put our thread to sleep until we're signalled.) */
         if (nops) {
-            const size_t k_attempt_multiplier = (timeout > 0 ? 50 : 1);
+            const size_t k_attempt_multiplier = (timeout != eb_nsecs_zero ? 50 : 1);
             for (size_t i = 0; i < k_attempt_multiplier * nops; i++) {
                 size_t idx = (i % nops);
                 eb_chan_op *op = ops[idx];
@@ -691,7 +692,7 @@ eb_chan_op *eb_chan_do(eb_chan_op *const ops[], size_t nops, eb_timeout timeout)
         }
         
         /* If we're polling and we get to this point, no operations could complete, so it's time to return. */
-        if (timeout == 0) {
+        if (timeout == eb_nsecs_zero) {
             goto cleanup;
         }
         
@@ -714,6 +715,9 @@ eb_chan_op *eb_chan_do(eb_chan_op *const ops[], size_t nops, eb_timeout timeout)
             }
         }
         
+        /* Before we go to sleep, call try_op() for every op until we get a non-busy return value. This way we'll ensure
+           that no op is actually able to be performed, and we'll also ensure that 'sem' is registered as the 'unbuf_sem'
+           for the necessary channels. */
         for (size_t i = 0; i < nops; i++) {
             eb_chan_op *op = ops[i];
             op_result r;
@@ -730,8 +734,18 @@ eb_chan_op *eb_chan_do(eb_chan_op *const ops[], size_t nops, eb_timeout timeout)
             }
         }
         
+        /* If we have a timeout, determine how much time has elapsed, because we may have already timed-out. */
+        eb_nsecs elapsed = 0;
+        if (timeout != eb_nsecs_zero && timeout != eb_nsecs_forever) {
+            elapsed = eb_time_nsecs_between(start_time, eb_time_now());
+            /* Check if we timed-out */
+            if (elapsed >= timeout) {
+                goto cleanup;
+            }
+        }
+        
         /* Put our thread to sleep until someone alerts us of an event */
-        eb_sem_wait(sem, timeout);
+        eb_sem_wait(sem, timeout - elapsed);
     }
     
     /* Cleanup! */
