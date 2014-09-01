@@ -734,7 +734,7 @@ eb_chan_op *eb_chan_do(eb_chan_op *const ops[], size_t nops, eb_nsecs timeout) {
             }
         }
         
-        /* If we have a timeout, determine how much time has elapsed, because we may have already timed-out. */
+        /* If we have a timeout, determine how much time has elapsed, because we may have timed-out. */
         eb_nsecs elapsed = 0;
         if (timeout != eb_nsecs_zero && timeout != eb_nsecs_forever) {
             elapsed = eb_time_nsecs_between(start_time, eb_time_now());

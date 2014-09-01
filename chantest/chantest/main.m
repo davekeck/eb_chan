@@ -119,6 +119,19 @@ void *thread(void *a)
     return NULL;
 }
 
+void *threadTest(void *a)
+{
+    eb_chan_op recv = eb_chan_recv_op(gChan);
+    eb_chan_op *const ops[] = {&recv};
+    
+    EBTime startTime = EBTimeCurrentTime();
+    eb_chan_do(ops, (sizeof(ops) / sizeof(*ops)), 2.5 * NSEC_PER_SEC);
+    NSLog(@"elapsed: %f (%ju iterations)", EBTimeElapsedSecondsSince(startTime), (uintmax_t)NTRIALS);
+    
+    exit(0);
+    return NULL;
+}
+
 int main(int argc, const char * argv[])
 {
     gChan = eb_chan_create(0);
@@ -131,11 +144,13 @@ int main(int argc, const char * argv[])
 //    pthread_create(&thread1, NULL, threadDoRecv, NULL);
 //    pthread_create(&thread2, NULL, threadTrySend, NULL);
     
-    pthread_create(&thread1, NULL, threadSend, NULL);
-    pthread_create(&thread2, NULL, threadRecv, NULL);
+//    pthread_create(&thread1, NULL, threadSend, NULL);
+//    pthread_create(&thread2, NULL, threadRecv, NULL);
     
 //    pthread_create(&thread1, NULL, thread, NULL);
 //    pthread_create(&thread2, NULL, thread, NULL);
+    
+    pthread_create(&thread1, NULL, threadTest, NULL);
     
     for (;;) {
         sleep(-1);
