@@ -644,7 +644,6 @@ static inline op_result try_op(uintptr_t id, eb_chan_op *op, eb_sem sem, eb_nsec
 }
 
 eb_chan_op *eb_chan_do(eb_chan_op *const ops[], size_t nops, eb_nsecs timeout) {
-    // TODO: make timeout work!
     // TODO: randomize iteration by shuffling input array once (upon entry)
         assert(ops);
     eb_sem sem = NULL;
