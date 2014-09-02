@@ -405,16 +405,15 @@ static inline op_result send_unbuf(uintptr_t id, eb_chan_op *op, eb_sem sem, eb_
             /* Verify that the channel isn't closed */
             eb_assert_or_bail(state != chanstate_closed, "Illegal send on closed channel");
         
-        bool wakeup_send = false;
         bool wakeup_recv = false;
-        if (state == chanstate_open && timeout > 0) {
+        if (state == chanstate_open && timeout != eb_nsecs_zero) {
             c->state = chanstate_send;
             c->unbuf_id = id;
             c->unbuf_op = op;
             c->unbuf_sem = sem;
             wakeup_recv = true;
             result = op_result_next_clean;
-        } else if (state == chanstate_send && timeout > 0) {
+        } else if (state == chanstate_send) {
             if (c->unbuf_op == op) {
                 /* We own the send op that's in progress, so assign chan's unbuf_sem */
                 /* Verify that the unbuf_id matches our 'id' parameter. If this assertion fails, it means there's likely
@@ -456,7 +455,7 @@ static inline op_result send_unbuf(uintptr_t id, eb_chan_op *op, eb_sem sem, eb_
                             if (c->state == chanstate_done || c->state == chanstate_cancelled) {
                                 c->state = chanstate_open;
                                 /* Wakeup a send since one of them can now proceed */
-                                wakeup_send = true;
+                                wakeup_recv = true;
                                 /* We're intentionally bypassing our loop's unlock because we unlock the channel
                                    outside the encompassing if-statement. */
                                 break;
@@ -479,10 +478,6 @@ static inline op_result send_unbuf(uintptr_t id, eb_chan_op *op, eb_sem sem, eb_
         
         eb_spinlock_unlock(&c->lock);
         
-        if (wakeup_send) {
-            sem_list_signal_first(c->sends, sem);
-        }
-        
         if (wakeup_recv) {
             sem_list_signal_first(c->recvs, sem);
         }
@@ -503,7 +498,7 @@ static inline op_result recv_unbuf(uintptr_t id, eb_chan_op *op, eb_sem sem, eb_
     if (eb_spinlock_try(&c->lock)) {
         chanstate state = c->state;
         bool wakeup_send = false;
-        if (state == chanstate_open && timeout > 0) {
+        if (state == chanstate_open && timeout != eb_nsecs_zero) {
             c->state = chanstate_recv;
             c->unbuf_id = id;
             c->unbuf_op = op;
@@ -557,7 +552,7 @@ static inline op_result recv_unbuf(uintptr_t id, eb_chan_op *op, eb_sem sem, eb_
                     }
                 }
             }
-        } else if (state == chanstate_recv && timeout > 0) {
+        } else if (state == chanstate_recv) {
             if (c->unbuf_op == op) {
                 /* We own the recv op that's in progress, so assign chan's unbuf_sem */
                 /* Verify that the _recv_id matches our 'id' parameter. If this assertion fails, it means there's likely

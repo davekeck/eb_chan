@@ -14,7 +14,7 @@ void *threadDoSend(void *a)
     eb_chan_op *const ops[] = {&send};
     for (NSUInteger i = 0; i < NTRIALS; i++) {
         assert(eb_chan_do(ops, (sizeof(ops) / sizeof(*ops)), eb_nsecs_forever));
-        NSLog(@"SENT");
+//        NSLog(@"SENT");
     }
     return NULL;
 }
@@ -23,18 +23,22 @@ void *threadTryRecv(void *a)
 {
     eb_chan_op recv = eb_chan_recv_op(gChan);
     eb_chan_op *const ops[] = {&recv};
-    for (NSUInteger i = 0; i < NTRIALS; i++) {
-        if (eb_chan_do(ops, (sizeof(ops) / sizeof(*ops)), 0) == 0) {
-            NSLog(@"RECEIVED");
+    NSUInteger count = 0;
+    for (;;) {
+        eb_chan_op *op = eb_chan_do(ops, (sizeof(ops) / sizeof(*ops)), eb_nsecs_zero);
+        if (op == &recv) {
+//            NSLog(@"RECEIVED");
+            count++;
+            if (count == NTRIALS) {
+                break;
+            }
         } else {
-            NSLog(@"NOT RECEIVED");
+//            NSLog(@"NOT RECEIVED");
         }
     }
+    exit(0);
     return NULL;
 }
-
-
-
 
 void *threadDoRecv(void *a)
 {
@@ -42,7 +46,7 @@ void *threadDoRecv(void *a)
     eb_chan_op *const ops[] = {&recv};
     for (NSUInteger i = 0; i < NTRIALS; i++) {
         assert(eb_chan_do(ops, (sizeof(ops) / sizeof(*ops)), eb_nsecs_forever));
-        NSLog(@"RECEIVED");
+//        NSLog(@"RECEIVED");
     }
     return NULL;
 }
@@ -51,13 +55,20 @@ void *threadTrySend(void *a)
 {
     eb_chan_op send = eb_chan_send_op(gChan, "sup g");
     eb_chan_op *const ops[] = {&send};
-    for (NSUInteger i = 0; i < NTRIALS; i++) {
-        if (eb_chan_do(ops, (sizeof(ops) / sizeof(*ops)), 0) == 0) {
-            NSLog(@"SENT");
+    NSUInteger count = 0;
+    for (;;) {
+        eb_chan_op *op = eb_chan_do(ops, (sizeof(ops) / sizeof(*ops)), eb_nsecs_zero);
+        if (op == &send) {
+//            NSLog(@"SENT");
+            count++;
+            if (count == NTRIALS) {
+                break;
+            }
         } else {
-            NSLog(@"NOT SENT");
+//            NSLog(@"NOT SENT");
         }
     }
+    exit(0);
     return NULL;
 }
 
@@ -141,8 +152,8 @@ int main(int argc, const char * argv[])
 //    pthread_create(&thread1, NULL, threadDoSend, NULL);
 //    pthread_create(&thread2, NULL, threadTryRecv, NULL);
     
-//    pthread_create(&thread1, NULL, threadDoRecv, NULL);
 //    pthread_create(&thread2, NULL, threadTrySend, NULL);
+//    pthread_create(&thread1, NULL, threadDoRecv, NULL);
     
     pthread_create(&thread1, NULL, threadSend, NULL);
     pthread_create(&thread2, NULL, threadRecv, NULL);
