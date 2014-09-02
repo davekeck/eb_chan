@@ -454,7 +454,7 @@ static inline op_result send_unbuf(uintptr_t id, eb_chan_op *op, eb_sem sem, eb_
                             
                             if (c->state == chanstate_done || c->state == chanstate_cancelled) {
                                 c->state = chanstate_open;
-                                /* Wakeup a send since one of them can now proceed */
+                                /* Wakeup a recv since one of them can now proceed */
                                 wakeup_recv = true;
                                 /* We're intentionally bypassing our loop's unlock because we unlock the channel
                                    outside the encompassing if-statement. */
@@ -685,7 +685,7 @@ eb_chan_op *eb_chan_do(eb_chan_op *const ops[], size_t nops, eb_nsecs timeout) {
             /* ## Fast path: loop over our operations to see if one of them was able to send/receive. (If not,
                we'll enter the slow path where we put our thread to sleep until we're signalled.) */
             if (nops) {
-                const size_t k_attempt_multiplier = 50;
+                const size_t k_attempt_multiplier = 500;
                 for (size_t i = 0; i < k_attempt_multiplier * nops; i++) {
                     size_t idx = (i % nops);
                     eb_chan_op *op = ops[idx];
