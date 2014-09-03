@@ -308,7 +308,7 @@ enum {
     op_result_complete,     /* The op completed and the caller should return */
     op_result_next,         /* The op couldn't make any progress and the caller should move on to the next op */
     op_result_next_clean,   /* Same as _next, but signifies that cleanup_op() must be called for the op */
-    op_result_busy,         /* The channel's busy and we should try the op again */
+    op_result_retry,        /* The channel's busy and we should try the op again */
 }; typedef unsigned int op_result;
 
 static inline op_result send_buf(uintptr_t id, const eb_chan_op *op, eb_sem sem, eb_nsecs timeout) {
@@ -341,7 +341,7 @@ static inline op_result send_buf(uintptr_t id, const eb_chan_op *op, eb_sem sem,
             sem_list_signal_first(c->recvs, sem);
         }
     } else {
-        result = op_result_busy;
+        result = op_result_retry;
     }
     
     return result;
@@ -387,7 +387,7 @@ static inline op_result recv_buf(uintptr_t id, eb_chan_op *op, eb_sem sem, eb_ns
             sem_list_signal_first(c->sends, sem);
         }
     } else {
-        result = op_result_busy;
+        result = op_result_retry;
     }
     
     return result;
@@ -402,9 +402,6 @@ static inline op_result send_unbuf(uintptr_t id, eb_chan_op *op, eb_sem sem, eb_
     
     if (eb_spinlock_try(&c->lock)) {
         chanstate state = c->state;
-            /* Verify that the channel isn't closed */
-            eb_assert_or_bail(state != chanstate_closed, "Illegal send on closed channel");
-        
         bool wakeup_recv = false;
         if (state == chanstate_open && timeout != eb_nsecs_zero) {
             c->state = chanstate_send;
@@ -413,6 +410,9 @@ static inline op_result send_unbuf(uintptr_t id, eb_chan_op *op, eb_sem sem, eb_
             c->unbuf_sem = sem;
             wakeup_recv = true;
             result = op_result_next_clean;
+        } else if (state == chanstate_closed) {
+            /* Sending on a closed channel -- not allowed! */
+            eb_assert_or_bail(state != chanstate_closed, "Illegal send on closed channel");
         } else if (state == chanstate_send) {
             if (c->unbuf_op == op) {
                 /* We own the send op that's in progress, so assign chan's unbuf_sem */
@@ -424,7 +424,7 @@ static inline op_result send_unbuf(uintptr_t id, eb_chan_op *op, eb_sem sem, eb_
                 result = op_result_next_clean;
             }
         } else if (state == chanstate_recv) {
-            /* Verify that the recv isn't part of the same select() (we can't do unbuffered sends/recvs from the same select()) */
+            /* Verify that the recv isn't part of the same op pool (we can't do unbuffered sends/recvs from the same _do() call) */
             if (c->unbuf_id != id) {
                     /* Sanity check -- make sure the op is a recv */
                     eb_assert_or_bail(!c->unbuf_op->send, "Op isn't a recv as expected");
@@ -450,11 +450,14 @@ static inline op_result send_unbuf(uintptr_t id, eb_chan_op *op, eb_sem sem, eb_
                         eb_spinlock_lock(&c->lock);
                             if (c->state == chanstate_done) {
                                 result = op_result_complete;
+                            } else if (c->state == chanstate_cancelled && timeout != eb_nsecs_zero) {
+                                /* We're resetting the channel's state to _open, so we should try the op again */
+                                result = op_result_retry;
                             }
                             
                             if (c->state == chanstate_done || c->state == chanstate_cancelled) {
                                 c->state = chanstate_open;
-                                /* Wakeup a recv since one of them can now proceed */
+                                /* Wakeup a send since one of them can now proceed */
                                 wakeup_recv = true;
                                 /* We're intentionally bypassing our loop's unlock because we unlock the channel
                                    outside the encompassing if-statement. */
@@ -473,6 +476,20 @@ static inline op_result send_unbuf(uintptr_t id, eb_chan_op *op, eb_sem sem, eb_
                 /* A recv is polling for chan's state to change, so update it to signal that we're done sending! */
                 c->state = chanstate_done;
                 result = op_result_complete;
+            } else if (c->unbuf_id != id) {
+                /* This isn't our op and it's not part of our op pool, so because _ack is an intermittent state,
+                   tell the caller that we should retry the op. */
+                result = op_result_retry;
+            }
+        } else if (state == chanstate_done) {
+            /* The _done state is intermittent, so if the op isn't part of our op pool, tell the caller that we should retry the op. */
+            if (c->unbuf_id != id) {
+                result = op_result_retry;
+            }
+        } else if (state == chanstate_cancelled) {
+            /* The _cancelled state is intermittent, so if the op isn't part of our op pool, tell the caller that we should retry the op. */
+            if (c->unbuf_id != id) {
+                result = op_result_retry;
             }
         }
         
@@ -482,7 +499,7 @@ static inline op_result send_unbuf(uintptr_t id, eb_chan_op *op, eb_sem sem, eb_
             sem_list_signal_first(c->recvs, sem);
         }
     } else {
-        result = op_result_busy;
+        result = op_result_retry;
     }
     
     return result;
@@ -538,6 +555,9 @@ static inline op_result recv_unbuf(uintptr_t id, eb_chan_op *op, eb_sem sem, eb_
                         eb_spinlock_lock(&c->lock);
                             if (c->state == chanstate_done) {
                                 result = op_result_complete;
+                            } else if (c->state == chanstate_cancelled && timeout != eb_nsecs_zero) {
+                                /* We're resetting the channel's state to _open, so we should try the op again */
+                                result = op_result_retry;
                             }
                             
                             if (c->state == chanstate_done || c->state == chanstate_cancelled) {
@@ -571,6 +591,20 @@ static inline op_result recv_unbuf(uintptr_t id, eb_chan_op *op, eb_sem sem, eb_
                 /* A send is polling for chan's state to change, so update it to signal that we're done sending! */
                 c->state = chanstate_done;
                 result = op_result_complete;
+            } else if (c->unbuf_id != id) {
+                /* This isn't our op and it's not part of our op pool, so because _ack is an intermittent state,
+                   tell the caller that we should retry the op. */
+                result = op_result_retry;
+            }
+        } else if (state == chanstate_done) {
+            /* The _done state is intermittent, so if the op isn't part of our op pool, tell the caller that we should retry the op. */
+            if (c->unbuf_id != id) {
+                result = op_result_retry;
+            }
+        } else if (state == chanstate_cancelled) {
+            /* The _cancelled state is intermittent, so if the op isn't part of our op pool, tell the caller that we should retry the op. */
+            if (c->unbuf_id != id) {
+                result = op_result_retry;
             }
         }
         
@@ -580,7 +614,7 @@ static inline op_result recv_unbuf(uintptr_t id, eb_chan_op *op, eb_sem sem, eb_
             sem_list_signal_first(c->sends, sem);
         }
     } else {
-        result = op_result_busy;
+        result = op_result_retry;
     }
     
     return result;
@@ -666,7 +700,7 @@ eb_chan_op *eb_chan_do(eb_chan_op *const ops[], size_t nops, eb_nsecs timeout) {
         for (size_t i = 0; i < nops; i++) {
             eb_chan_op *op = ops[i];
             op_result r;
-            while ((r = try_op(id, op, sem, timeout)) == op_result_busy);
+            while ((r = try_op(id, op, sem, timeout)) == op_result_retry);
             
             /* Update cleanup_ops. Note that we don't need to consider _busy because we waited until
                the operation returned something other than _busy. */
@@ -685,7 +719,7 @@ eb_chan_op *eb_chan_do(eb_chan_op *const ops[], size_t nops, eb_nsecs timeout) {
             /* ## Fast path: loop over our operations to see if one of them was able to send/receive. (If not,
                we'll enter the slow path where we put our thread to sleep until we're signalled.) */
             if (nops) {
-                const size_t k_attempt_multiplier = 500;
+                const size_t k_attempt_multiplier = 1000;
                 for (size_t i = 0; i < k_attempt_multiplier * nops; i++) {
                     size_t idx = (i % nops);
                     eb_chan_op *op = ops[idx];
@@ -695,7 +729,7 @@ eb_chan_op *eb_chan_do(eb_chan_op *const ops[], size_t nops, eb_nsecs timeout) {
                        that no information could be garnered from the channel. */
                     if (r == op_result_next_clean) {
                         cleanup_ops[idx] = true;
-                    } else if (r != op_result_busy) {
+                    } else if (r != op_result_retry) {
                         cleanup_ops[idx] = false;
                     }
                     
@@ -732,7 +766,7 @@ eb_chan_op *eb_chan_do(eb_chan_op *const ops[], size_t nops, eb_nsecs timeout) {
             for (size_t i = 0; i < nops; i++) {
                 eb_chan_op *op = ops[i];
                 op_result r;
-                while ((r = try_op(id, op, sem, timeout)) == op_result_busy);
+                while ((r = try_op(id, op, sem, timeout)) == op_result_retry);
                 
                 /* Update cleanup_ops. Note that we don't need to consider _busy because we waited until
                    the operation returned something other than _busy. */

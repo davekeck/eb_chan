@@ -34,21 +34,31 @@ func threadRecv(c chan string) {
         <-c
     }
     fmt.Printf("elapsed (%v): %f\n", NTRIALS, time.Since(start).Seconds())
-    os.Exit(0)
+    // os.Exit(0)
 }
 
 func main() {
-    runtime.GOMAXPROCS(2)
+    runtime.GOMAXPROCS(6)
     
     c := make(chan string, 0)
     
     // go thread(c)
     // go thread(c)
+    // go thread(c)
+    // go thread(c)
+    // go thread(c)
+    // go thread(c)
     
     go threadSend(c)
+    go threadSend(c)
+    go threadSend(c)
+    go threadRecv(c)
+    go threadRecv(c)
     go threadRecv(c)
     
-    time.Sleep(4 * time.Second)
+    for {
+        time.Sleep(999 * time.Second)
+    }
     
     // a := make(chan string, 1)
     //

@@ -24,6 +24,7 @@ void *threadTryRecv(void *a)
     eb_chan_op recv = eb_chan_recv_op(gChan);
     eb_chan_op *const ops[] = {&recv};
     NSUInteger count = 0;
+    EBTime startTime = EBTimeCurrentTime();
     for (;;) {
         eb_chan_op *op = eb_chan_do(ops, (sizeof(ops) / sizeof(*ops)), eb_nsecs_zero);
         if (op == &recv) {
@@ -36,6 +37,7 @@ void *threadTryRecv(void *a)
 //            NSLog(@"NOT RECEIVED");
         }
     }
+    NSLog(@"elapsed: %f (%ju iterations)", EBTimeElapsedSecondsSince(startTime), (uintmax_t)NTRIALS);
     exit(0);
     return NULL;
 }
@@ -53,9 +55,10 @@ void *threadDoRecv(void *a)
 
 void *threadTrySend(void *a)
 {
-    eb_chan_op send = eb_chan_send_op(gChan, "sup g");
+    eb_chan_op send = eb_chan_send_op(gChan, "halla");
     eb_chan_op *const ops[] = {&send};
     NSUInteger count = 0;
+    EBTime startTime = EBTimeCurrentTime();
     for (;;) {
         eb_chan_op *op = eb_chan_do(ops, (sizeof(ops) / sizeof(*ops)), eb_nsecs_zero);
         if (op == &send) {
@@ -68,6 +71,7 @@ void *threadTrySend(void *a)
 //            NSLog(@"NOT SENT");
         }
     }
+    NSLog(@"elapsed: %f (%ju iterations)", EBTimeElapsedSecondsSince(startTime), (uintmax_t)NTRIALS);
     exit(0);
     return NULL;
 }
@@ -109,7 +113,7 @@ void *threadRecv(void *a)
     }
     
     NSLog(@"elapsed: %f (%ju iterations)", EBTimeElapsedSecondsSince(startTime), (uintmax_t)NTRIALS);
-    exit(0);
+//    exit(0);
     return NULL;
 }
 
@@ -155,13 +159,21 @@ int main(int argc, const char * argv[])
 //    pthread_create(&thread2, NULL, threadTrySend, NULL);
 //    pthread_create(&thread1, NULL, threadDoRecv, NULL);
     
-//    pthread_create(&thread1, NULL, threadSend, NULL);
-//    pthread_create(&thread2, NULL, threadRecv, NULL);
+    pthread_create(&thread1, NULL, threadSend, NULL);
+    pthread_create(&thread1, NULL, threadSend, NULL);
+    pthread_create(&thread1, NULL, threadSend, NULL);
+    pthread_create(&thread2, NULL, threadRecv, NULL);
+    pthread_create(&thread2, NULL, threadRecv, NULL);
+    pthread_create(&thread2, NULL, threadRecv, NULL);
     
 //    pthread_create(&thread1, NULL, thread, NULL);
 //    pthread_create(&thread2, NULL, thread, NULL);
+//    pthread_create(&thread2, NULL, thread, NULL);
+//    pthread_create(&thread2, NULL, thread, NULL);
+//    pthread_create(&thread2, NULL, thread, NULL);
+//    pthread_create(&thread2, NULL, thread, NULL);
     
-    pthread_create(&thread1, NULL, threadTest, NULL);
+//    pthread_create(&thread1, NULL, threadTest, NULL);
     
     for (;;) {
         sleep(-1);
