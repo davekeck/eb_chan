@@ -1,12 +1,17 @@
 #include "eb_time.h"
 #include <stdint.h>
 #include <stdlib.h>
-#include <mach/mach.h>
+
+#if __MACH__
+    #define DARWIN 1
+    #include <mach/mach.h>
+#elif __linux__
+    #define LINUX 1
+    #include <time.h>
+#endif
+
 #include "eb_assert.h"
 #include "eb_atomic.h"
-
-#define DARWIN __MACH__
-#define LINUX __linux__
 
 eb_nsecs eb_time_now() {
 #if DARWIN
@@ -31,6 +36,6 @@ eb_nsecs eb_time_now() {
     struct timespec ts;
     int r = clock_gettime(CLOCK_MONOTONIC, &ts);
         eb_assert_or_recover(!r, return 0);
-    return ((uint64_t)ts.tv_sec * NSEC_PER_SEC) + ts.tv_nsec;
+    return ((uint64_t)ts.tv_sec * eb_nsecs_per_sec) + ts.tv_nsec;
 #endif
 }

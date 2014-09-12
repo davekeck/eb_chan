@@ -1,15 +1,20 @@
 #include "eb_port.h"
 #include <stdlib.h>
 #include <assert.h>
-#include <mach/mach.h>
-#include <semaphore.h>
-#include <time.h>
 #include <errno.h>
+#include <string.h>
+
+#if __MACH__
+    #define DARWIN 1
+    #include <mach/mach.h>
+#elif __linux__
+    #define LINUX 1
+    #include <time.h>
+    #include <semaphore.h>
+#endif
+
 #include "eb_assert.h"
 #include "eb_atomic.h"
-
-#define DARWIN __MACH__
-#define LINUX __linux__
 
 #define PORT_POOL_CAP 0x10
 static eb_spinlock g_port_pool_lock = EB_SPINLOCK_INIT;
@@ -91,7 +96,7 @@ eb_port eb_port_create() {
         /* We couldn't get a port out of the pool */
         p = malloc(sizeof(*p));
             eb_assert_or_recover(p, goto failed);
-        bzero(p, sizeof(*p));
+        memset(p, 0, sizeof(*p));
         
         /* Create the semaphore */
         #if DARWIN
@@ -170,7 +175,7 @@ bool eb_port_wait(eb_port p, eb_nsecs timeout) {
     } else {
         /* ## Actual timeout */
         #if DARWIN
-            mach_timespec_t ts = {.tv_sec = (unsigned int)(timeout / NSEC_PER_SEC), .tv_nsec = (clock_res_t)(timeout % NSEC_PER_SEC)};
+            mach_timespec_t ts = {.tv_sec = (unsigned int)(timeout / eb_nsecs_per_sec), .tv_nsec = (clock_res_t)(timeout % eb_nsecs_per_sec)};
             kern_return_t r = semaphore_timedwait(p->sem, ts);
                 eb_assert_or_recover(r == KERN_SUCCESS || r == KERN_OPERATION_TIMED_OUT, eb_no_op);
             result = (r == KERN_SUCCESS);
@@ -185,8 +190,8 @@ bool eb_port_wait(eb_port p, eb_nsecs timeout) {
                 struct timespec ts;
                 int r = clock_gettime(CLOCK_REALTIME, &ts);
                     eb_assert_or_recover(!r, break);
-                ts.tv_sec += (remaining_timeout / NSEC_PER_SEC);
-                ts.tv_nsec += (remaining_timeout % NSEC_PER_SEC);
+                ts.tv_sec += (remaining_timeout / eb_nsecs_per_sec);
+                ts.tv_nsec += (remaining_timeout % eb_nsecs_per_sec);
                 r = sem_timedwait(&p->sem, &ts);
                     /* The allowed return cases are: success (r==0), timed-out (r==-1, errno==ETIMEDOUT), (r==-1, errno==EINTR) */
                     eb_assert_or_recover(!r || (r == -1 && (errno == ETIMEDOUT || errno == EINTR)), break);

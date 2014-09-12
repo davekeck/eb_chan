@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <stdio.h>
-#include <strings.h>
+#include <string.h>
 #include "eb_assert.h"
 #include "eb_port.h"
 #include "eb_atomic.h"
@@ -193,7 +193,7 @@ eb_chan eb_chan_create(size_t buf_cap) {
     
     eb_chan c = malloc(sizeof(*c));
         eb_assert_or_recover(c, goto failed);
-    bzero(c, sizeof(*c));
+    memset(c, 0, sizeof(*c));
     
     c->retain_count = 1;
     c->lock = 0;
@@ -660,7 +660,7 @@ eb_chan_op *eb_chan_do(eb_chan_op *const ops[], size_t nops, eb_nsecs timeout) {
     eb_chan_op *result = NULL;
     uintptr_t id = (uintptr_t)&result;
     bool cleanup_ops[nops];
-    bzero(cleanup_ops, sizeof(cleanup_ops));
+    memset(cleanup_ops, 0, sizeof(cleanup_ops));
     
     /* ## Shuffle our input array */
     /* No need to shuffle arrays that have 0 or 1 elements */
