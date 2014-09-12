@@ -134,8 +134,10 @@ static inline void port_list_signal_first(const port_list l, eb_port ignore) {
 }
 
 enum {
+    /* Buffered/unbuffered channel states */
     chanstate_open,
     chanstate_closed,
+    /* Unbuffered channel states */
     chanstate_send,
     chanstate_recv,
     chanstate_ack,
@@ -270,7 +272,7 @@ void eb_chan_close(eb_chan c) {
         }
     }
     
-    /* Wake up the sends/recvs. It's illegal to have senders at this point anyway, so we'll abort if we have any. */
+    /* Wake up the sends/recvs. (It's illegal to have senders at this point, and we'll wind up aborting if we do...) */
     port_list_signal_first(c->sends, NULL);
     port_list_signal_first(c->recvs, NULL);
 }
