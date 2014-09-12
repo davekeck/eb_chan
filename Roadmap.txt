@@ -1,4 +1,3 @@
 ## Roadmap
 
-- Add Linux support (should be fairly straightforward by using POSIX semaphores, not sure what to use for spinlocks)
-- Combine try() and do() into a single function that takes a timeout parameter? (Use clock_alarm() on Darwin, sem_timedwait() on Linux)
+- Test on Linux
