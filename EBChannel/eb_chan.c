@@ -270,7 +270,8 @@ void eb_chan_close(eb_chan c) {
         }
     }
     
-    /* Wake up the first receiver. We don't bother to wake up senders here because it's illegal for the channel to have senders at this point anyway. */
+    /* Wake up the sends/recvs. It's illegal to have senders at this point anyway, so we'll abort if we have any. */
+    sem_list_signal_first(c->sends, NULL);
     sem_list_signal_first(c->recvs, NULL);
 }
 
