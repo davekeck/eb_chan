@@ -119,7 +119,7 @@ eb_sem eb_sem_retain(eb_sem p) {
 
 void eb_sem_release(eb_sem p) {
     assert(p);
-    if (eb_atomic_add(&p->retain_count, -1) == 1) {
+    if (eb_atomic_add(&p->retain_count, -1) == 0) {
         eb_sem_free(p);
     }
 }

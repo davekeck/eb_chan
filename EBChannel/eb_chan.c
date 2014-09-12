@@ -235,7 +235,7 @@ eb_chan eb_chan_retain(eb_chan c) {
 
 void eb_chan_release(eb_chan c) {
     assert(c);
-    if (eb_atomic_add(&c->retain_count, -1) == 1) {
+    if (eb_atomic_add(&c->retain_count, -1) == 0) {
         eb_chan_free(c);
     }
 }
