@@ -481,17 +481,19 @@ static inline op_result send_unbuf(uintptr_t id, eb_chan_op *op, eb_sem sem, eb_
                    tell the caller that we should retry the op. */
                 result = op_result_retry;
             }
-        } else if (state == chanstate_done) {
-            /* The _done state is intermittent, so if the op isn't part of our op pool, tell the caller that we should retry the op. */
-            if (c->unbuf_id != id) {
-                result = op_result_retry;
-            }
-        } else if (state == chanstate_cancelled) {
-            /* The _cancelled state is intermittent, so if the op isn't part of our op pool, tell the caller that we should retry the op. */
-            if (c->unbuf_id != id) {
-                result = op_result_retry;
-            }
         }
+        
+//        else if (state == chanstate_done) {
+//            /* The _done state is intermittent, so if the op isn't part of our op pool, tell the caller that we should retry the op. */
+//            if (c->unbuf_id != id) {
+//                result = op_result_retry;
+//            }
+//        } else if (state == chanstate_cancelled) {
+//            /* The _cancelled state is intermittent, so if the op isn't part of our op pool, tell the caller that we should retry the op. */
+//            if (c->unbuf_id != id) {
+//                result = op_result_retry;
+//            }
+//        }
         
         eb_spinlock_unlock(&c->lock);
         
@@ -596,17 +598,19 @@ static inline op_result recv_unbuf(uintptr_t id, eb_chan_op *op, eb_sem sem, eb_
                    tell the caller that we should retry the op. */
                 result = op_result_retry;
             }
-        } else if (state == chanstate_done) {
-            /* The _done state is intermittent, so if the op isn't part of our op pool, tell the caller that we should retry the op. */
-            if (c->unbuf_id != id) {
-                result = op_result_retry;
-            }
-        } else if (state == chanstate_cancelled) {
-            /* The _cancelled state is intermittent, so if the op isn't part of our op pool, tell the caller that we should retry the op. */
-            if (c->unbuf_id != id) {
-                result = op_result_retry;
-            }
         }
+        
+//        else if (state == chanstate_done) {
+//            /* The _done state is intermittent, so if the op isn't part of our op pool, tell the caller that we should retry the op. */
+//            if (c->unbuf_id != id) {
+//                result = op_result_retry;
+//            }
+//        } else if (state == chanstate_cancelled) {
+//            /* The _cancelled state is intermittent, so if the op isn't part of our op pool, tell the caller that we should retry the op. */
+//            if (c->unbuf_id != id) {
+//                result = op_result_retry;
+//            }
+//        }
         
         eb_spinlock_unlock(&c->lock);
         
