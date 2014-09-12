@@ -1,8 +1,15 @@
-#import <Foundation/Foundation.h>
-#import <EBFoundation/EBFoundation.h>
-#import <pthread.h>
-#import <math.h>
-#import "eb_chan.h"
+#include <pthread.h>
+#include <math.h>
+#include <assert.h>
+#include <stdio.h>
+#include <time.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include "eb_chan.h"
+
+#ifndef NSEC_PER_SEC
+#define NSEC_PER_SEC 1000000000ull
+#endif
 
 #define NTRIALS 1000000
 
@@ -12,9 +19,8 @@ void *threadDoSend(void *a)
 {
     eb_chan_op send = eb_chan_send_op(gChan, "halla");
     eb_chan_op *const ops[] = {&send};
-    for (NSUInteger i = 0; i < NTRIALS; i++) {
+    for (size_t i = 0; i < NTRIALS; i++) {
         assert(eb_chan_do(ops, (sizeof(ops) / sizeof(*ops)), eb_nsecs_forever));
-//        NSLog(@"SENT");
     }
     return NULL;
 }
@@ -23,21 +29,20 @@ void *threadTryRecv(void *a)
 {
     eb_chan_op recv = eb_chan_recv_op(gChan);
     eb_chan_op *const ops[] = {&recv};
-    NSUInteger count = 0;
-    EBTime startTime = EBTimeCurrentTime();
+    size_t count = 0;
+    eb_nsecs startTime = eb_time_now();
     for (;;) {
         eb_chan_op *op = eb_chan_do(ops, (sizeof(ops) / sizeof(*ops)), eb_nsecs_zero);
         if (op == &recv) {
-//            NSLog(@"RECEIVED");
             count++;
             if (count == NTRIALS) {
                 break;
             }
         } else {
-//            NSLog(@"NOT RECEIVED");
         }
     }
-    NSLog(@"elapsed: %f (%ju iterations)", EBTimeElapsedSecondsSince(startTime), (uintmax_t)NTRIALS);
+    
+    printf("elapsed: %f (%ju iterations)\n", ((double)(eb_time_now() - startTime) / NSEC_PER_SEC), (uintmax_t)NTRIALS);
     exit(0);
     return NULL;
 }
@@ -46,9 +51,8 @@ void *threadDoRecv(void *a)
 {
     eb_chan_op recv = eb_chan_recv_op(gChan);
     eb_chan_op *const ops[] = {&recv};
-    for (NSUInteger i = 0; i < NTRIALS; i++) {
+    for (size_t i = 0; i < NTRIALS; i++) {
         assert(eb_chan_do(ops, (sizeof(ops) / sizeof(*ops)), eb_nsecs_forever));
-//        NSLog(@"RECEIVED");
     }
     return NULL;
 }
@@ -57,35 +61,28 @@ void *threadTrySend(void *a)
 {
     eb_chan_op send = eb_chan_send_op(gChan, "halla");
     eb_chan_op *const ops[] = {&send};
-    NSUInteger count = 0;
-    EBTime startTime = EBTimeCurrentTime();
+    size_t count = 0;
+    eb_nsecs startTime = eb_time_now();
     for (;;) {
         eb_chan_op *op = eb_chan_do(ops, (sizeof(ops) / sizeof(*ops)), eb_nsecs_zero);
         if (op == &send) {
-//            NSLog(@"SENT");
             count++;
             if (count == NTRIALS) {
                 break;
             }
         } else {
-//            NSLog(@"NOT SENT");
         }
     }
-    NSLog(@"elapsed: %f (%ju iterations)", EBTimeElapsedSecondsSince(startTime), (uintmax_t)NTRIALS);
+    printf("elapsed: %f (%ju iterations)\n", ((double)(eb_time_now() - startTime) / NSEC_PER_SEC), (uintmax_t)NTRIALS);
     exit(0);
     return NULL;
 }
 
 void *threadSend(void *a)
 {
-//    for (NSUInteger i = 0; i < NTRIALS; i++) {
-//        assert(eb_chan_send(gChan, "hallo", eb_nsecs_forever));
-//    }
-//    return NULL;
-    
     eb_chan_op send = eb_chan_send_op(gChan, "hallo");
     eb_chan_op *const ops[] = {&send};
-    for (NSUInteger i = 0; i < NTRIALS; i++) {
+    for (size_t i = 0; i < NTRIALS; i++) {
         assert(eb_chan_do(ops, (sizeof(ops) / sizeof(*ops)), eb_nsecs_forever));
     }
     return NULL;
@@ -95,11 +92,11 @@ void *threadSend(void *a)
 void *threadRecv(void *a)
 {
 //    assert(eb_chan_recv(gChan, NULL, eb_nsecs_forever));
-//    EBTime startTime = EBTimeCurrentTime();
-//    for (NSUInteger i = 1; i < NTRIALS; i++) {
+//    eb_nsecs startTime = eb_time_now();
+//    for (size_t i = 1; i < NTRIALS; i++) {
 //        assert(eb_chan_recv(gChan, NULL, eb_nsecs_forever));
 //    }
-//    NSLog(@"elapsed: %f (%ju iterations)", EBTimeElapsedSecondsSince(startTime), (uintmax_t)NTRIALS);
+//    printf("elapsed: %f (%ju iterations)", ((double)(eb_time_now() - startTime) / NSEC_PER_SEC), (uintmax_t)NTRIALS);
 //    exit(0);
 //    return NULL;
     
@@ -107,13 +104,12 @@ void *threadRecv(void *a)
     eb_chan_op *const ops[] = {&recv};
     
     assert(eb_chan_do(ops, (sizeof(ops) / sizeof(*ops)), eb_nsecs_forever));
-    EBTime startTime = EBTimeCurrentTime();
-    for (NSUInteger i = 1; i < NTRIALS; i++) {
+    eb_nsecs startTime = eb_time_now();
+    for (size_t i = 1; i < NTRIALS; i++) {
         assert(eb_chan_do(ops, (sizeof(ops) / sizeof(*ops)), eb_nsecs_forever));
     }
     
-    NSLog(@"elapsed: %f (%ju iterations)", EBTimeElapsedSecondsSince(startTime), (uintmax_t)NTRIALS);
-//    exit(0);
+    printf("elapsed: %f (%ju iterations)\n", ((double)(eb_time_now() - startTime) / NSEC_PER_SEC), (uintmax_t)NTRIALS);
     return NULL;
 }
 
@@ -124,12 +120,12 @@ void *thread(void *a)
     eb_chan_op *const ops[] = {&send, &recv};
     
     assert(eb_chan_do(ops, (sizeof(ops) / sizeof(*ops)), eb_nsecs_forever));
-    EBTime startTime = EBTimeCurrentTime();
-    for (NSUInteger i = 1; i < NTRIALS; i++) {
+    eb_nsecs startTime = eb_time_now();
+    for (size_t i = 1; i < NTRIALS; i++) {
         assert(eb_chan_do(ops, (sizeof(ops) / sizeof(*ops)), eb_nsecs_forever));
     }
     
-    NSLog(@"elapsed: %f (%ju iterations)", EBTimeElapsedSecondsSince(startTime), (uintmax_t)NTRIALS);
+    printf("elapsed: %f (%ju iterations)\n", ((double)(eb_time_now() - startTime) / NSEC_PER_SEC), (uintmax_t)NTRIALS);
     exit(0);
     return NULL;
 }
@@ -139,9 +135,9 @@ void *threadTest(void *a)
     eb_chan_op recv = eb_chan_recv_op(gChan);
     eb_chan_op *const ops[] = {&recv};
     
-    EBTime startTime = EBTimeCurrentTime();
+    eb_nsecs startTime = eb_time_now();
     eb_chan_do(ops, (sizeof(ops) / sizeof(*ops)), 2.5 * NSEC_PER_SEC);
-    NSLog(@"elapsed: %f (%ju iterations)", EBTimeElapsedSecondsSince(startTime), (uintmax_t)NTRIALS);
+    printf("elapsed: %f (%ju iterations)\n", ((double)(eb_time_now() - startTime) / NSEC_PER_SEC), (uintmax_t)NTRIALS);
     
     exit(0);
     return NULL;
@@ -178,7 +174,7 @@ int main(int argc, const char * argv[])
     
     for (;;) {
         sleep(-1);
-        NSLog(@"SLEEPING");
+        printf("SLEEPING\n");
     }
     
     return 0;

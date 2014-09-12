@@ -9,7 +9,7 @@
 /* Begin PBXBuildFile section */
 		5519201119B2D6BE00868CBD /* eb_port.c in Sources */ = {isa = PBXBuildFile; fileRef = 5519200F19B2D6BE00868CBD /* eb_port.c */; };
 		55501D0D19A969750028A9FE /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 55501D0C19A969750028A9FE /* Foundation.framework */; };
-		55501D1019A969750028A9FE /* main.m in Sources */ = {isa = PBXBuildFile; fileRef = 55501D0F19A969750028A9FE /* main.m */; };
+		55501D1019A969750028A9FE /* main.c in Sources */ = {isa = PBXBuildFile; fileRef = 55501D0F19A969750028A9FE /* main.c */; };
 		55501D1419A969750028A9FE /* chantest.1 in CopyFiles */ = {isa = PBXBuildFile; fileRef = 55501D1319A969750028A9FE /* chantest.1 */; };
 		55501D2019A969990028A9FE /* eb_assert.c in Sources */ = {isa = PBXBuildFile; fileRef = 55501D1B19A969990028A9FE /* eb_assert.c */; };
 		55501D2219A969990028A9FE /* eb_chan.c in Sources */ = {isa = PBXBuildFile; fileRef = 55501D1F19A969990028A9FE /* eb_chan.c */; };
@@ -60,7 +60,7 @@
 		5519201419B2D7EB00868CBD /* eb_time.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = eb_time.h; path = ../../EBChannel/eb_time.h; sourceTree = "<group>"; };
 		55501D0919A969750028A9FE /* chantest */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = chantest; sourceTree = BUILT_PRODUCTS_DIR; };
 		55501D0C19A969750028A9FE /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = System/Library/Frameworks/Foundation.framework; sourceTree = SDKROOT; };
-		55501D0F19A969750028A9FE /* main.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = main.m; sourceTree = "<group>"; };
+		55501D0F19A969750028A9FE /* main.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = main.c; sourceTree = "<group>"; };
 		55501D1219A969750028A9FE /* chantest-Prefix.pch */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "chantest-Prefix.pch"; sourceTree = "<group>"; };
 		55501D1319A969750028A9FE /* chantest.1 */ = {isa = PBXFileReference; lastKnownFileType = text.man; path = chantest.1; sourceTree = "<group>"; };
 		55501D1A19A969990028A9FE /* eb_assert.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = eb_assert.h; path = ../../EBChannel/eb_assert.h; sourceTree = "<group>"; };
@@ -124,7 +124,7 @@
 				5519200F19B2D6BE00868CBD /* eb_port.c */,
 				5519201419B2D7EB00868CBD /* eb_time.h */,
 				55E6E0D119B3DDAA00212D5A /* eb_time.c */,
-				55501D0F19A969750028A9FE /* main.m */,
+				55501D0F19A969750028A9FE /* main.c */,
 				55501D1119A969750028A9FE /* Supporting Files */,
 			);
 			path = chantest;
@@ -223,7 +223,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				55501D2019A969990028A9FE /* eb_assert.c in Sources */,
-				55501D1019A969750028A9FE /* main.m in Sources */,
+				55501D1019A969750028A9FE /* main.c in Sources */,
 				55501D2219A969990028A9FE /* eb_chan.c in Sources */,
 				55E6E0D219B3DDAA00212D5A /* eb_time.c in Sources */,
 				5519201119B2D6BE00868CBD /* eb_port.c in Sources */,
