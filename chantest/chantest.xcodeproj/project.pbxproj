@@ -7,7 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		5519201119B2D6BE00868CBD /* eb_sem.c in Sources */ = {isa = PBXBuildFile; fileRef = 5519200F19B2D6BE00868CBD /* eb_sem.c */; };
+		5519201119B2D6BE00868CBD /* eb_port.c in Sources */ = {isa = PBXBuildFile; fileRef = 5519200F19B2D6BE00868CBD /* eb_port.c */; };
 		55501D0D19A969750028A9FE /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 55501D0C19A969750028A9FE /* Foundation.framework */; };
 		55501D1019A969750028A9FE /* main.m in Sources */ = {isa = PBXBuildFile; fileRef = 55501D0F19A969750028A9FE /* main.m */; };
 		55501D1419A969750028A9FE /* chantest.1 in CopyFiles */ = {isa = PBXBuildFile; fileRef = 55501D1319A969750028A9FE /* chantest.1 */; };
@@ -56,7 +56,7 @@
 
 /* Begin PBXFileReference section */
 		5509F36B19B18E8100BD98D3 /* eb_atomic.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = eb_atomic.h; path = ../../EBChannel/eb_atomic.h; sourceTree = "<group>"; };
-		5519200F19B2D6BE00868CBD /* eb_sem.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = eb_sem.c; path = ../../EBChannel/eb_sem.c; sourceTree = "<group>"; };
+		5519200F19B2D6BE00868CBD /* eb_port.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = eb_port.c; path = ../../EBChannel/eb_port.c; sourceTree = "<group>"; };
 		5519201419B2D7EB00868CBD /* eb_time.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = eb_time.h; path = ../../EBChannel/eb_time.h; sourceTree = "<group>"; };
 		55501D0919A969750028A9FE /* chantest */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = chantest; sourceTree = BUILT_PRODUCTS_DIR; };
 		55501D0C19A969750028A9FE /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = System/Library/Frameworks/Foundation.framework; sourceTree = SDKROOT; };
@@ -65,7 +65,7 @@
 		55501D1319A969750028A9FE /* chantest.1 */ = {isa = PBXFileReference; lastKnownFileType = text.man; path = chantest.1; sourceTree = "<group>"; };
 		55501D1A19A969990028A9FE /* eb_assert.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = eb_assert.h; path = ../../EBChannel/eb_assert.h; sourceTree = "<group>"; };
 		55501D1B19A969990028A9FE /* eb_assert.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = eb_assert.c; path = ../../EBChannel/eb_assert.c; sourceTree = "<group>"; };
-		55501D1C19A969990028A9FE /* eb_sem.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = eb_sem.h; path = ../../EBChannel/eb_sem.h; sourceTree = "<group>"; };
+		55501D1C19A969990028A9FE /* eb_port.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = eb_port.h; path = ../../EBChannel/eb_port.h; sourceTree = "<group>"; };
 		55501D1E19A969990028A9FE /* eb_chan.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = eb_chan.h; path = ../../EBChannel/eb_chan.h; sourceTree = "<group>"; };
 		55501D1F19A969990028A9FE /* eb_chan.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = eb_chan.c; path = ../../EBChannel/eb_chan.c; sourceTree = "<group>"; };
 		55501D2319A969F50028A9FE /* EBFoundation.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = EBFoundation.xcodeproj; path = "../../Open-source Stuff/EBFoundation/EBFoundation.xcodeproj"; sourceTree = "<group>"; };
@@ -120,8 +120,8 @@
 				5509F36B19B18E8100BD98D3 /* eb_atomic.h */,
 				55501D1E19A969990028A9FE /* eb_chan.h */,
 				55501D1F19A969990028A9FE /* eb_chan.c */,
-				55501D1C19A969990028A9FE /* eb_sem.h */,
-				5519200F19B2D6BE00868CBD /* eb_sem.c */,
+				55501D1C19A969990028A9FE /* eb_port.h */,
+				5519200F19B2D6BE00868CBD /* eb_port.c */,
 				5519201419B2D7EB00868CBD /* eb_time.h */,
 				55E6E0D119B3DDAA00212D5A /* eb_time.c */,
 				55501D0F19A969750028A9FE /* main.m */,
@@ -226,7 +226,7 @@
 				55501D1019A969750028A9FE /* main.m in Sources */,
 				55501D2219A969990028A9FE /* eb_chan.c in Sources */,
 				55E6E0D219B3DDAA00212D5A /* eb_time.c in Sources */,
-				5519201119B2D6BE00868CBD /* eb_sem.c in Sources */,
+				5519201119B2D6BE00868CBD /* eb_port.c in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
