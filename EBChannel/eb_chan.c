@@ -437,9 +437,11 @@ static inline op_result send_unbuf(uintptr_t id, eb_chan_op *op, eb_port port, e
                 c->unbuf_port = port;
                 result = op_result_next_clean;
             } else if (c->state == chanstate_recv && c->unbuf_id != id) {
-                /* We verified that the recv isn't part of the same op pool (we can't do unbuffered sends/recvs from the same _do() call) */
-                    /* Sanity check -- make sure the op is a recv */
-                    eb_assert_or_bail(!c->unbuf_op->send, "Op isn't a recv as expected");
+                /* We verified (immediately above) that the recv isn't part of the same op pool (we can't do unbuffered
+                   sends/recvs from the same _do() call) */
+                
+                /* Sanity check -- make sure the op is a recv */
+                eb_assert_or_bail(!c->unbuf_op->send, "Op isn't a recv as expected");
                 
                 c->state = chanstate_ack;
                 c->unbuf_op->open = true;
@@ -531,9 +533,11 @@ static inline op_result recv_unbuf(uintptr_t id, eb_chan_op *op, eb_port port, e
                 /* We completed this op so set our return value! */
                 result = op_result_complete;
             } else if (c->state == chanstate_send && c->unbuf_id != id) {
-                /* We verified that the send isn't part of the same select() (we can't do unbuffered sends/recvs from the same select()) */
-                    /* Sanity check -- make sure the op is a send */
-                    eb_assert_or_bail(c->unbuf_op->send, "Op isn't a send as expected");
+                /* We verified (immediately above) that the send isn't part of the same op pool (we can't do unbuffered
+                   sends/recvs from the same _do() call) */
+                
+                /* Sanity check -- make sure the op is a send */
+                eb_assert_or_bail(c->unbuf_op->send, "Op isn't a send as expected");
                 
                 c->state = chanstate_ack;
                 op->open = true;
@@ -693,7 +697,7 @@ eb_chan_op *eb_chan_do(eb_chan_op *const ops[], size_t nops, eb_nsecs timeout) {
             /* ## Fast path: loop over our operations to see if one of them was able to send/receive. (If not,
                we'll enter the slow path where we put our thread to sleep until we're signalled.) */
             if (nops) {
-                const size_t k_attempt_multiplier = 1000;
+                const size_t k_attempt_multiplier = 500;
                 for (size_t i = 0; i < k_attempt_multiplier * nops; i++) {
                     size_t idx = (i % nops);
                     eb_chan_op *op = ops[idx];
