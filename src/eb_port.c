@@ -163,26 +163,32 @@ bool eb_port_wait(eb_port p, eb_nsecs timeout) {
     } else if (timeout == eb_nsecs_forever) {
         /* ## Blocking */
         #if DARWIN
-            kern_return_t r = semaphore_wait(p->sem);
+            kern_return_t r;
+            while ((r = semaphore_wait(p->sem)) == KERN_ABORTED);
                 eb_assert_or_recover(r == KERN_SUCCESS, eb_no_op);
             result = (r == KERN_SUCCESS);
         #elif LINUX
-            int r = 0;
+            int r;
             while ((r = sem_wait(&p->sem)) == -1 && errno == EINTR);
                 eb_assert_or_recover(!r, eb_no_op);
             result = !r;
         #endif
     } else {
         /* ## Actual timeout */
-        #if DARWIN
-            mach_timespec_t ts = {.tv_sec = (unsigned int)(timeout / eb_nsecs_per_sec), .tv_nsec = (clock_res_t)(timeout % eb_nsecs_per_sec)};
-            kern_return_t r = semaphore_timedwait(p->sem, ts);
-                eb_assert_or_recover(r == KERN_SUCCESS || r == KERN_OPERATION_TIMED_OUT, eb_no_op);
-            result = (r == KERN_SUCCESS);
-        #elif LINUX
-            eb_nsecs start_time = eb_time_now();
-            eb_nsecs remaining_timeout = timeout;
-            for (;;) {
+        eb_nsecs start_time = eb_time_now();
+        eb_nsecs remaining_timeout = timeout;
+        for (;;) {
+            #if DARWIN
+                /* This needs to be in a loop because semaphore_timedwait() can return KERN_ABORTED, e.g. if the process receives a signal. */
+                mach_timespec_t ts = {.tv_sec = (unsigned int)(remaining_timeout / eb_nsecs_per_sec), .tv_nsec = (clock_res_t)(remaining_timeout % eb_nsecs_per_sec)};
+                kern_return_t r = semaphore_timedwait(p->sem, ts);
+                    eb_assert_or_recover(r == KERN_SUCCESS || r == KERN_OPERATION_TIMED_OUT || r == KERN_ABORTED, eb_no_op);
+                
+                if (r == KERN_SUCCESS) {
+                    result = true;
+                    break;
+                }
+            #elif LINUX
                 /* Because sem_timedwait() uses the system's _REALTIME clock instead of the _MONOTONIC clock, we'll time out when
                    the system's time changes. For that reason, we check for the timeout case ourself (instead of relying on errno
                    after calling sem_timedwait()) condition ourself, using our own monotonic clock APIs (eb_time_now()), and
@@ -201,16 +207,16 @@ bool eb_port_wait(eb_port p, eb_nsecs timeout) {
                     result = true;
                     break;
                 }
+            #endif
                 
-                /* Determine whether we timed-out, and if not, update 'remaining_timeout' with the amount of time to go. */
-                eb_nsecs elapsed = eb_time_now() - start_time;
-                if (elapsed < timeout) {
-                    remaining_timeout = timeout - elapsed;
-                } else {
-                    break;
-                }
+            /* Determine whether we timed-out, and if not, update 'remaining_timeout' with the amount of time to go. */
+            eb_nsecs elapsed = eb_time_now() - start_time;
+            if (elapsed < timeout) {
+                remaining_timeout = timeout - elapsed;
+            } else {
+                break;
             }
-        #endif
+        }
     }
     
     if (result) {

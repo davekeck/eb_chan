@@ -23,6 +23,8 @@ func AsynchFifo() {
 			os.Exit(1)
 		}
 	}
+    
+    print("AsynchFifo returned\n")
 }
 
 func Chain(ch <-chan int, val int, in <-chan int, out chan<- int) {
@@ -31,6 +33,7 @@ func Chain(ch <-chan int, val int, in <-chan int, out chan<- int) {
 		panic(val)
 	}
 	out <- 1
+    print("Chain returned\n")
 }
 
 // thread together a daisy chain to read the elements in sequence
@@ -48,6 +51,7 @@ func SynchFifo() {
 		ch <- i
 	}
 	<-in
+    print("SynchFifo returned\n")
 }
 
 func main() {

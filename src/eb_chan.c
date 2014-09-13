@@ -250,14 +250,13 @@ void eb_chan_close(eb_chan c) {
     while (!done) {
         eb_port signal_port = NULL;
         eb_spinlock_lock(&c->lock);
-            chanstate state = c->state;
-                eb_assert_or_bail(state != chanstate_closed, "Illegal close of already-closed channel.");
-                eb_assert_or_bail(state != chanstate_send && state != chanstate_ack, "Illegal close of channel while send is in progress.");
+                eb_assert_or_bail(c->state != chanstate_closed, "Illegal close of already-closed channel.");
+                eb_assert_or_bail(c->state != chanstate_send && c->state != chanstate_ack, "Illegal close of channel while send is in progress.");
             
-            if (state == chanstate_open) {
+            if (c->state == chanstate_open) {
                 c->state = chanstate_closed;
                 done = true;
-            } else if (state == chanstate_recv) {
+            } else if (c->state == chanstate_recv) {
                 if (c->unbuf_port) {
                     signal_port = eb_port_retain(c->unbuf_port);
                 }
@@ -298,15 +297,7 @@ size_t eb_chan_get_buf_len(eb_chan c) {
     return r;
 }
 
-#pragma mark - Multiple operations -
-eb_chan_op eb_chan_send_op(eb_chan c, const void *val) {
-    return (eb_chan_op){.chan = c, .send = true, .open = false, .val = val};
-}
-
-eb_chan_op eb_chan_recv_op(eb_chan c) {
-    return (eb_chan_op){.chan = c, .send = false, .open = false, .val = NULL};
-}
-
+#pragma mark - Performing operations -
 enum {
     op_result_complete,     /* The op completed and the caller should return */
     op_result_next,         /* The op couldn't make any progress and the caller should move on to the next op */
@@ -360,13 +351,11 @@ static inline op_result recv_buf(uintptr_t id, eb_chan_op *op, eb_port port, eb_
     eb_chan c = op->chan;
     op_result result = op_result_next;
     
-    chanstate state = c->state;
-    /* Sanity-check the channel's state */
-    eb_assert_or_bail(state == chanstate_open || state == chanstate_closed, "Invalid channel state");
-    
-    if (c->buf_len || state == chanstate_closed) {
+    if (c->buf_len || c->state == chanstate_closed) {
         if (eb_spinlock_try(&c->lock)) {
-            state = c->state;
+            /* Sanity-check the channel's state */
+            eb_assert_or_bail(c->state == chanstate_open || c->state == chanstate_closed, "Invalid channel state");
+            
             bool signal_send = false;
             if (c->buf_len) {
                 /* ## Receiving, buffered, buffer non-empty */
@@ -380,7 +369,7 @@ static inline op_result recv_buf(uintptr_t id, eb_chan_op *op, eb_port port, eb_
                 c->buf_idx = (c->buf_idx + 1) % c->buf_cap;
                 /* Set our flag signifying that we completed this op. */
                 result = op_result_complete;
-            } else if (state == chanstate_closed) {
+            } else if (c->state == chanstate_closed) {
                 /* ## Receiving, buffered, buffer empty, channel closed */
                 /* Set our op's state signifying that it completed because the channel's closed */
                 op->open = false;

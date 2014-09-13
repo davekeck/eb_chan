@@ -1,65 +1,73 @@
-// run
-
-// Copyright 2009 The Go Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style
-// license that can be found in the LICENSE file.
-
-// Test that unbuffered channels act as pure fifos.
+// DONE
 
 #include "eb_chan.h"
+#include <assert.h>
+#include <stdlib.h>
+#include <pthread.h>
+#include <stdio.h>
 
 #define N 10
 
 void AsynchFifo() {
     eb_chan ch = eb_chan_create(N);
-    
-    for (size_t i = 0; i < N; i++) {
-        eb_chan_op send = eb_chan_send_op(gChan, (uintptr_t)i);
-        eb_chan_do((eb_chan_op *const *){&send}, 1, eb_nsecs_forever);
-        
-        eb_chan_op *r = eb_chan_do(eb_nsecs_forever, &send, &recv);
-    }
-    
-	for i := 0; i < N; i++ {
-		ch <- i
+	for (size_t i = 0; i < N; i++) {
+        eb_chan_send(ch, (const void *)i);
 	}
-	for i := 0; i < N; i++ {
-		if <-ch != i {
-			print("bad receive\n")
-			os.Exit(1)
-		}
+	for (size_t i = 0; i < N; i++) {
+        const void *val;
+        eb_chan_recv(ch, &val);
+        assert((size_t)val == i);
 	}
+    
+    printf("AsynchFifo returned\n");
 }
 
-void Chain(ch <-chan int, val int, in <-chan int, out chan<- int) {
-	<-in
-	if <-ch != val {
-		panic(val)
-	}
-	out <- 1
+typedef struct {
+    eb_chan ch;
+    int val;
+    eb_chan in;
+    eb_chan out;    
+} ChainArgs;
+
+void *Chain(ChainArgs *args) {
+    eb_chan_recv(args->in, NULL);
+    
+    const void *val;
+    eb_chan_recv(args->ch, &val);
+    assert((uintptr_t)val == args->val);
+    
+    eb_chan_send(args->out, (const void *)1);
+    printf("Chain returned\n");
+    return NULL;
 }
 
 // thread together a daisy chain to read the elements in sequence
 void SynchFifo() {
-	ch := make(chan int)
-	in := make(chan int)
-	start := in
-	for i := 0; i < N; i++ {
-		out := make(chan int)
-		go Chain(ch, i, in, out)
-		in = out
+	eb_chan ch = eb_chan_create(0);
+	eb_chan in = eb_chan_create(0);
+	eb_chan start = in;
+	for (size_t i = 0; i < N; i++) {
+		eb_chan out = eb_chan_create(0);
+        
+        ChainArgs *args = malloc(sizeof(*args));
+        *args = (ChainArgs){ch, (int)i, in, out};
+        
+        pthread_t t;
+        pthread_create(&t, NULL, (void *(*)(void *))Chain, args);
+        
+		in = out;
 	}
-	start <- 0
-	for i := 0; i < N; i++ {
-		ch <- i
+    
+    eb_chan_send(start, (const void *)0);
+	for (size_t i = 0; i < N; i++) {
+        eb_chan_send(ch, (const void *)i);
 	}
-	<-in
+    eb_chan_recv(in, NULL);
+    printf("SynchFifo returned\n");
 }
 
 int main() {
-	AsynchFifo()
-	SynchFifo()
-    
+	AsynchFifo();
+	SynchFifo();
     return 0;
 }
-
