@@ -1,3 +1,3 @@
 gcc -D _POSIX_C_SOURCE=200809L -std=c99 test.c eb_chan.c eb_port.c eb_assert.c eb_time.c -lpthread
 
-gcc -D _POSIX_C_SOURCE=200809L -I/Users/dave/Desktop/ebchan/src -std=c99 ../src/eb_chan.c ../src/eb_port.c ../src/eb_assert.c ../src/eb_time.c -lpthread fifo.c
+gcc -D _POSIX_C_SOURCE=200809L -I/Users/dave/Desktop/ebchan/src -I/Users/dave/Desktop/ebchan/test -std=c99 ../src/eb_chan.c ../src/eb_port.c ../src/eb_assert.c ../src/eb_time.c -lpthread fifo.c

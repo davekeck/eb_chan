@@ -1,11 +1,8 @@
-// run
-
-// Copyright 2009 The Go Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style
-// license that can be found in the LICENSE file.
-
-// Torture test for goroutines.
-// Make a lot of goroutines, threaded together, and tear them down cleanly.
+#include "eb_chan.h"
+#include <assert.h>
+#include <stdlib.h>
+#include <pthread.h>
+#include <stdio.h>
 
 package main
 

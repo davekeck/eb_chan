@@ -1,10 +1,6 @@
 // DONE
 
-#include "eb_chan.h"
-#include <assert.h>
-#include <stdlib.h>
-#include <pthread.h>
-#include <stdio.h>
+#include "testglue.h"
 
 #define N 10
 
