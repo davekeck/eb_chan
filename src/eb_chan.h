@@ -1,3 +1,4 @@
+#pragma once
 #include <stddef.h>
 #include <stdbool.h>
 #include "eb_time.h"
@@ -26,4 +27,8 @@ size_t eb_chan_get_buf_len(eb_chan c);
 /* ## Performing operations */
 eb_chan_op eb_chan_send_op(eb_chan c, const void *val);
 eb_chan_op eb_chan_recv_op(eb_chan c);
-eb_chan_op *eb_chan_do(eb_chan_op *const ops[], size_t nops, eb_nsecs timeout);
+eb_chan_op *eb_chan_do_list(eb_nsecs timeout, eb_chan_op *const ops[], size_t nops);
+#define eb_chan_do(timeout, ...) ({                                                           \
+    eb_chan_op *const eb_chan_ops[] = {__VA_ARGS__};                                          \
+    eb_chan_do_list(timeout, eb_chan_ops, (sizeof(eb_chan_ops) / sizeof(*eb_chan_ops)));      \
+})

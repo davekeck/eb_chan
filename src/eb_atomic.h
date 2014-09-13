@@ -1,3 +1,4 @@
+#pragma once
 #include <assert.h>
 
 #define eb_atomic_add(ptr, delta) __sync_add_and_fetch(ptr, delta) /* Returns the new value */

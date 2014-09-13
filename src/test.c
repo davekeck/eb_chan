@@ -13,9 +13,8 @@ eb_chan gChan = NULL;
 void *threadDoSend(void *a)
 {
     eb_chan_op send = eb_chan_send_op(gChan, "halla");
-    eb_chan_op *const ops[] = {&send};
     for (size_t i = 0; i < NTRIALS; i++) {
-        assert(eb_chan_do(ops, (sizeof(ops) / sizeof(*ops)), eb_nsecs_forever));
+        assert(eb_chan_do(eb_nsecs_forever, &send));
     }
     return NULL;
 }
@@ -23,11 +22,10 @@ void *threadDoSend(void *a)
 void *threadTryRecv(void *a)
 {
     eb_chan_op recv = eb_chan_recv_op(gChan);
-    eb_chan_op *const ops[] = {&recv};
     size_t count = 0;
     eb_nsecs startTime = eb_time_now();
     for (;;) {
-        eb_chan_op *op = eb_chan_do(ops, (sizeof(ops) / sizeof(*ops)), eb_nsecs_zero);
+        eb_chan_op *op = eb_chan_do(eb_nsecs_zero, &recv);
         if (op == &recv) {
             count++;
             if (count == NTRIALS) {
@@ -45,9 +43,8 @@ void *threadTryRecv(void *a)
 void *threadDoRecv(void *a)
 {
     eb_chan_op recv = eb_chan_recv_op(gChan);
-    eb_chan_op *const ops[] = {&recv};
     for (size_t i = 0; i < NTRIALS; i++) {
-        assert(eb_chan_do(ops, (sizeof(ops) / sizeof(*ops)), eb_nsecs_forever));
+        assert(eb_chan_do(eb_nsecs_forever, &recv));
     }
     return NULL;
 }
@@ -55,11 +52,10 @@ void *threadDoRecv(void *a)
 void *threadTrySend(void *a)
 {
     eb_chan_op send = eb_chan_send_op(gChan, "halla");
-    eb_chan_op *const ops[] = {&send};
     size_t count = 0;
     eb_nsecs startTime = eb_time_now();
     for (;;) {
-        eb_chan_op *op = eb_chan_do(ops, (sizeof(ops) / sizeof(*ops)), eb_nsecs_zero);
+        eb_chan_op *op = eb_chan_do(eb_nsecs_zero, &send);
         if (op == &send) {
             count++;
             if (count == NTRIALS) {
@@ -76,9 +72,8 @@ void *threadTrySend(void *a)
 void *threadSend(void *a)
 {
     eb_chan_op send = eb_chan_send_op(gChan, "hallo");
-    eb_chan_op *const ops[] = {&send};
     for (size_t i = 0; i < NTRIALS; i++) {
-        assert(eb_chan_do(ops, (sizeof(ops) / sizeof(*ops)), eb_nsecs_forever));
+        assert(eb_chan_do(eb_nsecs_forever, &send));
     }
     return NULL;
     
@@ -96,12 +91,10 @@ void *threadRecv(void *a)
 //    return NULL;
     
     eb_chan_op recv = eb_chan_recv_op(gChan);
-    eb_chan_op *const ops[] = {&recv};
-    
-    assert(eb_chan_do(ops, (sizeof(ops) / sizeof(*ops)), eb_nsecs_forever));
+    assert(eb_chan_do(eb_nsecs_forever, &recv));
     eb_nsecs startTime = eb_time_now();
     for (size_t i = 1; i < NTRIALS; i++) {
-        assert(eb_chan_do(ops, (sizeof(ops) / sizeof(*ops)), eb_nsecs_forever));
+        assert(eb_chan_do(eb_nsecs_forever, &recv));
     }
     
     printf("elapsed: %f (%ju iterations)\n", ((double)(eb_time_now() - startTime) / eb_nsecs_per_sec), (uintmax_t)NTRIALS);
@@ -112,12 +105,11 @@ void *thread(void *a)
 {
     eb_chan_op send = eb_chan_send_op(gChan, "hallo");
     eb_chan_op recv = eb_chan_recv_op(gChan);
-    eb_chan_op *const ops[] = {&send, &recv};
+    assert(eb_chan_do(eb_nsecs_forever, &send, &recv));
     
-    assert(eb_chan_do(ops, (sizeof(ops) / sizeof(*ops)), eb_nsecs_forever));
     eb_nsecs startTime = eb_time_now();
     for (size_t i = 1; i < NTRIALS; i++) {
-        assert(eb_chan_do(ops, (sizeof(ops) / sizeof(*ops)), eb_nsecs_forever));
+        assert(eb_chan_do(eb_nsecs_forever, &send, &recv));
     }
     
     printf("elapsed: %f (%ju iterations)\n", ((double)(eb_time_now() - startTime) / eb_nsecs_per_sec), (uintmax_t)NTRIALS);
@@ -128,10 +120,8 @@ void *thread(void *a)
 void *threadTest(void *a)
 {
     eb_chan_op recv = eb_chan_recv_op(gChan);
-    eb_chan_op *const ops[] = {&recv};
-    
     eb_nsecs startTime = eb_time_now();
-    eb_chan_do(ops, (sizeof(ops) / sizeof(*ops)), 2.5 * eb_nsecs_per_sec);
+    eb_chan_do(2.5 * eb_nsecs_per_sec, &recv);
     printf("elapsed: %f (%ju iterations)\n", ((double)(eb_time_now() - startTime) / eb_nsecs_per_sec), (uintmax_t)NTRIALS);
     
     exit(0);
@@ -140,7 +130,7 @@ void *threadTest(void *a)
 
 int main(int argc, const char * argv[])
 {
-    gChan = eb_chan_create(10000000);
+    gChan = eb_chan_create(100);
     
     pthread_t thread1, thread2;
     

@@ -1,3 +1,4 @@
+#pragma once
 #include <stddef.h>
 #include <stdbool.h>
 #include "eb_time.h"

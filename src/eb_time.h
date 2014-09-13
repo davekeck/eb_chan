@@ -1,3 +1,4 @@
+#pragma once
 #include <stdint.h>
 
 typedef uint64_t eb_nsecs; /* Units of nanoseconds */

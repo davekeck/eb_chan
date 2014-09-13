@@ -4,7 +4,7 @@
 
 #if __MACH__
     #define DARWIN 1
-    #include <mach/mach.h>
+    #include <mach/mach_time.h>
 #elif __linux__
     #define LINUX 1
     #include <time.h>

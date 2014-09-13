@@ -653,7 +653,7 @@ static inline op_result try_op(uintptr_t id, eb_chan_op *op, eb_port port, eb_ns
     return op_result_next;
 }
 
-eb_chan_op *eb_chan_do(eb_chan_op *const ops[], size_t nops, eb_nsecs timeout) {
+eb_chan_op *eb_chan_do_list(eb_nsecs timeout, eb_chan_op *const ops[], size_t nops) {
     // TODO: randomize iteration by shuffling input array once (upon entry)
         assert(ops);
     eb_port port = NULL;
