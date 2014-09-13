@@ -433,9 +433,6 @@ static inline op_result send_unbuf(uintptr_t id, eb_chan_op *op, eb_port port, e
                 eb_assert_or_bail(!c->unbuf_op->send, "Op isn't a recv as expected");
                 
                 c->state = chanstate_ack;
-                c->unbuf_op->open = true;
-                c->unbuf_op->val = op->val;
-                
                 eb_port signal_port = (c->unbuf_port ? eb_port_retain(c->unbuf_port) : NULL);
                 eb_spinlock_unlock(&c->lock);
                 
@@ -446,29 +443,31 @@ static inline op_result send_unbuf(uintptr_t id, eb_chan_op *op, eb_port port, e
                     signal_port = NULL;
                 }
                 
-                /* Wait until chan transitions to _done or _cancelled. */
-                for (;;) {
-                    chanstate state = *((volatile chanstate *)&c->state);
-                    if (state == chanstate_done || state == chanstate_cancelled) {
-                        eb_spinlock_lock(&c->lock);
-                            if (c->state == chanstate_done) {
-                                result = op_result_complete;
-                            } else if (c->state == chanstate_cancelled && timeout != eb_nsecs_zero) {
-                                /* We're resetting the channel's state to _open, so we should try the op again */
-                                result = op_result_retry;
-                            }
-                            
-                            if (c->state == chanstate_done || c->state == chanstate_cancelled) {
-                                c->state = chanstate_open;
-                                /* Wakeup a send since one of them can now proceed */
-                                signal_recv = true;
-                                /* We're intentionally bypassing our loop's unlock because we unlock the channel
-                                   outside the encompassing if-statement. */
-                                break;
-                            }
-                        eb_spinlock_unlock(&c->lock);
+                while (*((volatile chanstate *)&c->state) == chanstate_ack);
+                
+                eb_spinlock_lock(&c->lock);
+                if (c->state == chanstate_done) {
+                    /* Reset the channel state back to _open */
+                    c->state = chanstate_open;
+                    /* Set our op's fields */
+                    c->unbuf_op->open = true;
+                    c->unbuf_op->val = op->val;
+                    /* We completed this op! */
+                    result = op_result_complete;
+                } else if (c->state == chanstate_cancelled) {
+                    /* Reset the channel state back to _open */
+                    c->state = chanstate_open;
+                    /* As long as we're not polling, we should try the op again */
+                    if (timeout != eb_nsecs_zero) {
+                        result = op_result_retry;
                     }
+                } else {
+                    // TODO: update
+                    abort();
                 }
+                
+                /* Wakeup a send since one of them can now proceed */
+                signal_recv = true;
             } else if (c->state == chanstate_ack && c->unbuf_op == op) {
                 /* A recv acknowledged our send! */
                 /* Verify that the unbuf_id matches our 'id' parameter. If this assertion fails, it means there's likely
@@ -529,9 +528,6 @@ static inline op_result recv_unbuf(uintptr_t id, eb_chan_op *op, eb_port port, e
                 eb_assert_or_bail(c->unbuf_op->send, "Op isn't a send as expected");
                 
                 c->state = chanstate_ack;
-                op->open = true;
-                op->val = c->unbuf_op->val;
-                
                 eb_port signal_port = (c->unbuf_port ? eb_port_retain(c->unbuf_port) : NULL);
                 eb_spinlock_unlock(&c->lock);
                 
@@ -542,29 +538,31 @@ static inline op_result recv_unbuf(uintptr_t id, eb_chan_op *op, eb_port port, e
                     signal_port = NULL;
                 }
                 
-                /* Wait until chan transitions to _done or _cancelled. */
-                for (;;) {
-                    chanstate state = *((volatile chanstate *)&c->state);
-                    if (state == chanstate_done || state == chanstate_cancelled) {
-                        eb_spinlock_lock(&c->lock);
-                            if (c->state == chanstate_done) {
-                                result = op_result_complete;
-                            } else if (c->state == chanstate_cancelled && timeout != eb_nsecs_zero) {
-                                /* We're resetting the channel's state to _open, so we should try the op again */
-                                result = op_result_retry;
-                            }
-                            
-                            if (c->state == chanstate_done || c->state == chanstate_cancelled) {
-                                c->state = chanstate_open;
-                                /* Wakeup a send since one of them can now proceed */
-                                signal_send = true;
-                                /* We're intentionally bypassing our loop's unlock because we unlock the channel
-                                   outside the encompassing if-statement. */
-                                break;
-                            }
-                        eb_spinlock_unlock(&c->lock);
+                while (*((volatile chanstate *)&c->state) == chanstate_ack);
+                
+                eb_spinlock_lock(&c->lock);
+                if (c->state == chanstate_done) {
+                    /* Reset the channel state back to _open */
+                    c->state = chanstate_open;
+                    /* Set our op's fields */
+                    op->open = true;
+                    op->val = c->unbuf_op->val;
+                    /* We completed this op! */
+                    result = op_result_complete;
+                } else if (c->state == chanstate_cancelled) {
+                    /* Reset the channel state back to _open */
+                    c->state = chanstate_open;
+                    /* As long as we're not polling, we should try the op again */
+                    if (timeout != eb_nsecs_zero) {
+                        result = op_result_retry;
                     }
+                } else {
+                    // TODO: update
+                    abort();
                 }
+                
+                /* Wakeup a send since one of them can now proceed */
+                signal_send = true;
             } else if (c->state == chanstate_recv && c->unbuf_op == op) {
                 /* We own the recv op that's in progress, so assign chan's unbuf_port */
                 /* Verify that the _recv_id matches our 'id' parameter. If this assertion fails, it means there's likely
