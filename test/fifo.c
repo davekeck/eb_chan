@@ -1,5 +1,7 @@
 // DONE
 
+// Test that unbuffered channels act as pure fifos.
+
 #include "testglue.h"
 
 #define N 10

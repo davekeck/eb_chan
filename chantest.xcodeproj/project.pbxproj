@@ -29,6 +29,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		5545050419C590B4009A0C08 /* sendstmt.go */ = {isa = PBXFileReference; lastKnownFileType = text; name = sendstmt.go; path = test/sendstmt.go; sourceTree = SOURCE_ROOT; };
 		55501D0919A969750028A9FE /* chantest */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = chantest; sourceTree = BUILT_PRODUCTS_DIR; };
 		55501D0C19A969750028A9FE /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = System/Library/Frameworks/Foundation.framework; sourceTree = SDKROOT; };
 		55501D1219A969750028A9FE /* chantest-Prefix.pch */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "chantest-Prefix.pch"; sourceTree = "<group>"; };
@@ -97,6 +98,7 @@
 				559F510B19C3A223005921EE /* eb_time.h */,
 				559F511619C40E46005921EE /* testglue.h */,
 				559F511519C40E46005921EE /* testglue.c */,
+				5545050419C590B4009A0C08 /* sendstmt.go */,
 				559F510C19C3A223005921EE /* test.c */,
 				55501D1119A969750028A9FE /* Supporting Files */,
 			);

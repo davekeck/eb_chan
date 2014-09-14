@@ -1,37 +1,36 @@
-// run
-
-// Copyright 2011 The Go Authors.  All rights reserved.
-// Use of this source code is governed by a BSD-style
-// license that can be found in the LICENSE file.
+// DONE
 
 // Test various parsing cases that are a little
 // different now that send is a statement, not a expression.
 
-package main
+#include "testglue.h"
 
-func main() {
-	chanchan()
-	sendprec()
+void chanchan() {
+	eb_chan cc = eb_chan_create(1);
+	eb_chan c = eb_chan_create(1);
+    eb_chan_send(cc, (void*)c);
+    
+    const void *val;
+    assert(eb_chan_recv(cc, &val));
+    
+    assert(eb_chan_try_send((eb_chan)val, (void*)2));
+    
+    const void *val2;
+    assert(eb_chan_recv(c, &val2));
+    assert((intptr_t)val2 == 2);
 }
 
-func chanchan() {
-	cc := make(chan chan int, 1)
-	c := make(chan int, 1)
-	cc <- c
-	select {
-	case <-cc <- 2:
-	default:
-		panic("nonblock")
-	}
-	if <-c != 2 {
-		panic("bad receive")
-	}
+void sendprec() {
+	eb_chan c = eb_chan_create(1);
+    
+    eb_chan_send(c, (void*)(false || true));
+    
+    const void *val;
+    assert(eb_chan_recv(c, &val));
+    assert(val);
 }
 
-func sendprec() {
-	c := make(chan bool, 1)
-	c <- false || true	// not a syntax error: same as c <- (false || true)
-	if !<-c {
-		panic("sent false")
-	}
+int main() {
+	chanchan();
+	sendprec();
 }
