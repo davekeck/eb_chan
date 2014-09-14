@@ -1,6 +1,7 @@
 #pragma once
 #include <stddef.h>
 #include <stdbool.h>
+#include <assert.h>
 #include "eb_time.h"
 
 /* ## Types */
@@ -43,7 +44,7 @@ static inline eb_chan_op eb_chan_recv_op(eb_chan c) {
 
 static inline void eb_chan_send(eb_chan c, const void *val) {
     eb_chan_op op = eb_chan_send_op(c, val);
-    eb_chan_do(eb_nsecs_forever, &op);
+    assert(eb_chan_do(eb_nsecs_forever, &op));
 }
 
 static inline bool eb_chan_try_send(eb_chan c, const void *val) {
@@ -53,7 +54,7 @@ static inline bool eb_chan_try_send(eb_chan c, const void *val) {
 
 static inline bool eb_chan_recv(eb_chan c, const void **val) {
     eb_chan_op op = eb_chan_recv_op(c);
-    eb_chan_do(eb_nsecs_forever, &op);
+    assert(eb_chan_do(eb_nsecs_forever, &op));
     if (val) {
         *val = op.val;
     }

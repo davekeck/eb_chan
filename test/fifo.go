@@ -29,9 +29,11 @@ func AsynchFifo() {
 
 func Chain(ch <-chan int, val int, in <-chan int, out chan<- int) {
 	<-in
+    
 	if <-ch != val {
 		panic(val)
 	}
+    
 	out <- 1
     print("Chain returned\n")
 }
@@ -46,6 +48,7 @@ func SynchFifo() {
 		go Chain(ch, i, in, out)
 		in = out
 	}
+    
 	start <- 0
 	for i := 0; i < N; i++ {
 		ch <- i
@@ -57,5 +60,6 @@ func SynchFifo() {
 func main() {
 	AsynchFifo()
 	SynchFifo()
+    os.Exit(0)
 }
 

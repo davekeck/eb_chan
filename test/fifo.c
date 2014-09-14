@@ -18,23 +18,16 @@ void AsynchFifo() {
     printf("AsynchFifo returned\n");
 }
 
-typedef struct {
-    eb_chan ch;
-    int val;
-    eb_chan in;
-    eb_chan out;    
-} ChainArgs;
 
-void *Chain(ChainArgs *args) {
-    eb_chan_recv(args->in, NULL);
+void Chain(eb_chan ch, int val, eb_chan in, eb_chan out) {
+    eb_chan_recv(in, NULL);
     
-    const void *val;
-    eb_chan_recv(args->ch, &val);
-    assert((uintptr_t)val == args->val);
+    const void *recvd_val;
+    eb_chan_recv(ch, &recvd_val);
+    assert((int)(intptr_t)recvd_val == val);
     
-    eb_chan_send(args->out, (const void *)1);
+    eb_chan_send(out, (const void *)1);
     printf("Chain returned\n");
-    return NULL;
 }
 
 // thread together a daisy chain to read the elements in sequence
@@ -44,13 +37,7 @@ void SynchFifo() {
 	eb_chan start = in;
 	for (size_t i = 0; i < N; i++) {
 		eb_chan out = eb_chan_create(0);
-        
-        ChainArgs *args = malloc(sizeof(*args));
-        *args = (ChainArgs){ch, (int)i, in, out};
-        
-        pthread_t t;
-        pthread_create(&t, NULL, (void *(*)(void *))Chain, args);
-        
+        go(^{ Chain(ch, (int)i, in, out); });
 		in = out;
 	}
     
@@ -65,5 +52,5 @@ void SynchFifo() {
 int main() {
 	AsynchFifo();
 	SynchFifo();
-    return 0;
+    exit(0);
 }

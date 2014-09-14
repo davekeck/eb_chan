@@ -24,7 +24,7 @@ static size_t g_port_pool_len = 0;
 struct eb_port {
     unsigned int retain_count;
     bool sem_valid;
-    bool signalled;
+    bool signaled;
     #if DARWIN
         semaphore_t sem;
     #elif LINUX
@@ -133,7 +133,7 @@ void eb_port_release(eb_port p) {
 void eb_port_signal(eb_port p) {
     assert(p);
     
-    if (eb_atomic_compare_and_swap(&p->signalled, false, true)) {
+    if (eb_atomic_compare_and_swap(&p->signaled, false, true)) {
         #if DARWIN
             kern_return_t r = semaphore_signal(p->sem);
                 eb_assert_or_recover(r == KERN_SUCCESS, eb_no_op);
@@ -220,7 +220,7 @@ bool eb_port_wait(eb_port p, eb_nsecs timeout) {
     }
     
     if (result) {
-        assert(eb_atomic_compare_and_swap(&p->signalled, true, false));
+        assert(eb_atomic_compare_and_swap(&p->signaled, true, false));
     }
     
     return result;
