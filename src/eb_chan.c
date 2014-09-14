@@ -145,6 +145,15 @@ enum {
     chanstate_cancelled
 }; typedef int32_t chanstate;
 
+typedef struct {
+    eb_chan_op *const *ops;
+    size_t nops;
+    bool *cleanup_ops;
+    
+    eb_nsecs timeout;
+    eb_port port;
+} do_state;
+
 struct eb_chan {
     unsigned int retain_count;
     eb_spinlock lock;
@@ -160,7 +169,7 @@ struct eb_chan {
     const void **buf;
     
     /* Unbuffered ivars */
-    uintptr_t unbuf_id;
+    const do_state *unbuf_state;
     eb_chan_op *unbuf_op;
     eb_port unbuf_port;
 };
@@ -213,7 +222,7 @@ eb_chan eb_chan_create(size_t buf_cap) {
             eb_assert_or_recover(c->buf, goto failed);
     } else {
         /* ## Unbuffered */
-        c->unbuf_id = 0;
+        c->unbuf_state = NULL;
         c->unbuf_op = NULL;
         c->unbuf_port = NULL;
     }
@@ -301,11 +310,50 @@ size_t eb_chan_get_buf_len(eb_chan c) {
 enum {
     op_result_complete,     /* The op completed and the caller should return */
     op_result_next,         /* The op couldn't make any progress and the caller should move on to the next op */
-    op_result_next_clean,   /* Same as _next, but signifies that cleanup_op() must be called for the op */
     op_result_retry,        /* The channel's busy and we should try the op again */
 }; typedef unsigned int op_result;
 
-static inline op_result send_buf(uintptr_t id, const eb_chan_op *op, eb_port port, eb_nsecs timeout) {
+static inline void cleanup_ops(const do_state *state) {
+        assert(state);
+    
+    for (size_t i = 0; i < state->nops; i++) {
+        if (state->cleanup_ops[i]) {
+            eb_chan_op *op = state->ops[i];
+            eb_chan c = op->chan;
+            bool signal_send = false;
+            bool signal_recv = false;
+            eb_spinlock_lock(&c->lock);
+                if (c->state == chanstate_send && c->unbuf_op == op) {
+                    /* 'op' was in the process of an unbuffered send on the channel, but no recv had arrived
+                       yet, so reset state to _open. */
+                    c->state = chanstate_open;
+                    signal_send = true;
+                } else if (c->state == chanstate_recv && c->unbuf_op == op) {
+                    /* 'op' was in the process of an unbuffered recv on the channel, but no send had arrived
+                       yet, so reset state to _open. */
+                    c->state = chanstate_open;
+                    signal_recv = true;
+                } else if (c->state == chanstate_ack && c->unbuf_op == op) {
+                    /* A counterpart acknowledged 'op' but, but 'op' isn't the one that completed in our select() call, so we're cancelling. */
+                    c->state = chanstate_cancelled;
+                }
+            eb_spinlock_unlock(&c->lock);
+            
+            if (signal_send) {
+                port_list_signal_first(c->sends, state->port);
+            }
+            
+            if (signal_recv) {
+                port_list_signal_first(c->recvs, state->port);
+            }
+            
+            state->cleanup_ops[i] = false;
+        }
+    }
+}
+
+static inline op_result send_buf(const do_state *state, eb_chan_op *op, size_t op_idx) {
+        assert(state);
         assert(op);
         assert(op->chan);
     
@@ -334,7 +382,7 @@ static inline op_result send_buf(uintptr_t id, const eb_chan_op *op, eb_port por
             eb_spinlock_unlock(&c->lock);
             
             if (signal_recv) {
-                port_list_signal_first(c->recvs, port);
+                port_list_signal_first(c->recvs, state->port);
             }
         } else {
             result = op_result_retry;
@@ -344,7 +392,8 @@ static inline op_result send_buf(uintptr_t id, const eb_chan_op *op, eb_port por
     return result;
 }
 
-static inline op_result recv_buf(uintptr_t id, eb_chan_op *op, eb_port port, eb_nsecs timeout) {
+static inline op_result recv_buf(const do_state *state, eb_chan_op *op, size_t op_idx) {
+        assert(state);
         assert(op);
         assert(op->chan);
     
@@ -381,7 +430,7 @@ static inline op_result recv_buf(uintptr_t id, eb_chan_op *op, eb_port port, eb_
             eb_spinlock_unlock(&c->lock);
             
             if (signal_send) {
-                port_list_signal_first(c->sends, port);
+                port_list_signal_first(c->sends, state->port);
             }
         } else {
             result = op_result_retry;
@@ -391,41 +440,48 @@ static inline op_result recv_buf(uintptr_t id, eb_chan_op *op, eb_port port, eb_
     return result;
 }
 
-static inline op_result send_unbuf(uintptr_t id, eb_chan_op *op, eb_port port, eb_nsecs timeout) {
+static inline op_result send_unbuf(const do_state *state, eb_chan_op *op, size_t op_idx) {
+        assert(state);
         assert(op);
         assert(op->chan);
     
     eb_chan c = op->chan;
     op_result result = op_result_next;
     
-    if ((c->state == chanstate_open && timeout != eb_nsecs_zero) ||
+    if ((c->state == chanstate_open && state->timeout != eb_nsecs_zero) ||
         c->state == chanstate_closed ||
         (c->state == chanstate_send && c->unbuf_op == op) ||
-        (c->state == chanstate_recv && c->unbuf_id != id) ||
+        (c->state == chanstate_recv && c->unbuf_state != state) ||
         (c->state == chanstate_ack && c->unbuf_op == op)) {
         
         /* It looks like our channel's in an acceptable state, so try to acquire the lock */
         if (eb_spinlock_try(&c->lock)) {
+            /* Reset the cleanup state since we acquired the lock and are actually getting a look at the channel's state */
+            state->cleanup_ops[op_idx] = false;
+            
             bool signal_recv = false;
-            if (c->state == chanstate_open && timeout != eb_nsecs_zero) {
+            if (c->state == chanstate_open && state->timeout != eb_nsecs_zero) {
                 c->state = chanstate_send;
-                c->unbuf_id = id;
+                c->unbuf_state = state;
                 c->unbuf_op = op;
-                c->unbuf_port = port;
+                c->unbuf_port = state->port;
+                /* We need to cleanup after this since we put it in the _send state! */
+                state->cleanup_ops[op_idx] = true;
+                /* Signal a recv since one of them can continue now */
                 signal_recv = true;
-                result = op_result_next_clean;
             } else if (c->state == chanstate_closed) {
                 /* Sending on a closed channel -- not allowed! */
                 eb_assert_or_bail(c->state != chanstate_closed, "Illegal send on closed channel");
             } else if (c->state == chanstate_send && c->unbuf_op == op) {
                 /* We own the send op that's in progress, so assign chan's unbuf_port */
-                /* Verify that the unbuf_id matches our 'id' parameter. If this assertion fails, it means there's likely
+                /* Verify that the unbuf_state matches our 'id' parameter. If this assertion fails, it means there's likely
                    one eb_chan_op being shared by multiple threads, which isn't allowed. */
-                eb_assert_or_bail(c->unbuf_id == id, "Send id invalid");
+                eb_assert_or_bail(c->unbuf_state == state, "unbuf_state invalid");
                 /* Assign the port */
-                c->unbuf_port = port;
-                result = op_result_next_clean;
-            } else if (c->state == chanstate_recv && c->unbuf_id != id) {
+                c->unbuf_port = state->port;
+                /* We need to cleanup after this since we put it in the _send state! */
+                state->cleanup_ops[op_idx] = true;
+            } else if (c->state == chanstate_recv && c->unbuf_state != state) {
                 /* We verified (immediately above) that the recv isn't part of the same op pool (we can't do unbuffered
                    sends/recvs from the same _do() call) */
                 
@@ -443,6 +499,12 @@ static inline op_result send_unbuf(uintptr_t id, eb_chan_op *op, eb_port port, e
                     signal_port = NULL;
                 }
                 
+                /* We have to cleanup all our ops here to cancel any outstanding unbuffered send/recvs, to avoid a deadlock
+                   where another thread is executing _do() and is waiting on our _do() to complete, but it never does
+                   because we're about to wait for the other _do() to complete. */
+                cleanup_ops(state);
+                
+                /* Wait until the channel's state changes away from _ack */
                 while (*((volatile chanstate *)&c->state) == chanstate_ack);
                 
                 eb_spinlock_lock(&c->lock);
@@ -457,8 +519,8 @@ static inline op_result send_unbuf(uintptr_t id, eb_chan_op *op, eb_port port, e
                 } else if (c->state == chanstate_cancelled) {
                     /* Reset the channel state back to _open */
                     c->state = chanstate_open;
-                    /* As long as we're not polling, we should try the op again */
-                    if (timeout != eb_nsecs_zero) {
+                    /* As long as we're not polling, we should try the op again because it's _open again. */
+                    if (state->timeout != eb_nsecs_zero) {
                         result = op_result_retry;
                     }
                 } else {
@@ -470,9 +532,9 @@ static inline op_result send_unbuf(uintptr_t id, eb_chan_op *op, eb_port port, e
                 signal_recv = true;
             } else if (c->state == chanstate_ack && c->unbuf_op == op) {
                 /* A recv acknowledged our send! */
-                /* Verify that the unbuf_id matches our 'id' parameter. If this assertion fails, it means there's likely
+                /* Verify that the unbuf_state matches our 'id' parameter. If this assertion fails, it means there's likely
                    one eb_chan_op being shared by multiple threads, which isn't allowed. */
-                eb_assert_or_bail(c->unbuf_id == id, "unbuf_id invalid");
+                eb_assert_or_bail(c->unbuf_state == state, "unbuf_state invalid");
                 /* A recv is polling for chan's state to change, so update it to signal that we're done sending! */
                 c->state = chanstate_done;
                 result = op_result_complete;
@@ -481,7 +543,7 @@ static inline op_result send_unbuf(uintptr_t id, eb_chan_op *op, eb_port port, e
             eb_spinlock_unlock(&c->lock);
             
             if (signal_recv) {
-                port_list_signal_first(c->recvs, port);
+                port_list_signal_first(c->recvs, state->port);
             }
         } else {
             result = op_result_retry;
@@ -491,36 +553,40 @@ static inline op_result send_unbuf(uintptr_t id, eb_chan_op *op, eb_port port, e
     return result;
 }
 
-static inline op_result recv_unbuf(uintptr_t id, eb_chan_op *op, eb_port port, eb_nsecs timeout) {
+static inline op_result recv_unbuf(const do_state *state, eb_chan_op *op, size_t op_idx) {
+        assert(state);
         assert(op);
         assert(op->chan);
     
     eb_chan c = op->chan;
     op_result result = op_result_next;
     
-    if ((c->state == chanstate_open && timeout != eb_nsecs_zero) ||
+    if ((c->state == chanstate_open && state->timeout != eb_nsecs_zero) ||
         c->state == chanstate_closed ||
-        (c->state == chanstate_send && c->unbuf_id != id) ||
+        (c->state == chanstate_send && c->unbuf_state != state) ||
         (c->state == chanstate_recv && c->unbuf_op == op) ||
         (c->state == chanstate_ack && c->unbuf_op == op)) {
         
         /* It looks like our channel's in an acceptable state, so try to acquire the lock */
         if (eb_spinlock_try(&c->lock)) {
+            /* Reset the cleanup state since we acquired the lock and are actually getting a look at the channel's state */
+            state->cleanup_ops[op_idx] = false;
+            
             bool signal_send = false;
-            if (c->state == chanstate_open && timeout != eb_nsecs_zero) {
+            if (c->state == chanstate_open && state->timeout != eb_nsecs_zero) {
                 c->state = chanstate_recv;
-                c->unbuf_id = id;
+                c->unbuf_state = state;
                 c->unbuf_op = op;
-                c->unbuf_port = port;
+                c->unbuf_port = state->port;
+                /* We need to cleanup after this since we put it in the _send state! */
+                state->cleanup_ops[op_idx] = true;
+                /* Signal a send since one of them can continue now */
                 signal_send = true;
-                result = op_result_next_clean;
             } else if (c->state == chanstate_closed) {
                 /* Set our op's state signifying that we're returning the value due to a closed channel */
                 op->open = false;
                 op->val = NULL;
-                /* We completed this op so set our return value! */
-                result = op_result_complete;
-            } else if (c->state == chanstate_send && c->unbuf_id != id) {
+            } else if (c->state == chanstate_send && c->unbuf_state != state) {
                 /* We verified (immediately above) that the send isn't part of the same op pool (we can't do unbuffered
                    sends/recvs from the same _do() call) */
                 
@@ -538,6 +604,12 @@ static inline op_result recv_unbuf(uintptr_t id, eb_chan_op *op, eb_port port, e
                     signal_port = NULL;
                 }
                 
+                /* We have to cleanup all our ops here to cancel any outstanding unbuffered send/recvs, to avoid a deadlock
+                   where another thread is executing _do() and is waiting on our _do() to complete, but it never does
+                   because we're about to wait for the other _do() to complete. */
+                cleanup_ops(state);
+                
+                /* Wait until the channel's state changes away from _ack */
                 while (*((volatile chanstate *)&c->state) == chanstate_ack);
                 
                 eb_spinlock_lock(&c->lock);
@@ -553,7 +625,7 @@ static inline op_result recv_unbuf(uintptr_t id, eb_chan_op *op, eb_port port, e
                     /* Reset the channel state back to _open */
                     c->state = chanstate_open;
                     /* As long as we're not polling, we should try the op again */
-                    if (timeout != eb_nsecs_zero) {
+                    if (state->timeout != eb_nsecs_zero) {
                         result = op_result_retry;
                     }
                 } else {
@@ -567,15 +639,16 @@ static inline op_result recv_unbuf(uintptr_t id, eb_chan_op *op, eb_port port, e
                 /* We own the recv op that's in progress, so assign chan's unbuf_port */
                 /* Verify that the _recv_id matches our 'id' parameter. If this assertion fails, it means there's likely
                    one eb_chan_op being shared by multiple threads, which isn't allowed. */
-                eb_assert_or_bail(c->unbuf_id == id, "unbuf_id invalid");
+                eb_assert_or_bail(c->unbuf_state == state, "unbuf_state invalid");
                 /* Assign the port */
-                c->unbuf_port = port;
-                result = op_result_next_clean;
+                c->unbuf_port = state->port;
+                /* We need to cleanup after this since we put it in the _send state! */
+                state->cleanup_ops[op_idx] = true;
             } else if (c->state == chanstate_ack && c->unbuf_op == op) {
                 /* A send acknowledged our recv! */
-                /* Verify that the unbuf_id matches our 'id' parameter. If this assertion fails, it means there's likely
+                /* Verify that the unbuf_state matches our 'id' parameter. If this assertion fails, it means there's likely
                    one eb_chan_op being shared by multiple threads, which isn't allowed. */
-                eb_assert_or_bail(c->unbuf_id == id, "unbuf_id invalid");
+                eb_assert_or_bail(c->unbuf_state == state, "unbuf_state invalid");
                 /* A send is polling for chan's state to change, so update it to signal that we're done sending! */
                 c->state = chanstate_done;
                 result = op_result_complete;
@@ -584,7 +657,7 @@ static inline op_result recv_unbuf(uintptr_t id, eb_chan_op *op, eb_port port, e
             eb_spinlock_unlock(&c->lock);
             
             if (signal_send) {
-                port_list_signal_first(c->sends, port);
+                port_list_signal_first(c->sends, state->port);
             }
         } else {
             result = op_result_retry;
@@ -594,47 +667,18 @@ static inline op_result recv_unbuf(uintptr_t id, eb_chan_op *op, eb_port port, e
     return result;
 }
 
-static inline void cleanup_op(const eb_chan_op *op, eb_port port) {
+static inline op_result try_op(const do_state *state, eb_chan_op *op, size_t op_idx) {
+        assert(state);
         assert(op);
-    eb_chan c = op->chan;
-    bool signal_send = false;
-    bool signal_recv = false;
-    eb_spinlock_lock(&c->lock);
-        if (c->state == chanstate_send && c->unbuf_op == op) {
-            /* 'op' was in the process of an unbuffered send on the channel, but no recv had arrived
-               yet, so reset state to _open. */
-            c->state = chanstate_open;
-            signal_send = true;
-        } else if (c->state == chanstate_recv && c->unbuf_op == op) {
-            /* 'op' was in the process of an unbuffered recv on the channel, but no send had arrived
-               yet, so reset state to _open. */
-            c->state = chanstate_open;
-            signal_recv = true;
-        } else if (c->state == chanstate_ack && c->unbuf_op == op) {
-            /* A counterpart acknowledged 'op' but, but 'op' isn't the one that completed in our select() call, so we're cancelling. */
-            c->state = chanstate_cancelled;
-        }
-    eb_spinlock_unlock(&c->lock);
     
-    if (signal_send) {
-        port_list_signal_first(c->sends, port);
-    }
-    
-    if (signal_recv) {
-        port_list_signal_first(c->recvs, port);
-    }
-}
-
-static inline op_result try_op(uintptr_t id, eb_chan_op *op, eb_port port, eb_nsecs timeout) {
-        assert(op);
     eb_chan c = op->chan;
     if (c) {
         if (op->send) {
             /* ## Send */
-            return (c->buf_cap ? send_buf(id, op, port, timeout) : send_unbuf(id, op, port, timeout));
+            return (c->buf_cap ? send_buf(state, op, op_idx) : send_unbuf(state, op, op_idx));
         } else {
             /* ## Receive */
-            return (c->buf_cap ? recv_buf(id, op, port, timeout) : recv_unbuf(id, op, port, timeout));
+            return (c->buf_cap ? recv_buf(state, op, op_idx) : recv_unbuf(state, op, op_idx));
         }
     }
     return op_result_next;
@@ -643,11 +687,17 @@ static inline op_result try_op(uintptr_t id, eb_chan_op *op, eb_port port, eb_ns
 eb_chan_op *eb_chan_do_list(eb_nsecs timeout, eb_chan_op *const ops[], size_t nops) {
     // TODO: randomize iteration by shuffling input array once (upon entry)
         assert(ops);
-    eb_port port = NULL;
+    
+    bool co[nops];
+    memset(co, 0, sizeof(co));
+    
     eb_chan_op *result = NULL;
-    uintptr_t id = (uintptr_t)&result;
-    bool cleanup_ops[nops];
-    memset(cleanup_ops, 0, sizeof(cleanup_ops));
+    do_state state = {
+        .ops = ops,
+        .nops = nops,
+        .cleanup_ops = co,
+        .timeout = timeout,
+        .port = NULL};
     
     /* ## Shuffle our input array */
     /* No need to shuffle arrays that have 0 or 1 elements */
@@ -665,12 +715,7 @@ eb_chan_op *eb_chan_do_list(eb_nsecs timeout, eb_chan_op *const ops[], size_t no
         for (size_t i = 0; i < nops; i++) {
             eb_chan_op *op = ops[i];
             op_result r;
-            while ((r = try_op(id, op, port, timeout)) == op_result_retry);
-            
-            /* Update cleanup_ops. Note that we don't need to consider _busy because we waited until
-               the operation returned something other than _busy. */
-            cleanup_ops[i] = (r == op_result_next_clean);
-            
+            while ((r = try_op(&state, op, i)) == op_result_retry);
             /* If the op completed, we need to exit! */
             if (r == op_result_complete) {
                 result = op;
@@ -688,16 +733,7 @@ eb_chan_op *eb_chan_do_list(eb_nsecs timeout, eb_chan_op *const ops[], size_t no
                 for (size_t i = 0; i < k_attempt_multiplier * nops; i++) {
                     size_t idx = (i % nops);
                     eb_chan_op *op = ops[idx];
-                    op_result r = try_op(id, op, port, timeout);
-                    
-                    /* Update cleanup_ops. In the case of _busy, we can't update cleanup_ops, because its semantics imply
-                       that no information could be garnered from the channel. */
-                    if (r == op_result_next_clean) {
-                        cleanup_ops[idx] = true;
-                    } else if (r != op_result_retry) {
-                        cleanup_ops[idx] = false;
-                    }
-                    
+                    op_result r = try_op(&state, op, idx);
                     /* If the op completed, we need to exit! */
                     if (r == op_result_complete) {
                         result = op;
@@ -708,10 +744,10 @@ eb_chan_op *eb_chan_do_list(eb_nsecs timeout, eb_chan_op *const ops[], size_t no
             
             /* ## Slow path: we weren't able to find an operation that could send/receive, so we'll create a
                port to receive notifications on and put this thread to sleep until someone wakes us up. */
-            if (!port) {
+            if (!state.port) {
                 /* Create our port that we'll attach to channels so that we can be notified when events occur. */
-                port = eb_port_create();
-                    eb_assert_or_recover(port, goto cleanup);
+                state.port = eb_port_create();
+                    eb_assert_or_recover(state.port, goto cleanup);
                 
                 /* Register our port for the appropriate notifications on every channel. */
                 /* This adds 'port' to the channel's sends/recvs (depending on the op), which we clean up at the
@@ -720,7 +756,7 @@ eb_chan_op *eb_chan_do_list(eb_nsecs timeout, eb_chan_op *const ops[], size_t no
                     eb_chan_op *op = ops[i];
                     eb_chan c = op->chan;
                     if (c) {
-                        port_list_add((op->send ? c->sends : c->recvs), port);
+                        port_list_add((op->send ? c->sends : c->recvs), state.port);
                     }
                 }
             }
@@ -731,12 +767,7 @@ eb_chan_op *eb_chan_do_list(eb_nsecs timeout, eb_chan_op *const ops[], size_t no
             for (size_t i = 0; i < nops; i++) {
                 eb_chan_op *op = ops[i];
                 op_result r;
-                while ((r = try_op(id, op, port, timeout)) == op_result_retry);
-                
-                /* Update cleanup_ops. Note that we don't need to consider _busy because we waited until
-                   the operation returned something other than _busy. */
-                cleanup_ops[i] = (r == op_result_next_clean);
-                
+                while ((r = try_op(&state, op, i)) == op_result_retry);
                 /* If the op completed, we need to exit! */
                 if (r == op_result_complete) {
                     result = op;
@@ -757,33 +788,29 @@ eb_chan_op *eb_chan_do_list(eb_nsecs timeout, eb_chan_op *const ops[], size_t no
             }
             
             /* Put our thread to sleep until someone alerts us of an event */
-            eb_port_wait(port, wait_timeout);
+            eb_port_wait(state.port, wait_timeout);
         }
     }
     
     /* Cleanup! */
     cleanup: {
-        if (port) {
+        if (state.port) {
             for (size_t i = 0; i < nops; i++) {
                 eb_chan_op *op = ops[i];
                 eb_chan c = op->chan;
                 if (c) {
                     port_list ports = (op->send ? c->sends : c->recvs);
-                    port_list_rm(ports, port);
-                    port_list_signal_first(ports, port);
+                    port_list_rm(ports, state.port);
+                    port_list_signal_first(ports, state.port);
                 }
             }
         }
         
-        for (size_t i = 0; i < nops; i++) {
-            if (cleanup_ops[i]) {
-                cleanup_op(ops[i], port);
-            }
-        }
+        cleanup_ops(&state);
         
-        if (port) {
-            eb_port_release(port);
-            port = NULL;
+        if (state.port) {
+            eb_port_release(state.port);
+            state.port = NULL;
         }
     }
     
