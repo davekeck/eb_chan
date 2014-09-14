@@ -37,7 +37,7 @@ void SynchFifo() {
 	eb_chan start = in;
 	for (size_t i = 0; i < N; i++) {
 		eb_chan out = eb_chan_create(0);
-        go(^{ Chain(ch, (int)i, in, out); });
+        go( Chain(ch, (int)i, in, out) );
 		in = out;
 	}
     

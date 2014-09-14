@@ -1,55 +1,51 @@
-// run
-
-// Copyright 2009 The Go Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style
-// license that can be found in the LICENSE file.
+// DONE
 
 // Test communication with multiple simultaneous goroutines.
 
-package main
+#include "testglue.h"
 
-import "runtime"
+#define N 1000 // sent messages
+#define M 10   // receiving goroutines
+#define W 2    // channel buffering
+int h[N];      // marking of send/recv
 
-const N = 1000 // sent messages
-const M = 10   // receiving goroutines
-const W = 2    // channel buffering
-var h [N]int   // marking of send/recv
-
-func r(c chan int, m int) {
-	for {
-		select {
-		case r := <-c:
-			if h[r] != 1 {
-				println("r",
-					"m=", m,
-					"r=", r,
-					"h=", h[r])
-				panic("fail")
-			}
-			h[r] = 2
-		}
+void r(eb_chan c, int m) {
+	for (;;) {
+        const void *val;
+        eb_chan_recv(c, &val);
+        int r = (int)(intptr_t)val;
+        if (h[r] != 1) {
+            printf("r,"
+                "m=%d,"
+                "r=%d,"
+                "h=%d,", m, r, h[r]);
+            abort();
+        }
+        h[r] = 2;
 	}
 }
 
-func s(c chan int) {
-	for n := 0; n < N; n++ {
-		r := n
-		if h[r] != 0 {
-			println("s")
-			panic("fail")
+void s(eb_chan c) {
+	for (int n = 0; n < N; n++) {
+		int r = n;
+		if (h[r] != 0) {
+			printf("s\n");
+            abort();
 		}
-		h[r] = 1
-		c <- r
+		h[r] = 1;
+        eb_chan_send(c, (void*)(intptr_t)r);
 	}
 }
 
-func main() {
-	c := make(chan int, W)
-	for m := 0; m < M; m++ {
-		go r(c, m)
-		runtime.Gosched()
+int main() {
+	eb_chan c = eb_chan_create(W);
+	for (int m = 0; m < M; m++) {
+		go( r(c, m) );
+		usleep(100);
 	}
-	runtime.Gosched()
-	runtime.Gosched()
-	s(c)
+    
+    usleep(100);
+    usleep(100);
+	s(c);
+    return 0;
 }

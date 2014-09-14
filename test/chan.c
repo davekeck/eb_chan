@@ -1,5 +1,7 @@
 // DONE
 
+// Test communication operations including select.
+
 #include "testglue.h"
 
 int randx = 0;
@@ -227,8 +229,8 @@ void sel(Chan *r0, Chan *r1, Chan *r2, Chan *r3, Chan *s0, Chan *s1, Chan *s2, C
 void test1(Chan *c) {
 	changeNproc(2);
     
-    go(^{ mySend(c); });
-    go(^{ myRecv(c); });
+    go( mySend(c) );
+    go( myRecv(c) );
 }
 
 // direct send to select recv
@@ -237,14 +239,14 @@ void test2(int c) {
 
 	changeNproc(4);
     
-    go(^{ mySend(ca[0]); });
-    go(^{ mySend(ca[1]); });
-    go(^{ mySend(ca[2]); });
-    go(^{ mySend(ca[3]); });
+    go(  mySend(ca[0]) );
+    go(  mySend(ca[1]) );
+    go(  mySend(ca[2]) );
+    go(  mySend(ca[3]) );
 
 	changeNproc(1);
     
-    go(^{ sel(ca[0], ca[1], ca[2], ca[3], nc, nc, nc, nc); });
+    go(  sel(ca[0], ca[1], ca[2], ca[3], nc, nc, nc, nc) );
 }
 
 // select send to direct recv
@@ -252,14 +254,14 @@ void test3(int c) {
 	Chan **ca = mkchan(c, 4);
 
 	changeNproc(4);
-    go(^{ myRecv(ca[0]); });
-    go(^{ myRecv(ca[1]); });
-    go(^{ myRecv(ca[2]); });
-    go(^{ myRecv(ca[3]); });
+    go(  myRecv(ca[0]) );
+    go(  myRecv(ca[1]) );
+    go(  myRecv(ca[2]) );
+    go(  myRecv(ca[3]) );
     
 	changeNproc(1);
     
-    go(^{ sel(nc, nc, nc, nc, ca[0], ca[1], ca[2], ca[3]); });
+    go(  sel(nc, nc, nc, nc, ca[0], ca[1], ca[2], ca[3]) );
 }
 
 // select send to select recv
@@ -267,36 +269,36 @@ void test4(int c) {
 	Chan **ca = mkchan(c, 4);
 
 	changeNproc(2);
-	go(^{ sel(nc, nc, nc, nc, ca[0], ca[1], ca[2], ca[3]); });
-	go(^{ sel(ca[0], ca[1], ca[2], ca[3], nc, nc, nc, nc); });
+	go(  sel(nc, nc, nc, nc, ca[0], ca[1], ca[2], ca[3]) );
+	go(  sel(ca[0], ca[1], ca[2], ca[3], nc, nc, nc, nc) );
 }
 
 void test5(int c) {
 	Chan **ca = mkchan(c, 8);
 
 	changeNproc(2);
-	go(^{ sel(ca[4], ca[5], ca[6], ca[7], ca[0], ca[1], ca[2], ca[3]); });
-	go(^{ sel(ca[0], ca[1], ca[2], ca[3], ca[4], ca[5], ca[6], ca[7]); });
+	go(  sel(ca[4], ca[5], ca[6], ca[7], ca[0], ca[1], ca[2], ca[3]) );
+	go(  sel(ca[0], ca[1], ca[2], ca[3], ca[4], ca[5], ca[6], ca[7]) );
 }
 
 void test6(int c) {
 	Chan **ca = mkchan(c, 12);
 
 	changeNproc(4);
-	go(^{ mySend(ca[4]); });
-	go(^{ mySend(ca[5]); });
-	go(^{ mySend(ca[6]); });
-	go(^{ mySend(ca[7]); });
+	go(  mySend(ca[4]) );
+	go(  mySend(ca[5]) );
+	go(  mySend(ca[6]) );
+	go(  mySend(ca[7]) );
 
 	changeNproc(4);
-	go(^{ myRecv(ca[8]); });
-	go(^{ myRecv(ca[9]); });
-	go(^{ myRecv(ca[10]); });
-	go(^{ myRecv(ca[11]); });
+	go(  myRecv(ca[8]) );
+	go(  myRecv(ca[9]) );
+	go(  myRecv(ca[10]) );
+	go(  myRecv(ca[11]) );
 
 	changeNproc(2);
-	go(^{ sel(ca[4], ca[5], ca[6], ca[7], ca[0], ca[1], ca[2], ca[3]); });
-	go(^{ sel(ca[0], ca[1], ca[2], ca[3], ca[8], ca[9], ca[10], ca[11]); });
+	go(  sel(ca[4], ca[5], ca[6], ca[7], ca[0], ca[1], ca[2], ca[3]) );
+	go(  sel(ca[0], ca[1], ca[2], ca[3], ca[8], ca[9], ca[10], ca[11]) );
 }
 
 // wait for outstanding tests to finish

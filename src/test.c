@@ -128,34 +128,34 @@ int main(int argc, const char * argv[])
 {
     gChan = eb_chan_create(0);
     
-//    go(^{ threadDoSend(); });
-//    go(^{ threadTryRecv(); });
+//    go( threadDoSend() );
+//    go( threadTryRecv() );
 //    
-//    go(^{ threadTrySend(); });
-//    go(^{ threadDoRecv(); });
+//    go( threadTrySend() );
+//    go( threadDoRecv() );
     
-    go(^{ threadSend(); });
-    go(^{ threadSend(); });
-    go(^{ threadSend(); });
+    go( threadSend() );
+    go( threadSend() );
+    go( threadSend() );
     
-    go(^{ threadRecv(); });
-    go(^{ threadRecv(); });
-    go(^{ threadRecv(); });
+    go( threadRecv() );
+    go( threadRecv() );
+    go( threadRecv() );
     
-//    go(^{ thread(); });
-//    go(^{ thread(); });
-//    go(^{ thread(); });
-//    go(^{ thread(); });
-//    go(^{ thread(); });
-//    go(^{ thread(); });
-//    go(^{ thread(); });
-//    go(^{ thread(); });
+//    go( thread() );
+//    go( thread() );
+//    go( thread() );
+//    go( thread() );
+//    go( thread() );
+//    go( thread() );
+//    go( thread() );
+//    go( thread() );
     
 //    // at one time this caused a deadlock
 //    eb_chan a = eb_chan_create(0);
 //    eb_chan b = eb_chan_create(0);
-//    go(^{ deadlock(a,b); });
-//    go(^{ deadlock(b,a); });
+//    go( deadlock(a,b) );
+//    go( deadlock(b,a) );
     
 //    timeoutTest();
     

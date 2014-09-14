@@ -10,4 +10,5 @@
 #include <strings.h>
 
 typedef void (^VoidBlock)();
-void go(VoidBlock b);
+void spawnThread(VoidBlock b);
+#define go(a) spawnThread(^{ a ;});
