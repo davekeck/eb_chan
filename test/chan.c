@@ -1,3 +1,5 @@
+// DONE
+
 #include "testglue.h"
 
 int randx = 0;
@@ -167,7 +169,7 @@ void sel(Chan *r0, Chan *r1, Chan *r2, Chan *r3, Chan *s0, Chan *s1, Chan *s2, C
         eb_chan_op so2 = eb_chan_send_op(s2->sc, (void*)(intptr_t)s2->sv);
         eb_chan_op so3 = eb_chan_send_op(s3->sc, (void*)(intptr_t)s3->sv);
         
-        eb_chan_op *r = eb_chan_do(eb_nsecs_forever, &ro0, &ro1, &ro2, &ro3, &so0, &so1, &so2, &so3);
+        eb_chan_op *r = eb_chan_do(eb_nsec_forever, &ro0, &ro1, &ro2, &ro3, &so0, &so1, &so2, &so3);
         
         if (r == &ro0) {
             v = (int)(intptr_t)r->val;

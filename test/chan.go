@@ -287,26 +287,26 @@ func wait() {
 // run all tests with specified buffer size
 func tests(c int) {
 	ca := mkchan(c, 4)
-    // test1(ca[0])
-    // test1(ca[1])
-    // test1(ca[2])
-    // test1(ca[3])
-    // wait()
+    test1(ca[0])
+    test1(ca[1])
+    test1(ca[2])
+    test1(ca[3])
+    wait()
 
 	test2(c)
 	wait()
 
-    // test3(c)
-    // wait()
-    //
-    // test4(c)
-    // wait()
-    //
-    // test5(c)
-    // wait()
-    //
-    // test6(c)
-    // wait()
+    test3(c)
+    wait()
+
+    test4(c)
+    wait()
+
+    test5(c)
+    wait()
+
+    test6(c)
+    wait()
 }
 
 // run all test with 4 buffser sizes

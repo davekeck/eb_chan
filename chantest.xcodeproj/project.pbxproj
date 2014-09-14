@@ -42,11 +42,8 @@
 		559F510A19C3A223005921EE /* eb_time.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = eb_time.c; path = src/eb_time.c; sourceTree = SOURCE_ROOT; };
 		559F510B19C3A223005921EE /* eb_time.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = eb_time.h; path = src/eb_time.h; sourceTree = SOURCE_ROOT; };
 		559F510C19C3A223005921EE /* test.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = test.c; path = src/test.c; sourceTree = SOURCE_ROOT; };
-		559F511319C3FFF1005921EE /* fifo.go */ = {isa = PBXFileReference; lastKnownFileType = text; name = fifo.go; path = test/fifo.go; sourceTree = SOURCE_ROOT; };
-		559F511419C40559005921EE /* chan.go */ = {isa = PBXFileReference; lastKnownFileType = text; name = chan.go; path = test/chan.go; sourceTree = SOURCE_ROOT; };
 		559F511519C40E46005921EE /* testglue.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = testglue.c; path = test/testglue.c; sourceTree = SOURCE_ROOT; };
 		559F511619C40E46005921EE /* testglue.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = testglue.h; path = test/testglue.h; sourceTree = SOURCE_ROOT; };
-		559F511819C40EC3005921EE /* fifo.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; name = fifo.c; path = test/fifo.c; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -89,8 +86,6 @@
 		55501D0E19A969750028A9FE /* chantest */ = {
 			isa = PBXGroup;
 			children = (
-				559F511319C3FFF1005921EE /* fifo.go */,
-				559F511819C40EC3005921EE /* fifo.c */,
 				559F510319C3A223005921EE /* eb_assert.c */,
 				559F510419C3A223005921EE /* eb_assert.h */,
 				559F510519C3A223005921EE /* eb_atomic.h */,
@@ -102,7 +97,6 @@
 				559F510B19C3A223005921EE /* eb_time.h */,
 				559F511619C40E46005921EE /* testglue.h */,
 				559F511519C40E46005921EE /* testglue.c */,
-				559F511419C40559005921EE /* chan.go */,
 				559F510C19C3A223005921EE /* test.c */,
 				55501D1119A969750028A9FE /* Supporting Files */,
 			);

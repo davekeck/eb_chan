@@ -119,7 +119,6 @@ static inline bool port_list_rm(port_list l, eb_port p) {
 }
 
 /* Signal the first port in the list that isn't 'ignore' */
-// TODO: we may want to randomize the port that we pick out of the list?
 static inline void port_list_signal_first(const port_list l, eb_port ignore) {
     assert(l);
     
@@ -466,7 +465,6 @@ static inline op_result send_unbuf(const do_state *state, eb_chan_op *op, size_t
             /* Reset the cleanup state since we acquired the lock and are actually getting a look at the channel's state */
             state->cleanup_ops[op_idx] = false;
             
-            bool signal_send = false;
             bool signal_recv = false;
             if (c->state == chanstate_open && state->timeout != eb_nsec_zero) {
                 c->state = chanstate_send;
@@ -524,7 +522,7 @@ static inline op_result send_unbuf(const do_state *state, eb_chan_op *op, size_t
                                 /* Reset the channel state back to _open */
                                 c->state = chanstate_open;
                                 /* We reset our state to _open, so signal a send since it can proceed now. */
-                                signal_send = true;
+                                signal_recv = true;
                                 /* We completed this op! */
                                 result = op_result_complete;
                                 /* Breaking here so that we skip the _unlock() call, because we unlock the spinlock outside
@@ -538,7 +536,7 @@ static inline op_result send_unbuf(const do_state *state, eb_chan_op *op, size_t
                                     result = op_result_retry;
                                 } else {
                                     /* We're not telling the caller to retry, so signal a send since it can proceed now. */
-                                    signal_send = true;
+                                    signal_recv = true;
                                 }
                                 /* Breaking here so that we skip the _unlock() call, because we unlock the spinlock outside
                                    of our large if-statement. */
@@ -558,10 +556,6 @@ static inline op_result send_unbuf(const do_state *state, eb_chan_op *op, size_t
             }
             
             eb_spinlock_unlock(&c->lock);
-            
-            if (signal_send) {
-                port_list_signal_first(c->sends, state->port);
-            }
             
             if (signal_recv) {
                 port_list_signal_first(c->recvs, state->port);
@@ -594,7 +588,6 @@ static inline op_result recv_unbuf(const do_state *state, eb_chan_op *op, size_t
             state->cleanup_ops[op_idx] = false;
             
             bool signal_send = false;
-            bool signal_recv = false;
             if (c->state == chanstate_open && state->timeout != eb_nsec_zero) {
                 c->state = chanstate_recv;
                 c->unbuf_state = state;
@@ -643,7 +636,7 @@ static inline op_result recv_unbuf(const do_state *state, eb_chan_op *op, size_t
                                 /* Reset the channel state back to _open */
                                 c->state = chanstate_open;
                                 /* We reset our state to _open, so signal a recv since it can proceed now. */
-                                signal_recv = true;
+                                signal_send = true;
                                 /* We completed this op! */
                                 result = op_result_complete;
                                 /* Breaking here so that we skip the _unlock() call, because we unlock the spinlock outside
@@ -657,7 +650,7 @@ static inline op_result recv_unbuf(const do_state *state, eb_chan_op *op, size_t
                                     result = op_result_retry;
                                 } else {
                                     /* We're not telling the caller to retry, so signal a recv since it can proceed now. */
-                                    signal_recv = true;
+                                    signal_send = true;
                                 }
                                 /* Breaking here so that we skip the _unlock() call, because we unlock the spinlock outside
                                    of our large if-statement. */
@@ -689,10 +682,6 @@ static inline op_result recv_unbuf(const do_state *state, eb_chan_op *op, size_t
             
             if (signal_send) {
                 port_list_signal_first(c->sends, state->port);
-            }
-            
-            if (signal_recv) {
-                port_list_signal_first(c->recvs, state->port);
             }
         } else {
             result = op_result_retry;
@@ -763,17 +752,15 @@ eb_chan_op *eb_chan_do_list(eb_nsec timeout, eb_chan_op *const ops[], size_t nop
         for (;;) {
             /* ## Fast path: loop over our operations to see if one of them was able to send/receive. (If not,
                we'll enter the slow path where we put our thread to sleep until we're signaled.) */
-            if (nops) {
-                const size_t k_attempt_multiplier = 500;
-                for (size_t i = 0; i < k_attempt_multiplier * nops; i++) {
-                    size_t idx = (i % nops);
-                    eb_chan_op *op = ops[idx];
-                    op_result r = try_op(&state, op, idx);
-                    /* If the op completed, we need to exit! */
-                    if (r == op_result_complete) {
-                        result = op;
-                        goto cleanup;
-                    }
+            const size_t k_attempt_multiplier = 500;
+            for (size_t i = 0; i < k_attempt_multiplier * nops; i++) {
+                size_t idx = (i % nops);
+                eb_chan_op *op = ops[idx];
+                op_result r = try_op(&state, op, idx);
+                /* If the op completed, we need to exit! */
+                if (r == op_result_complete) {
+                    result = op;
+                    goto cleanup;
                 }
             }
             
