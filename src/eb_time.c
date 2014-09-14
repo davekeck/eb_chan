@@ -13,7 +13,7 @@
 #include "eb_assert.h"
 #include "eb_atomic.h"
 
-eb_nsecs eb_time_now() {
+eb_nsec eb_time_now() {
 #if DARWIN
     /* Initialize k_timebase_info, thread-safely */
     static mach_timebase_info_t k_timebase_info = NULL;
@@ -36,6 +36,6 @@ eb_nsecs eb_time_now() {
     struct timespec ts;
     int r = clock_gettime(CLOCK_MONOTONIC, &ts);
         eb_assert_or_recover(!r, return 0);
-    return ((uint64_t)ts.tv_sec * eb_nsecs_per_sec) + ts.tv_nsec;
+    return ((uint64_t)ts.tv_sec * eb_nsec_per_sec) + ts.tv_nsec;
 #endif
 }

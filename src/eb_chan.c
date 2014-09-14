@@ -157,7 +157,7 @@ typedef struct {
     size_t nops;
     bool *cleanup_ops;
     
-    eb_nsecs timeout;
+    eb_nsec timeout;
     eb_port port;
 } do_state;
 
@@ -455,7 +455,7 @@ static inline op_result send_unbuf(const do_state *state, eb_chan_op *op, size_t
     eb_chan c = op->chan;
     op_result result = op_result_next;
     
-    if ((c->state == chanstate_open && state->timeout != eb_nsecs_zero) ||
+    if ((c->state == chanstate_open && state->timeout != eb_nsec_zero) ||
         c->state == chanstate_closed ||
         (c->state == chanstate_send && c->unbuf_op == op) ||
         (c->state == chanstate_recv && c->unbuf_state != state) ||
@@ -468,7 +468,7 @@ static inline op_result send_unbuf(const do_state *state, eb_chan_op *op, size_t
             
             bool signal_send = false;
             bool signal_recv = false;
-            if (c->state == chanstate_open && state->timeout != eb_nsecs_zero) {
+            if (c->state == chanstate_open && state->timeout != eb_nsec_zero) {
                 c->state = chanstate_send;
                 c->unbuf_state = state;
                 c->unbuf_op = op;
@@ -534,7 +534,7 @@ static inline op_result send_unbuf(const do_state *state, eb_chan_op *op, size_t
                                 /* Reset the channel state back to _open */
                                 c->state = chanstate_open;
                                 /* As long as we're not polling, we should try the op again */
-                                if (state->timeout != eb_nsecs_zero) {
+                                if (state->timeout != eb_nsec_zero) {
                                     result = op_result_retry;
                                 } else {
                                     /* We're not telling the caller to retry, so signal a send since it can proceed now. */
@@ -582,7 +582,7 @@ static inline op_result recv_unbuf(const do_state *state, eb_chan_op *op, size_t
     eb_chan c = op->chan;
     op_result result = op_result_next;
     
-    if ((c->state == chanstate_open && state->timeout != eb_nsecs_zero) ||
+    if ((c->state == chanstate_open && state->timeout != eb_nsec_zero) ||
         c->state == chanstate_closed ||
         (c->state == chanstate_send && c->unbuf_state != state) ||
         (c->state == chanstate_recv && c->unbuf_op == op) ||
@@ -595,7 +595,7 @@ static inline op_result recv_unbuf(const do_state *state, eb_chan_op *op, size_t
             
             bool signal_send = false;
             bool signal_recv = false;
-            if (c->state == chanstate_open && state->timeout != eb_nsecs_zero) {
+            if (c->state == chanstate_open && state->timeout != eb_nsec_zero) {
                 c->state = chanstate_recv;
                 c->unbuf_state = state;
                 c->unbuf_op = op;
@@ -653,7 +653,7 @@ static inline op_result recv_unbuf(const do_state *state, eb_chan_op *op, size_t
                                 /* Reset the channel state back to _open */
                                 c->state = chanstate_open;
                                 /* As long as we're not polling, we should try the op again */
-                                if (state->timeout != eb_nsecs_zero) {
+                                if (state->timeout != eb_nsec_zero) {
                                     result = op_result_retry;
                                 } else {
                                     /* We're not telling the caller to retry, so signal a recv since it can proceed now. */
@@ -719,7 +719,7 @@ static inline op_result try_op(const do_state *state, eb_chan_op *op, size_t op_
     return op_result_next;
 }
 
-eb_chan_op *eb_chan_do_list(eb_nsecs timeout, eb_chan_op *const ops[], size_t nops) {
+eb_chan_op *eb_chan_do_list(eb_nsec timeout, eb_chan_op *const ops[], size_t nops) {
     // TODO: randomize iteration by shuffling input array once (upon entry)
         assert(ops);
     
@@ -745,7 +745,7 @@ eb_chan_op *eb_chan_do_list(eb_nsecs timeout, eb_chan_op *const ops[], size_t no
 //        }
 //    }
     
-    if (timeout == eb_nsecs_zero) {
+    if (timeout == eb_nsec_zero) {
         /* ## timeout == 0: try every op exactly once; if none of them can proceed, return NULL. */
         for (size_t i = 0; i < nops; i++) {
             eb_chan_op *op = ops[i];
@@ -759,7 +759,7 @@ eb_chan_op *eb_chan_do_list(eb_nsecs timeout, eb_chan_op *const ops[], size_t no
         }
     } else {
         /* ## timeout != 0 */
-        eb_nsecs start_time = (timeout != eb_nsecs_forever ? eb_time_now() : 0);
+        eb_nsec start_time = (timeout != eb_nsec_forever ? eb_time_now() : 0);
         for (;;) {
             /* ## Fast path: loop over our operations to see if one of them was able to send/receive. (If not,
                we'll enter the slow path where we put our thread to sleep until we're signaled.) */
@@ -810,10 +810,10 @@ eb_chan_op *eb_chan_do_list(eb_nsecs timeout, eb_chan_op *const ops[], size_t no
                 }
             }
             
-            eb_nsecs wait_timeout = eb_nsecs_forever;
-            if (timeout != eb_nsecs_forever) {
+            eb_nsec wait_timeout = eb_nsec_forever;
+            if (timeout != eb_nsec_forever) {
                 /* If we have a timeout, determine how much time has elapsed, because we may have timed-out. */
-                eb_nsecs elapsed = eb_time_now() - start_time;
+                eb_nsec elapsed = eb_time_now() - start_time;
                 /* Check if we timed-out */
                 if (elapsed < timeout) {
                     wait_timeout = timeout - elapsed;

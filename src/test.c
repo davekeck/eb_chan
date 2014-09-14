@@ -4,7 +4,7 @@
 //    eb_chan_op send = eb_chan_send_op(a, "xxx");
 //    eb_chan_op recv = eb_chan_recv_op(b);
 //    for (;;) {
-//        eb_chan_op *r = eb_chan_do(eb_nsecs_forever, &send, &recv);
+//        eb_chan_op *r = eb_chan_do(eb_nsec_forever, &send, &recv);
 //        if (r == &send) {
 //            printf("send\n");
 //        } else if (r == &recv) {
@@ -210,7 +210,7 @@
 //        eb_chan_op so2 = eb_chan_send_op(s2->sc, (void*)(intptr_t)s2->sv);
 //        eb_chan_op so3 = eb_chan_send_op(s3->sc, (void*)(intptr_t)s3->sv);
 //        
-//        eb_chan_op *r = eb_chan_do(eb_nsecs_forever, &ro0, &ro1, &ro2, &ro3, &so0, &so1, &so2, &so3);
+//        eb_chan_op *r = eb_chan_do(eb_nsec_forever, &ro0, &ro1, &ro2, &ro3, &so0, &so1, &so2, &so3);
 //        
 //        if (r == &ro0) {
 //            v = (int)(intptr_t)r->val;
@@ -430,7 +430,7 @@ void *threadDoSend(void *a)
 void *threadTryRecv(void *a)
 {
     size_t count = 0;
-    eb_nsecs startTime = eb_time_now();
+    eb_nsec startTime = eb_time_now();
     for (;;) {
         if (eb_chan_try_recv(gChan, NULL, NULL)) {
             count++;
@@ -440,7 +440,7 @@ void *threadTryRecv(void *a)
         }
     }
     
-    printf("elapsed: %f (%ju iterations)\n", ((double)(eb_time_now() - startTime) / eb_nsecs_per_sec), (uintmax_t)NTRIALS);
+    printf("elapsed: %f (%ju iterations)\n", ((double)(eb_time_now() - startTime) / eb_nsec_per_sec), (uintmax_t)NTRIALS);
     exit(0);
     return NULL;
 }
@@ -456,7 +456,7 @@ void *threadDoRecv(void *a)
 void *threadTrySend(void *a)
 {
     size_t count = 0;
-    eb_nsecs startTime = eb_time_now();
+    eb_nsec startTime = eb_time_now();
     for (;;) {
         if (eb_chan_try_send(gChan, "hello")) {
             count++;
@@ -465,7 +465,7 @@ void *threadTrySend(void *a)
             }
         }
     }
-    printf("elapsed: %f (%ju iterations)\n", ((double)(eb_time_now() - startTime) / eb_nsecs_per_sec), (uintmax_t)NTRIALS);
+    printf("elapsed: %f (%ju iterations)\n", ((double)(eb_time_now() - startTime) / eb_nsec_per_sec), (uintmax_t)NTRIALS);
     exit(0);
     return NULL;
 }
@@ -481,22 +481,22 @@ void *threadSend(void *a)
 
 void *threadRecv(void *a)
 {
-//    assert(eb_chan_recv(gChan, NULL, eb_nsecs_forever));
-//    eb_nsecs startTime = eb_time_now();
+//    assert(eb_chan_recv(gChan, NULL, eb_nsec_forever));
+//    eb_nsec startTime = eb_time_now();
 //    for (size_t i = 1; i < NTRIALS; i++) {
-//        assert(eb_chan_recv(gChan, NULL, eb_nsecs_forever));
+//        assert(eb_chan_recv(gChan, NULL, eb_nsec_forever));
 //    }
-//    printf("elapsed: %f (%ju iterations)", ((double)(eb_time_now() - startTime) / eb_nsecs_per_sec), (uintmax_t)NTRIALS);
+//    printf("elapsed: %f (%ju iterations)", ((double)(eb_time_now() - startTime) / eb_nsec_per_sec), (uintmax_t)NTRIALS);
 //    exit(0);
 //    return NULL;
     
     eb_chan_recv(gChan, NULL);
-    eb_nsecs startTime = eb_time_now();
+    eb_nsec startTime = eb_time_now();
     for (size_t i = 1; i < NTRIALS; i++) {
         eb_chan_recv(gChan, NULL);
     }
     
-    printf("elapsed: %f (%ju iterations)\n", ((double)(eb_time_now() - startTime) / eb_nsecs_per_sec), (uintmax_t)NTRIALS);
+    printf("elapsed: %f (%ju iterations)\n", ((double)(eb_time_now() - startTime) / eb_nsec_per_sec), (uintmax_t)NTRIALS);
 //    exit(0);//
     return NULL;
 }
@@ -505,14 +505,14 @@ void *thread(void *a)
 {
     eb_chan_op send = eb_chan_send_op(gChan, "hallo");
     eb_chan_op recv = eb_chan_recv_op(gChan);
-    assert(eb_chan_do(eb_nsecs_forever, &send, &recv));
+    assert(eb_chan_do(eb_nsec_forever, &send, &recv));
     
-    eb_nsecs startTime = eb_time_now();
+    eb_nsec startTime = eb_time_now();
     for (size_t i = 1; i < NTRIALS; i++) {
-        assert(eb_chan_do(eb_nsecs_forever, &send, &recv));
+        assert(eb_chan_do(eb_nsec_forever, &send, &recv));
     }
     
-    printf("elapsed: %f (%ju iterations)\n", ((double)(eb_time_now() - startTime) / eb_nsecs_per_sec), (uintmax_t)NTRIALS);
+    printf("elapsed: %f (%ju iterations)\n", ((double)(eb_time_now() - startTime) / eb_nsec_per_sec), (uintmax_t)NTRIALS);
     exit(0);
     return NULL;
 }
@@ -520,9 +520,9 @@ void *thread(void *a)
 void *timeoutTest(void *a)
 {
     eb_chan_op recv = eb_chan_recv_op(gChan);
-    eb_nsecs startTime = eb_time_now();
-    eb_chan_do(2.5 * eb_nsecs_per_sec, &recv);
-    printf("elapsed: %f (%ju iterations)\n", ((double)(eb_time_now() - startTime) / eb_nsecs_per_sec), (uintmax_t)NTRIALS);
+    eb_nsec startTime = eb_time_now();
+    eb_chan_do(2.5 * eb_nsec_per_sec, &recv);
+    printf("elapsed: %f (%ju iterations)\n", ((double)(eb_time_now() - startTime) / eb_nsec_per_sec), (uintmax_t)NTRIALS);
     
     exit(0);
     return NULL;

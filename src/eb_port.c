@@ -47,7 +47,7 @@ static void eb_port_free(eb_port p) {
         eb_spinlock_unlock(&g_port_pool_lock);
         
         if (reset) {
-            eb_port_wait(p, eb_nsecs_zero);
+            eb_port_wait(p, eb_nsec_zero);
         }
         
         /* Now that the port's reset, add it to the pool as long as it'll still fit. */
@@ -144,11 +144,11 @@ void eb_port_signal(eb_port p) {
     }
 }
 
-bool eb_port_wait(eb_port p, eb_nsecs timeout) {
+bool eb_port_wait(eb_port p, eb_nsec timeout) {
     assert(p);
     
     bool result = false;
-    if (timeout == eb_nsecs_zero) {
+    if (timeout == eb_nsec_zero) {
         /* ## Non-blocking */
         #if DARWIN
             kern_return_t r = semaphore_timedwait(p->sem, (mach_timespec_t){0, 0});
@@ -160,7 +160,7 @@ bool eb_port_wait(eb_port p, eb_nsecs timeout) {
                 eb_assert_or_recover(!r || (r == -1 && errno == EAGAIN), eb_no_op);
             result = !r;
         #endif
-    } else if (timeout == eb_nsecs_forever) {
+    } else if (timeout == eb_nsec_forever) {
         /* ## Blocking */
         #if DARWIN
             kern_return_t r;
@@ -175,12 +175,12 @@ bool eb_port_wait(eb_port p, eb_nsecs timeout) {
         #endif
     } else {
         /* ## Actual timeout */
-        eb_nsecs start_time = eb_time_now();
-        eb_nsecs remaining_timeout = timeout;
+        eb_nsec start_time = eb_time_now();
+        eb_nsec remaining_timeout = timeout;
         for (;;) {
             #if DARWIN
                 /* This needs to be in a loop because semaphore_timedwait() can return KERN_ABORTED, e.g. if the process receives a signal. */
-                mach_timespec_t ts = {.tv_sec = (unsigned int)(remaining_timeout / eb_nsecs_per_sec), .tv_nsec = (clock_res_t)(remaining_timeout % eb_nsecs_per_sec)};
+                mach_timespec_t ts = {.tv_sec = (unsigned int)(remaining_timeout / eb_nsec_per_sec), .tv_nsec = (clock_res_t)(remaining_timeout % eb_nsec_per_sec)};
                 kern_return_t r = semaphore_timedwait(p->sem, ts);
                     eb_assert_or_recover(r == KERN_SUCCESS || r == KERN_OPERATION_TIMED_OUT || r == KERN_ABORTED, eb_no_op);
                 
@@ -196,8 +196,8 @@ bool eb_port_wait(eb_port p, eb_nsecs timeout) {
                 struct timespec ts;
                 int r = clock_gettime(CLOCK_REALTIME, &ts);
                     eb_assert_or_recover(!r, break);
-                ts.tv_sec += (remaining_timeout / eb_nsecs_per_sec);
-                ts.tv_nsec += (remaining_timeout % eb_nsecs_per_sec);
+                ts.tv_sec += (remaining_timeout / eb_nsec_per_sec);
+                ts.tv_nsec += (remaining_timeout % eb_nsec_per_sec);
                 r = sem_timedwait(&p->sem, &ts);
                     /* The allowed return cases are: success (r==0), timed-out (r==-1, errno==ETIMEDOUT), (r==-1, errno==EINTR) */
                     eb_assert_or_recover(!r || (r == -1 && (errno == ETIMEDOUT || errno == EINTR)), break);
@@ -210,7 +210,7 @@ bool eb_port_wait(eb_port p, eb_nsecs timeout) {
             #endif
                 
             /* Determine whether we timed-out, and if not, update 'remaining_timeout' with the amount of time to go. */
-            eb_nsecs elapsed = eb_time_now() - start_time;
+            eb_nsec elapsed = eb_time_now() - start_time;
             if (elapsed < timeout) {
                 remaining_timeout = timeout - elapsed;
             } else {
