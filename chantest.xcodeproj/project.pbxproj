@@ -29,6 +29,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		554B630D19CE433D0005385C /* select2.go */ = {isa = PBXFileReference; lastKnownFileType = text; name = select2.go; path = test/select2.go; sourceTree = SOURCE_ROOT; };
 		55501D0919A969750028A9FE /* chantest */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = chantest; sourceTree = BUILT_PRODUCTS_DIR; };
 		55501D0C19A969750028A9FE /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = System/Library/Frameworks/Foundation.framework; sourceTree = SDKROOT; };
 		55501D1219A969750028A9FE /* chantest-Prefix.pch */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "chantest-Prefix.pch"; sourceTree = "<group>"; };
@@ -98,6 +99,7 @@
 				559F511619C40E46005921EE /* testglue.h */,
 				559F511519C40E46005921EE /* testglue.c */,
 				559F510C19C3A223005921EE /* test.c */,
+				554B630D19CE433D0005385C /* select2.go */,
 				55501D1119A969750028A9FE /* Supporting Files */,
 			);
 			path = chantest;
