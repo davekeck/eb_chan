@@ -1,38 +1,29 @@
-#include "eb_chan.h"
-#include <assert.h>
-#include <stdlib.h>
-#include <pthread.h>
-#include <stdio.h>
+// DONE
 
-package main
+// Torture test for goroutines.
+// Make a lot of goroutines, threaded together, and tear them down cleanly.
 
-import (
-	"os"
-	"strconv"
-)
+#include "testglue.h"
 
-func f(left, right chan int) {
-	left <- <-right
+void f(eb_chan left, eb_chan right) {
+    const void *val;
+    assert(eb_chan_recv(right, &val));
+    eb_chan_send(left, val);
 }
 
-func main() {
-	var n = 10000
-	if len(os.Args) > 1 {
-		var err error
-		n, err = strconv.Atoi(os.Args[1])
-		if err != nil {
-			print("bad arg\n")
-			os.Exit(1)
-		}
+int main() {
+	const int n = 2040;
+	eb_chan leftmost = eb_chan_create(0);
+	eb_chan right = leftmost;
+	eb_chan left = leftmost;
+	for (int i = 0; i < n; i++) {
+		right = eb_chan_create(0);
+		go( f(left, right) );
+		left = right;
 	}
-	leftmost := make(chan int)
-	right := leftmost
-	left := leftmost
-	for i := 0; i < n; i++ {
-		right = make(chan int)
-		go f(left, right)
-		left = right
-	}
-	go func(c chan int) { c <- 1 }(right)
-	<-leftmost
+    
+    go (eb_chan_send(right, (void*)1) );
+    eb_chan_recv(leftmost, NULL);
+    
+    return 0;
 }

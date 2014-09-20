@@ -8,5 +8,5 @@ static void *runBlock(VoidBlock b) {
 void spawnThread(VoidBlock b) {
     b = (VoidBlock)Block_copy((void *)b);
     pthread_t t;
-    pthread_create(&t, NULL, (void*)runBlock, b);
+    assert(!pthread_create(&t, NULL, (void*)runBlock, b));
 }
