@@ -206,9 +206,9 @@ static inline void eb_chan_free(eb_chan c) {
 eb_chan eb_chan_create(size_t buf_cap) {
     static const size_t k_init_buf_cap = 16;
     
-    eb_chan c = malloc(sizeof(*c));
+    /* Using calloc so that the bytes are zeroed. */
+    eb_chan c = calloc(1, sizeof(*c));
         eb_assert_or_recover(c, goto failed);
-    memset(c, 0, sizeof(*c));
     
     c->retain_count = 1;
     c->lock = 0;
@@ -266,7 +266,7 @@ void eb_chan_close(eb_chan c) {
         eb_port signal_port = NULL;
         eb_spinlock_lock(&c->lock);
                 eb_assert_or_bail(c->state != chanstate_closed, "Illegal close of already-closed channel.");
-                eb_assert_or_bail(c->state != chanstate_send && c->state != chanstate_ack, "Illegal close of channel while send is in progress.");
+                eb_assert_or_bail(c->state != chanstate_send && c->state != chanstate_ack, "Illegal close of channel with send in progress.");
             
             if (c->state == chanstate_open) {
                 c->state = chanstate_closed;
@@ -275,6 +275,9 @@ void eb_chan_close(eb_chan c) {
                 if (c->unbuf_port) {
                     signal_port = eb_port_retain(c->unbuf_port);
                 }
+                
+                c->state = chanstate_closed;
+                done = true;
             }
         eb_spinlock_unlock(&c->lock);
         
@@ -292,12 +295,12 @@ void eb_chan_close(eb_chan c) {
 }
 
 #pragma mark - Getters -
-size_t eb_chan_get_buf_cap(eb_chan c) {
+size_t eb_chan_buf_cap(eb_chan c) {
     assert(c);
     return c->buf_cap;
 }
 
-size_t eb_chan_get_buf_len(eb_chan c) {
+size_t eb_chan_buf_len(eb_chan c) {
     assert(c);
     
     /* buf_len is only valid if the channel's buffered */
@@ -601,6 +604,8 @@ static inline op_result recv_unbuf(const do_state *state, eb_chan_op *op, size_t
                 /* Set our op's state signifying that we're returning the value due to a closed channel */
                 op->open = false;
                 op->val = NULL;
+                /* We completed this op! */
+                result = op_result_complete;
             } else if (c->state == chanstate_send && c->unbuf_state != state) {
                 /* We verified (immediately above) that the send isn't part of the same op pool (we can't do unbuffered
                    sends/recvs from the same _do() call) */

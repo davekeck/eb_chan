@@ -1,31 +1,20 @@
-// run
-
-// Copyright 2009 The Go Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style
-// license that can be found in the LICENSE file.
+// DONE
 
 // Test the cap predeclared function applied to channels.
 
-package main
+#include "testglue.h"
 
-func main() {
-	c := make(chan int, 10)
-	if len(c) != 0 || cap(c) != 10 {
-		println("chan len/cap ", len(c), cap(c), " want 0 10")
-		panic("fail")
-	}
+int main() {
+	eb_chan c = eb_chan_create(10);
+    assert(eb_chan_buf_len(c) == 0 && eb_chan_buf_cap(c) == 10);
 
-	for i := 0; i < 3; i++ {
-		c <- i
+	for (int i = 0; i < 3; i++) {
+        eb_chan_send(c, (void*)(intptr_t)i);
 	}
-	if len(c) != 3 || cap(c) != 10 {
-		println("chan len/cap ", len(c), cap(c), " want 3 10")
-		panic("fail")
-	}
+    
+    assert(eb_chan_buf_len(c) == 3 && eb_chan_buf_cap(c) == 10);
 
-	c = make(chan int)
-	if len(c) != 0 || cap(c) != 0 {
-		println("chan len/cap ", len(c), cap(c), " want 0 0")
-		panic("fail")
-	}
+	c = eb_chan_create(0);
+    assert(eb_chan_buf_len(c) == 0 && eb_chan_buf_cap(c) == 0);
+    return 0;
 }

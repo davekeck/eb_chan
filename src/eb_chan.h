@@ -22,8 +22,8 @@ void eb_chan_release(eb_chan c);
 void eb_chan_close(eb_chan c);
 
 /* ## Getters */
-size_t eb_chan_get_buf_cap(eb_chan c);
-size_t eb_chan_get_buf_len(eb_chan c);
+size_t eb_chan_buf_cap(eb_chan c);
+size_t eb_chan_buf_len(eb_chan c);
 
 /* ## Performing operations */
 eb_chan_op *eb_chan_do_list(eb_nsec timeout, eb_chan_op *const ops[], size_t nops);

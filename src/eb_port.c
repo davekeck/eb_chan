@@ -94,9 +94,9 @@ eb_port eb_port_create() {
         eb_assert_or_bail(!p->retain_count, "Sanity-check failed");
     } else {
         /* We couldn't get a port out of the pool */
-        p = malloc(sizeof(*p));
+        /* Using calloc so that bytes are zeroed */
+        p = calloc(1, sizeof(*p));
             eb_assert_or_recover(p, goto failed);
-        memset(p, 0, sizeof(*p));
         
         /* Create the semaphore */
         #if DARWIN

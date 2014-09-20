@@ -1,86 +1,80 @@
-// run
-
-// Copyright 2009 The Go Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style
-// license that can be found in the LICENSE file.
+// DONE
 
 // Test the situation in which two cases of a select can
 // both end up running. See http://codereview.appspot.com/180068.
 
-package main
+#include "testglue.h"
 
-import (
-	"flag"
-	"runtime"
-)
-
-var iterations *int = flag.Int("n", 100000, "number of iterations")
+#define iterations 1000
 
 // sender sends a counter to one of four different channels. If two
 // cases both end up running in the same iteration, the same value will be sent
 // to two different channels.
-func sender(n int, c1, c2, c3, c4 chan<- int) {
-	defer close(c1)
-	defer close(c2)
-	defer close(c3)
-	defer close(c4)
-
-	for i := 0; i < n; i++ {
-		select {
-		case c1 <- i:
-		case c2 <- i:
-		case c3 <- i:
-		case c4 <- i:
-		}
+void sender(eb_chan c1, eb_chan c2, eb_chan c3, eb_chan c4) {
+	for (int i = 0; i < iterations; i++) {
+        eb_chan_op o1 = eb_chan_send_op(c1, (void*)(intptr_t)i);
+        eb_chan_op o2 = eb_chan_send_op(c2, (void*)(intptr_t)i);
+        eb_chan_op o3 = eb_chan_send_op(c3, (void*)(intptr_t)i);
+        eb_chan_op o4 = eb_chan_send_op(c4, (void*)(intptr_t)i);
+        assert(eb_chan_do(eb_nsec_forever, &o1, &o2, &o3, &o4));
 	}
+    
+    eb_chan_close(c4);
+    eb_chan_close(c3);
+    eb_chan_close(c2);
+    eb_chan_close(c1);
 }
 
 // mux receives the values from sender and forwards them onto another channel.
 // It would be simpler to just have sender's four cases all be the same
 // channel, but this doesn't actually trigger the bug.
-func mux(out chan<- int, in <-chan int, done chan<- bool) {
-	for v := range in {
-		out <- v
-	}
-	done <- true
+void mux(eb_chan out, eb_chan in, eb_chan done) {
+    for (const void *v; eb_chan_recv(in, &v);) {
+        eb_chan_send(out, v);
+    }
+    
+    eb_chan_send(done, (void*)true);
 }
 
 // recver gets a steam of values from the four mux's and checks for duplicates.
-func recver(in <-chan int) {
-	seen := make(map[int]bool)
-
-	for v := range in {
-		if _, ok := seen[v]; ok {
-			println("got duplicate value: ", v)
-			panic("fail")
-		}
-		seen[v] = true
-	}
+void recver(eb_chan in) {
+    bool *seen = calloc(iterations, sizeof(*seen));
+    
+    for (const void *v; eb_chan_recv(in, &v);) {
+        assert(!seen[(uintptr_t)v]);
+        seen[(uintptr_t)v] = true;
+    }
 }
 
-func main() {
-	runtime.GOMAXPROCS(2)
+void waitForDone(eb_chan done, eb_chan cmux) {
+    eb_chan_recv(done, NULL);
+    eb_chan_recv(done, NULL);
+    eb_chan_recv(done, NULL);
+    eb_chan_recv(done, NULL);
+    eb_chan_close(cmux);
+}
 
-	c1 := make(chan int)
-	c2 := make(chan int)
-	c3 := make(chan int)
-	c4 := make(chan int)
-	done := make(chan bool)
-	cmux := make(chan int)
-	go sender(*iterations, c1, c2, c3, c4)
-	go mux(cmux, c1, done)
-	go mux(cmux, c2, done)
-	go mux(cmux, c3, done)
-	go mux(cmux, c4, done)
-	go func() {
-		<-done
-		<-done
-		<-done
-		<-done
-		close(cmux)
-	}()
+int main() {
+	eb_chan c1 = eb_chan_create(0);
+	eb_chan c2 = eb_chan_create(0);
+	eb_chan c3 = eb_chan_create(0);
+	eb_chan c4 = eb_chan_create(0);
+	eb_chan done = eb_chan_create(0);
+	eb_chan cmux = eb_chan_create(0);
+	go( sender(c1, c2, c3, c4) );
+	go( mux(cmux, c1, done) );
+	go( mux(cmux, c2, done) );
+	go( mux(cmux, c3, done) );
+	go( mux(cmux, c4, done) );
+	go( eb_chan_recv(done, NULL);
+        eb_chan_recv(done, NULL);
+        eb_chan_recv(done, NULL);
+        eb_chan_recv(done, NULL);
+        eb_chan_close(cmux); );
+    
 	// We keep the recver because it might catch more bugs in the future.
 	// However, the result of the bug linked to at the top is that we'll
 	// end up panicking with: "throw: bad g->status in ready".
-	recver(cmux)
+	recver(cmux);
+    return 0;
 }
