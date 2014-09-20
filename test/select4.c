@@ -1,31 +1,24 @@
-// run
-
-// Copyright 2010 The Go Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style
-// license that can be found in the LICENSE file
+// DONE
 
 // Test that a select statement proceeds when a value is ready.
 
-package main
+#include "testglue.h"
 
-func f() *int {
-	println("BUG: called f")
-	return new(int)
-}
-
-func main() {
-	var x struct {
-		a int
-	}
-	c := make(chan int, 1)
-	c1 := make(chan int)
-	c <- 42
-	select {
-	case *f() = <-c1:
-		// nothing
-	case x.a = <-c:
-		if x.a != 42 {
-			println("BUG:", x.a)
-		}
-	}
+int main() {
+	eb_chan c = eb_chan_create(1);
+	eb_chan c1 = eb_chan_create(0);
+    
+    eb_chan_send(c, (void*)42);
+    
+    eb_chan_op c1recv = eb_chan_recv_op(c1);
+    eb_chan_op crecv = eb_chan_recv_op(c);
+    
+    eb_chan_op *r = eb_chan_do(eb_nsec_forever, &c1recv, &crecv);
+    if (r == &crecv) {
+        assert(crecv.val == (void*)42);
+    } else {
+        abort();
+    }
+    
+    return 0;
 }
