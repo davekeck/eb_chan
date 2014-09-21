@@ -32,7 +32,6 @@
 		55501D0919A969750028A9FE /* chantest */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = chantest; sourceTree = BUILT_PRODUCTS_DIR; };
 		55501D0C19A969750028A9FE /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = System/Library/Frameworks/Foundation.framework; sourceTree = SDKROOT; };
 		55501D1219A969750028A9FE /* chantest-Prefix.pch */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "chantest-Prefix.pch"; sourceTree = "<group>"; };
-		55537C0219CEA2F300864295 /* select3.go */ = {isa = PBXFileReference; lastKnownFileType = text; name = select3.go; path = test/select3.go; sourceTree = SOURCE_ROOT; };
 		559F510319C3A223005921EE /* eb_assert.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = eb_assert.c; path = src/eb_assert.c; sourceTree = SOURCE_ROOT; };
 		559F510419C3A223005921EE /* eb_assert.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = eb_assert.h; path = src/eb_assert.h; sourceTree = SOURCE_ROOT; };
 		559F510519C3A223005921EE /* eb_atomic.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = eb_atomic.h; path = src/eb_atomic.h; sourceTree = SOURCE_ROOT; };
@@ -45,6 +44,7 @@
 		559F510C19C3A223005921EE /* test.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = test.c; path = src/test.c; sourceTree = SOURCE_ROOT; };
 		559F511519C40E46005921EE /* testglue.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = testglue.c; path = test/testglue.c; sourceTree = SOURCE_ROOT; };
 		559F511619C40E46005921EE /* testglue.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = testglue.h; path = test/testglue.h; sourceTree = SOURCE_ROOT; };
+		55D2EA4719CF737C0053E832 /* nonblock.go */ = {isa = PBXFileReference; lastKnownFileType = text; name = nonblock.go; path = test/nonblock.go; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -99,7 +99,7 @@
 				559F511619C40E46005921EE /* testglue.h */,
 				559F511519C40E46005921EE /* testglue.c */,
 				559F510C19C3A223005921EE /* test.c */,
-				55537C0219CEA2F300864295 /* select3.go */,
+				55D2EA4719CF737C0053E832 /* nonblock.go */,
 				55501D1119A969750028A9FE /* Supporting Files */,
 			);
 			path = chantest;

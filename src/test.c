@@ -1,212 +1,287 @@
-// run
+// DONE
 
-// Test the semantics of the select statement
-// for basic empty/non-empty cases.
+// Test channel operations that test for blocking.
+// Use several sizes and types of operands.
 
 #include "testglue.h"
 
-const char *const always = "function did not";
-const char *const never = "function did";
-
-void unreachable() {
-    abort();
-}
-
-typedef void(^VoidBlock)();
-
-// Calls f and verifies that f always/never panics depending on signal.
-void testPanic(const char *signal, VoidBlock f) {
-	f();
-    usleep(100000); //allow signal to be handled
-    
-    if (signal == always) {
-        fprintf(stderr, "We should have panicked but we didn't!\n");
-        exit(1);
-    }
-}
-
-
-// Calls f and empirically verifies that f always/never blocks depending on signal.
-void testBlock(const char *signal, VoidBlock f) {
-	eb_chan c = eb_chan_create(0);
-	go(
-		f();
-        eb_chan_send(c, never); // f didn't block
-	);
-	
-    go(
-        usleep(100000); // 0.1s seems plenty long
-        eb_chan_send(c, always); // f blocked always
-	);
-    
+void i32receiver(eb_chan c, eb_chan strobe) {
     const void *v;
     assert(eb_chan_recv(c, &v));
+    assert(v == (void*)123);
     
-    if (v != signal) {
-        char msg[256];
-        snprintf(msg, sizeof(msg), "%s block", signal);
-        abort();
-    }
+    eb_chan_send(strobe, (void*)true);
 }
 
+void i32sender(eb_chan c, eb_chan strobe) {
+    eb_chan_send(c, (void*)234);
+    eb_chan_send(strobe, (void*)true);
+}
+
+void i64receiver(eb_chan c, eb_chan strobe) {
+    const void *v;
+    assert(eb_chan_recv(c, &v));
+    assert(v == (void*)123456);
+    
+    eb_chan_send(strobe, (void*)true);
+}
+
+void i64sender(eb_chan c, eb_chan strobe) {
+    eb_chan_send(c, (void*)234567);
+    eb_chan_send(strobe, (void*)true);
+}
+
+void breceiver(eb_chan c, eb_chan strobe) {
+    const void *v;
+    assert(eb_chan_recv(c, &v));
+    assert(v == (void*)true);
+    
+    eb_chan_send(strobe, (void*)true);
+}
+
+void bsender(eb_chan c, eb_chan strobe) {
+    eb_chan_send(c, (void*)true);
+    eb_chan_send(strobe, (void*)true);
+}
+
+void sreceiver(eb_chan c, eb_chan strobe) {
+    const void *v;
+    assert(eb_chan_recv(c, &v));
+    assert(!strcmp(v, "hello"));
+    
+    eb_chan_send(strobe, (void*)true);
+}
+
+void ssender(eb_chan c, eb_chan strobe) {
+    eb_chan_send(c, (void*)"hello again");
+    eb_chan_send(strobe, (void*)true);
+}
+
+void mysleep() {
+    usleep(10);
+    usleep(10);
+    usleep(10);
+}
+
+static const int maxTries = 10000; // Up to 100ms per test.
 
 int main() {
-	const int async = 1; // asynchronous channels
-    eb_chan nilch = NULL;
-	eb_chan closedch = eb_chan_create(0);
-    eb_chan_close(closedch);
+    int32_t i32;
+    int64_t i64;
+    bool b;
+    const char *s;
+    eb_chan sync = eb_chan_create(0);
 
-	// sending/receiving from a nil channel blocks
-	testBlock(always, ^{
-        eb_chan_send(nilch, (void*)7);
-	});
-	testBlock(always, ^{
-        eb_chan_recv(nilch, NULL);
-	});
-
-	// sending/receiving from a nil channel inside a select is never selected
-	testPanic(never, ^{
-        eb_chan_op nilchsend = eb_chan_send_op(NULL, (void*)7);
-        eb_chan_op *r = eb_chan_do(eb_nsec_zero, &nilchsend);
-        if (r == &nilchsend) {
-            unreachable();
-        } else {
-            // OK
-        }
-	});
-    
-	testPanic(never, ^{
-        eb_chan_op nilchrecv = eb_chan_recv_op(NULL);
-        eb_chan_op *r = eb_chan_do(eb_nsec_zero, &nilchrecv);
-        if (r == &nilchrecv) {
-            unreachable();
-        } else {
-            // OK
-        }
-	});
-
-	// sending to an async channel with free buffer space never blocks
-	testBlock(never, ^{
-		eb_chan ch = eb_chan_create(async);
-        eb_chan_send(ch, (void*)7);
-	});
-
-	// receiving from a closed channel never blocks
-	testBlock(never, ^{
-		for (int i = 0; i < 10; i++) {
-            
-            if (eb_chan_recv(closedch, NULL)) {
-				abort();
-			}
-            
-			if (eb_chan_recv(closedch, NULL)) {
-				abort();
-			}
-		}
-	});
-    
-	// receiving from a non-ready channel always blocks
-	testBlock(always, ^{
-		eb_chan ch = eb_chan_create(0);
-        eb_chan_recv(ch, NULL);
-	});
-
-	// empty selects always block
-	testBlock(always, ^{
-        eb_chan_do(eb_nsec_forever);
-	});
-
-	// selects with only nil channels always block
-	testBlock(always, ^{
-        eb_chan_op nilchrecv = eb_chan_recv_op(nilch);
-        eb_chan_do(eb_nsec_forever, &nilchrecv);
-        unreachable();
-	});
-	testBlock(always, ^{
-        eb_chan_op nilchsend = eb_chan_send_op(nilch, (void*)7);
-        eb_chan_do(eb_nsec_forever, &nilchsend);
-        unreachable();
-	});
-	testBlock(always, ^{
-        eb_chan_op nilchrecv = eb_chan_recv_op(nilch);
-        eb_chan_op nilchsend = eb_chan_send_op(nilch, (void*)7);
-        eb_chan_do(eb_nsec_forever, &nilchrecv, &nilchsend);
-        unreachable();
-	});
-
-	// selects with non-ready non-nil channels always block
-	testBlock(always, ^{
-		eb_chan ch = eb_chan_create(0);
-        eb_chan_op recvop = eb_chan_recv_op(ch);
-        eb_chan_do(eb_nsec_forever, &recvop);
-        unreachable();
-	});
-
-	// selects with default cases don't block
-	testBlock(never, ^{
-        eb_chan_do(eb_nsec_zero);
-	});
-	testBlock(never, ^{
-        eb_chan_op nilchrecv = eb_chan_recv_op(nilch);
-        eb_chan_do(eb_nsec_zero, &nilchrecv);
-	});
-	testBlock(never, ^{
-        eb_chan_op nilchsend = eb_chan_send_op(nilch, (void*)7);
-        eb_chan_do(eb_nsec_zero, &nilchsend);
-	});
-
-	// selects with ready channels don't block
-	testBlock(never, ^{
-		eb_chan ch = eb_chan_create(async);
-        eb_chan_op sendop = eb_chan_send_op(ch, (void*)7);
-        eb_chan_op *r = eb_chan_do(eb_nsec_zero, &sendop);
-        if (r == &sendop) {
-            // OK
-        } else {
-            unreachable();
-        }
-	});
-	testBlock(never, ^{
-		eb_chan ch = eb_chan_create(async);
-        eb_chan_send(ch, (void*)7);
+	for (int buffer = 0; buffer < 2; buffer++) {
+		eb_chan c32 = eb_chan_create(buffer);
+		eb_chan c64 = eb_chan_create(buffer);
+		eb_chan cb = eb_chan_create(buffer);
+		eb_chan cs = eb_chan_create(buffer);
         
-        eb_chan_op recvop = eb_chan_recv_op(ch);
-        eb_chan_op *r = eb_chan_do(eb_nsec_zero, &recvop);
-        if (r == &recvop) {
-            // OK
+        eb_chan_op c32recv = eb_chan_op_recv(c32);
+        eb_chan_op *r32 = eb_chan_do(eb_nsec_zero, &c32recv);
+        if (r32 == &c32recv) {
+            abort();
         } else {
-            unreachable();
+            // OK
         }
-	});
+        
+        eb_chan_op c64recv = eb_chan_op_recv(c64);
+        eb_chan_op *r64 = eb_chan_do(eb_nsec_zero, &c64recv);
+        if (r64 == &c64recv) {
+            abort();
+        } else {
+            // OK
+        }
+        
+        eb_chan_op cbrecv = eb_chan_op_recv(cb);
+        eb_chan_op *rb = eb_chan_do(eb_nsec_zero, &cbrecv);
+        if (rb == &cbrecv) {
+            abort();
+        } else {
+            // OK
+        }
+        
+        eb_chan_op csrecv = eb_chan_op_recv(cs);
+        eb_chan_op *rs = eb_chan_do(eb_nsec_zero, &csrecv);
+        if (rs == &csrecv) {
+            abort();
+        } else {
+            // OK
+        }
+        
+		go( i32receiver(c32, sync) );
+		int try = 0;
+	Send32:
+		for (;;) {
+            eb_chan_op send = eb_chan_op_send(c32, (void*)123);
+            eb_chan_op *r = eb_chan_do(eb_nsec_zero, &send);
+            
+            if (r == &send) {
+                break;
+            } else {
+				try++;
+                assert(try <= maxTries);
+				mysleep();
+            }
+		}
+        
+        eb_chan_recv(sync, NULL);
 
-	// selects with closed channels behave like ordinary operations
-	testBlock(never, ^{
-        eb_chan_op recvop = eb_chan_recv_op(closedch);
-        assert(eb_chan_do(eb_nsec_forever, &recvop) == &recvop);
-        assert(!recvop.open);
-	});
+		go( i32sender(c32, sync) );
+		if (buffer > 0) {
+            eb_chan_recv(sync, NULL);
+		}
+		try = 0;
+	Recv32:
+		for (;;) {
+            eb_chan_op recv = eb_chan_op_recv(c32);
+            eb_chan_op *r = eb_chan_do(eb_nsec_zero, &recv);
+            
+            if (r == &recv) {
+                assert(recv.open);
+                i32 = (int32_t)(intptr_t)recv.val;
+                break;
+            } else {
+				try++;
+                assert(try <= maxTries);
+				mysleep();
+            }
+		}
+        
+        assert(i32 == 234);
+        
+		if (buffer == 0) {
+            eb_chan_recv(sync, NULL);
+		}
 
-	// select should not get confused if it sees itself
-	testBlock(always, ^{
-		eb_chan c = eb_chan_create(0);
-        eb_chan_op sendop = eb_chan_send_op(c, (void*)1);
-        eb_chan_op recvop = eb_chan_recv_op(c);
-        eb_chan_do(eb_nsec_forever, &sendop, &recvop);
-        unreachable();
-	});
-    
-    
-    // test panicing behavior (uncomment one of these blocks)
-//	testPanic(always, ^{
-//        eb_chan_op sendop = eb_chan_send_op(closedch, (void*)7);
-//        eb_chan_do(eb_nsec_zero, &sendop);
-//	});
-    
-//	// sending to a closed channel panics.
-//	testPanic(always, ^{
-//        eb_chan_send(closedch, (void*)7);
-//	});
-    
-    
+		go( i64receiver(c64, sync) );
+		try = 0;
+	Send64:
+		for (;;) {
+            eb_chan_op send = eb_chan_op_send(c64, (void*)123456);
+            eb_chan_op *r = eb_chan_do(eb_nsec_zero, &send);
+            
+            if (r == &send) {
+                break;
+            } else {
+				try++;
+                assert(try <= maxTries);
+				mysleep();
+            }
+		}
+        
+		eb_chan_recv(sync, NULL);
+
+		go( i64sender(c64, sync) );
+		if (buffer > 0) {
+            eb_chan_recv(sync, NULL);
+		}
+		try = 0;
+	Recv64:
+		for (;;) {
+            eb_chan_op recv = eb_chan_op_recv(c64);
+            eb_chan_op *r = eb_chan_do(eb_nsec_zero, &recv);
+            
+            if (r == &recv) {
+                assert(recv.open);
+                i64 = (int64_t)(intptr_t)recv.val;
+                break;
+            } else {
+				try++;
+                assert(try <= maxTries);
+				mysleep();
+            }
+		}
+        assert(i64 == 234567);
+        
+		if (buffer == 0) {
+			eb_chan_recv(sync, NULL);
+		}
+
+		go( breceiver(cb, sync) );
+		try = 0;
+	SendBool:
+		for (;;) {
+            eb_chan_op send = eb_chan_op_send(cb, (void*)true);
+            eb_chan_op *r = eb_chan_do(eb_nsec_zero, &send);
+            
+            if (r == &send) {
+                break;
+            } else {
+				try++;
+                assert(try <= maxTries);
+				mysleep();
+            }
+		}
+		eb_chan_recv(sync, NULL);
+
+		go( bsender(cb, sync) );
+		if (buffer > 0) {
+			eb_chan_recv(sync, NULL);
+		}
+		try = 0;
+	RecvBool:
+		for (;;) {
+            eb_chan_op recv = eb_chan_op_recv(cb);
+            eb_chan_op *r = eb_chan_do(eb_nsec_zero, &recv);
+            
+            if (r == &recv) {
+                assert(recv.open);
+                b = (bool)(intptr_t)recv.val;
+                break;
+            } else {
+				try++;
+                assert(try <= maxTries);
+				mysleep();
+            }
+		}
+        assert(b);
+		if (buffer == 0) {
+			eb_chan_recv(sync, NULL);
+		}
+
+		go( sreceiver(cs, sync) );
+		try = 0;
+	SendString:
+		for (;;) {
+            eb_chan_op send = eb_chan_op_send(cs, (void*)"hello");
+            eb_chan_op *r = eb_chan_do(eb_nsec_zero, &send);
+            
+            if (r == &send) {
+                break;
+            } else {
+				try++;
+                assert(try <= maxTries);
+				mysleep();
+            }
+		}
+		eb_chan_recv(sync, NULL);
+
+		go( ssender(cs, sync) );
+		if (buffer > 0) {
+			eb_chan_recv(sync, NULL);
+		}
+		try = 0;
+	RecvString:
+		for (;;) {
+            eb_chan_op recv = eb_chan_op_recv(cs);
+            eb_chan_op *r = eb_chan_do(eb_nsec_zero, &recv);
+            
+            if (r == &recv) {
+                assert(recv.open);
+                s = (const char *)recv.val;
+                break;
+            } else {
+				try++;
+                assert(try <= maxTries);
+				mysleep();
+            }
+		}
+        assert(!strcmp(s, "hello again"));
+		if (buffer == 0) {
+			eb_chan_recv(sync, NULL);
+		}
+	}
     return 0;
 }

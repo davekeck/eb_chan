@@ -1,282 +1,287 @@
-// run
-
-// Copyright 2009 The Go Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style
-// license that can be found in the LICENSE file.
+// DONE
 
 // Test channel operations that test for blocking.
 // Use several sizes and types of operands.
 
-package main
+#include "testglue.h"
 
-import "runtime"
-import "time"
-
-func i32receiver(c chan int32, strobe chan bool) {
-	if <-c != 123 {
-		panic("i32 value")
-	}
-	strobe <- true
+void i32receiver(eb_chan c, eb_chan strobe) {
+    const void *v;
+    assert(eb_chan_recv(c, &v));
+    assert(v == (void*)123);
+    
+    eb_chan_send(strobe, (void*)true);
 }
 
-func i32sender(c chan int32, strobe chan bool) {
-	c <- 234
-	strobe <- true
+void i32sender(eb_chan c, eb_chan strobe) {
+    eb_chan_send(c, (void*)234);
+    eb_chan_send(strobe, (void*)true);
 }
 
-func i64receiver(c chan int64, strobe chan bool) {
-	if <-c != 123456 {
-		panic("i64 value")
-	}
-	strobe <- true
+void i64receiver(eb_chan c, eb_chan strobe) {
+    const void *v;
+    assert(eb_chan_recv(c, &v));
+    assert(v == (void*)123456);
+    
+    eb_chan_send(strobe, (void*)true);
 }
 
-func i64sender(c chan int64, strobe chan bool) {
-	c <- 234567
-	strobe <- true
+void i64sender(eb_chan c, eb_chan strobe) {
+    eb_chan_send(c, (void*)234567);
+    eb_chan_send(strobe, (void*)true);
 }
 
-func breceiver(c chan bool, strobe chan bool) {
-	if !<-c {
-		panic("b value")
-	}
-	strobe <- true
+void breceiver(eb_chan c, eb_chan strobe) {
+    const void *v;
+    assert(eb_chan_recv(c, &v));
+    assert(v == (void*)true);
+    
+    eb_chan_send(strobe, (void*)true);
 }
 
-func bsender(c chan bool, strobe chan bool) {
-	c <- true
-	strobe <- true
+void bsender(eb_chan c, eb_chan strobe) {
+    eb_chan_send(c, (void*)true);
+    eb_chan_send(strobe, (void*)true);
 }
 
-func sreceiver(c chan string, strobe chan bool) {
-	if <-c != "hello" {
-		panic("s value")
-	}
-	strobe <- true
+void sreceiver(eb_chan c, eb_chan strobe) {
+    const void *v;
+    assert(eb_chan_recv(c, &v));
+    assert(!strcmp(v, "hello"));
+    
+    eb_chan_send(strobe, (void*)true);
 }
 
-func ssender(c chan string, strobe chan bool) {
-	c <- "hello again"
-	strobe <- true
+void ssender(eb_chan c, eb_chan strobe) {
+    eb_chan_send(c, (void*)"hello again");
+    eb_chan_send(strobe, (void*)true);
 }
 
-var ticker = time.Tick(10 * 1000) // 10 us
-func sleep() {
-	<-ticker
-	<-ticker
-	runtime.Gosched()
-	runtime.Gosched()
-	runtime.Gosched()
+void mysleep() {
+    usleep(10);
+    usleep(10);
+    usleep(10);
 }
 
-const maxTries = 10000 // Up to 100ms per test.
+static const int maxTries = 10000; // Up to 100ms per test.
 
-func main() {
-	var i32 int32
-	var i64 int64
-	var b bool
-	var s string
+int main() {
+    int32_t i32;
+    int64_t i64;
+    bool b;
+    const char *s;
+    eb_chan sync = eb_chan_create(0);
 
-	var sync = make(chan bool)
-
-	for buffer := 0; buffer < 2; buffer++ {
-		c32 := make(chan int32, buffer)
-		c64 := make(chan int64, buffer)
-		cb := make(chan bool, buffer)
-		cs := make(chan string, buffer)
-
-		select {
-		case i32 = <-c32:
-			panic("blocked i32sender")
-		default:
-		}
-
-		select {
-		case i64 = <-c64:
-			panic("blocked i64sender")
-		default:
-		}
-
-		select {
-		case b = <-cb:
-			panic("blocked bsender")
-		default:
-		}
-
-		select {
-		case s = <-cs:
-			panic("blocked ssender")
-		default:
-		}
-
-		go i32receiver(c32, sync)
-		try := 0
+	for (int buffer = 0; buffer < 2; buffer++) {
+		eb_chan c32 = eb_chan_create(buffer);
+		eb_chan c64 = eb_chan_create(buffer);
+		eb_chan cb = eb_chan_create(buffer);
+		eb_chan cs = eb_chan_create(buffer);
+        
+        eb_chan_op c32recv = eb_chan_op_recv(c32);
+        eb_chan_op *r32 = eb_chan_do(eb_nsec_zero, &c32recv);
+        if (r32 == &c32recv) {
+            abort();
+        } else {
+            // OK
+        }
+        
+        eb_chan_op c64recv = eb_chan_op_recv(c64);
+        eb_chan_op *r64 = eb_chan_do(eb_nsec_zero, &c64recv);
+        if (r64 == &c64recv) {
+            abort();
+        } else {
+            // OK
+        }
+        
+        eb_chan_op cbrecv = eb_chan_op_recv(cb);
+        eb_chan_op *rb = eb_chan_do(eb_nsec_zero, &cbrecv);
+        if (rb == &cbrecv) {
+            abort();
+        } else {
+            // OK
+        }
+        
+        eb_chan_op csrecv = eb_chan_op_recv(cs);
+        eb_chan_op *rs = eb_chan_do(eb_nsec_zero, &csrecv);
+        if (rs == &csrecv) {
+            abort();
+        } else {
+            // OK
+        }
+        
+		go( i32receiver(c32, sync) );
+		int try = 0;
 	Send32:
-		for {
-			select {
-			case c32 <- 123:
-				break Send32
-			default:
-				try++
-				if try > maxTries {
-					println("i32receiver buffer=", buffer)
-					panic("fail")
-				}
-				sleep()
-			}
+		for (;;) {
+            eb_chan_op send = eb_chan_op_send(c32, (void*)123);
+            eb_chan_op *r = eb_chan_do(eb_nsec_zero, &send);
+            
+            if (r == &send) {
+                break;
+            } else {
+				try++;
+                assert(try <= maxTries);
+				mysleep();
+            }
 		}
-		<-sync
+        
+        eb_chan_recv(sync, NULL);
 
-		go i32sender(c32, sync)
-		if buffer > 0 {
-			<-sync
+		go( i32sender(c32, sync) );
+		if (buffer > 0) {
+            eb_chan_recv(sync, NULL);
 		}
-		try = 0
+		try = 0;
 	Recv32:
-		for {
-			select {
-			case i32 = <-c32:
-				break Recv32
-			default:
-				try++
-				if try > maxTries {
-					println("i32sender buffer=", buffer)
-					panic("fail")
-				}
-				sleep()
-			}
+		for (;;) {
+            eb_chan_op recv = eb_chan_op_recv(c32);
+            eb_chan_op *r = eb_chan_do(eb_nsec_zero, &recv);
+            
+            if (r == &recv) {
+                assert(recv.open);
+                i32 = (int32_t)(intptr_t)recv.val;
+                break;
+            } else {
+				try++;
+                assert(try <= maxTries);
+				mysleep();
+            }
 		}
-		if i32 != 234 {
-			panic("i32sender value")
-		}
-		if buffer == 0 {
-			<-sync
+        
+        assert(i32 == 234);
+        
+		if (buffer == 0) {
+            eb_chan_recv(sync, NULL);
 		}
 
-		go i64receiver(c64, sync)
-		try = 0
+		go( i64receiver(c64, sync) );
+		try = 0;
 	Send64:
-		for {
-			select {
-			case c64 <- 123456:
-				break Send64
-			default:
-				try++
-				if try > maxTries {
-					panic("i64receiver")
-				}
-				sleep()
-			}
+		for (;;) {
+            eb_chan_op send = eb_chan_op_send(c64, (void*)123456);
+            eb_chan_op *r = eb_chan_do(eb_nsec_zero, &send);
+            
+            if (r == &send) {
+                break;
+            } else {
+				try++;
+                assert(try <= maxTries);
+				mysleep();
+            }
 		}
-		<-sync
+        
+		eb_chan_recv(sync, NULL);
 
-		go i64sender(c64, sync)
-		if buffer > 0 {
-			<-sync
+		go( i64sender(c64, sync) );
+		if (buffer > 0) {
+            eb_chan_recv(sync, NULL);
 		}
-		try = 0
+		try = 0;
 	Recv64:
-		for {
-			select {
-			case i64 = <-c64:
-				break Recv64
-			default:
-				try++
-				if try > maxTries {
-					panic("i64sender")
-				}
-				sleep()
-			}
+		for (;;) {
+            eb_chan_op recv = eb_chan_op_recv(c64);
+            eb_chan_op *r = eb_chan_do(eb_nsec_zero, &recv);
+            
+            if (r == &recv) {
+                assert(recv.open);
+                i64 = (int64_t)(intptr_t)recv.val;
+                break;
+            } else {
+				try++;
+                assert(try <= maxTries);
+				mysleep();
+            }
 		}
-		if i64 != 234567 {
-			panic("i64sender value")
-		}
-		if buffer == 0 {
-			<-sync
+        assert(i64 == 234567);
+        
+		if (buffer == 0) {
+			eb_chan_recv(sync, NULL);
 		}
 
-		go breceiver(cb, sync)
-		try = 0
+		go( breceiver(cb, sync) );
+		try = 0;
 	SendBool:
-		for {
-			select {
-			case cb <- true:
-				break SendBool
-			default:
-				try++
-				if try > maxTries {
-					panic("breceiver")
-				}
-				sleep()
-			}
+		for (;;) {
+            eb_chan_op send = eb_chan_op_send(cb, (void*)true);
+            eb_chan_op *r = eb_chan_do(eb_nsec_zero, &send);
+            
+            if (r == &send) {
+                break;
+            } else {
+				try++;
+                assert(try <= maxTries);
+				mysleep();
+            }
 		}
-		<-sync
+		eb_chan_recv(sync, NULL);
 
-		go bsender(cb, sync)
-		if buffer > 0 {
-			<-sync
+		go( bsender(cb, sync) );
+		if (buffer > 0) {
+			eb_chan_recv(sync, NULL);
 		}
-		try = 0
+		try = 0;
 	RecvBool:
-		for {
-			select {
-			case b = <-cb:
-				break RecvBool
-			default:
-				try++
-				if try > maxTries {
-					panic("bsender")
-				}
-				sleep()
-			}
+		for (;;) {
+            eb_chan_op recv = eb_chan_op_recv(cb);
+            eb_chan_op *r = eb_chan_do(eb_nsec_zero, &recv);
+            
+            if (r == &recv) {
+                assert(recv.open);
+                b = (bool)(intptr_t)recv.val;
+                break;
+            } else {
+				try++;
+                assert(try <= maxTries);
+				mysleep();
+            }
 		}
-		if !b {
-			panic("bsender value")
-		}
-		if buffer == 0 {
-			<-sync
+        assert(b);
+		if (buffer == 0) {
+			eb_chan_recv(sync, NULL);
 		}
 
-		go sreceiver(cs, sync)
-		try = 0
+		go( sreceiver(cs, sync) );
+		try = 0;
 	SendString:
-		for {
-			select {
-			case cs <- "hello":
-				break SendString
-			default:
-				try++
-				if try > maxTries {
-					panic("sreceiver")
-				}
-				sleep()
-			}
+		for (;;) {
+            eb_chan_op send = eb_chan_op_send(cs, (void*)"hello");
+            eb_chan_op *r = eb_chan_do(eb_nsec_zero, &send);
+            
+            if (r == &send) {
+                break;
+            } else {
+				try++;
+                assert(try <= maxTries);
+				mysleep();
+            }
 		}
-		<-sync
+		eb_chan_recv(sync, NULL);
 
-		go ssender(cs, sync)
-		if buffer > 0 {
-			<-sync
+		go( ssender(cs, sync) );
+		if (buffer > 0) {
+			eb_chan_recv(sync, NULL);
 		}
-		try = 0
+		try = 0;
 	RecvString:
-		for {
-			select {
-			case s = <-cs:
-				break RecvString
-			default:
-				try++
-				if try > maxTries {
-					panic("ssender")
-				}
-				sleep()
-			}
+		for (;;) {
+            eb_chan_op recv = eb_chan_op_recv(cs);
+            eb_chan_op *r = eb_chan_do(eb_nsec_zero, &recv);
+            
+            if (r == &recv) {
+                assert(recv.open);
+                s = (const char *)recv.val;
+                break;
+            } else {
+				try++;
+                assert(try <= maxTries);
+				mysleep();
+            }
 		}
-		if s != "hello again" {
-			panic("ssender value")
-		}
-		if buffer == 0 {
-			<-sync
+        assert(!strcmp(s, "hello again"));
+		if (buffer == 0) {
+			eb_chan_recv(sync, NULL);
 		}
 	}
+    return 0;
 }

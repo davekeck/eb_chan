@@ -34,26 +34,26 @@ eb_chan_op *eb_chan_do_list(eb_nsec timeout, eb_chan_op *const ops[], size_t nop
     eb_chan_do_list(timeout, eb_chan_do_ops, (sizeof(eb_chan_do_ops) / sizeof(*eb_chan_do_ops)));   \
 })
 
-static inline eb_chan_op eb_chan_send_op(eb_chan c, const void *val) {
+static inline eb_chan_op eb_chan_op_send(eb_chan c, const void *val) {
     return (eb_chan_op){.chan = c, .send = true, .open = false, .val = val};
 }
 
-static inline eb_chan_op eb_chan_recv_op(eb_chan c) {
+static inline eb_chan_op eb_chan_op_recv(eb_chan c) {
     return (eb_chan_op){.chan = c, .send = false, .open = false, .val = NULL};
 }
 
 static inline void eb_chan_send(eb_chan c, const void *val) {
-    eb_chan_op op = eb_chan_send_op(c, val);
+    eb_chan_op op = eb_chan_op_send(c, val);
     assert(eb_chan_do(eb_nsec_forever, &op));
 }
 
 static inline bool eb_chan_try_send(eb_chan c, const void *val) {
-    eb_chan_op op = eb_chan_send_op(c, val);
+    eb_chan_op op = eb_chan_op_send(c, val);
     return (eb_chan_do(eb_nsec_zero, &op) != NULL);
 }
 
 static inline bool eb_chan_recv(eb_chan c, const void **val) {
-    eb_chan_op op = eb_chan_recv_op(c);
+    eb_chan_op op = eb_chan_op_recv(c);
     assert(eb_chan_do(eb_nsec_forever, &op));
     if (val) {
         *val = op.val;
@@ -62,7 +62,7 @@ static inline bool eb_chan_recv(eb_chan c, const void **val) {
 }
 
 static inline bool eb_chan_try_recv(eb_chan c, bool *open, const void **val) {
-    eb_chan_op op = eb_chan_recv_op(c);
+    eb_chan_op op = eb_chan_op_recv(c);
     bool result = (eb_chan_do(eb_nsec_zero, &op) != NULL);
     if (result) {
         if (open) {
