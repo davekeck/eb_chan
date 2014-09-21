@@ -1,8 +1,4 @@
-// run
-
-// Copyright 2011 The Go Authors.  All rights reserved.
-// Use of this source code is governed by a BSD-style
-// license that can be found in the LICENSE file.
+// DONE
 
 // Test for select: Issue 2075
 // A bug in select corrupts channel queues of failed cases
@@ -11,24 +7,34 @@
 // on the channel without draining it first then those waiters
 // will never wake up. In the code below c1 is such a channel.
 
-package main
+#include "testglue.h"
 
-func main() {
-	c1 := make(chan bool)
-	c2 := make(chan bool)
-	c3 := make(chan bool)
-	go func() { <-c1 }()
-	go func() {
-		select {
-		case <-c1:
-			panic("dummy")
-		case <-c2:
-			c3 <- true
-		}
-		<-c1
-	}()
-	go func() { c2 <- true }()
-	<-c3
-	c1 <- true
-	c1 <- true
+int main() {
+	eb_chan c1 = eb_chan_create(0);
+	eb_chan c2 = eb_chan_create(0);
+	eb_chan c3 = eb_chan_create(0);
+    
+    go( eb_chan_recv(c1, NULL) );
+    
+    go(
+        eb_chan_op c1recv = eb_chan_recv_op(c1);
+        eb_chan_op c2recv = eb_chan_recv_op(c2);
+        eb_chan_op *r = eb_chan_do(eb_nsec_forever, &c1recv, &c2recv);
+        if (r == &c1recv) {
+            abort();
+        } else if (r == &c2recv) {
+            eb_chan_send(c3, (void*)true);
+        } else {
+            abort();
+        }
+        
+        assert(eb_chan_recv(c1, NULL));
+    );
+    
+    go( eb_chan_send(c2, (void*)true) );
+    assert(eb_chan_recv(c3, NULL));
+    
+    eb_chan_send(c1, (void*)true);
+    eb_chan_send(c1, (void*)true);
+    return 0;
 }
