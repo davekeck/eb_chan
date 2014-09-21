@@ -1,224 +1,212 @@
-// run
-
-// Copyright 2010 The Go Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style
-// license that can be found in the LICENSE file.
+// DONE
 
 // Test the semantics of the select statement
 // for basic empty/non-empty cases.
 
-package main
+#include "testglue.h"
 
-import "time"
+const char *const always = "function did not";
+const char *const never = "function did";
 
-const always = "function did not"
-const never = "function did"
-
-
-func unreachable() {
-	panic("control flow shouldn't reach here")
+void unreachable() {
+    abort();
 }
 
+typedef void(^VoidBlock)();
 
 // Calls f and verifies that f always/never panics depending on signal.
-func testPanic(signal string, f func()) {
-	defer func() {
-		s := never
-		if recover() != nil {
-			s = always // f panicked
-		}
-		if s != signal {
-			panic(signal + " panic")
-		}
-	}()
-	f()
+void testPanic(const char *signal, VoidBlock f) {
+	f();
+    usleep(100000); //allow signal to be handled
+    
+    if (signal == always) {
+        fprintf(stderr, "We should have panicked but we didn't!\n");
+        exit(1);
+    }
 }
 
 
 // Calls f and empirically verifies that f always/never blocks depending on signal.
-func testBlock(signal string, f func()) {
-	c := make(chan string)
-	go func() {
-		f()
-		c <- never // f didn't block
-	}()
-	go func() {
-		time.Sleep(1e8) // 0.1s seems plenty long
-		c <- always     // f blocked always
-	}()
-	if <-c != signal {
-		panic(signal + " block")
-	}
+void testBlock(const char *signal, VoidBlock f) {
+	eb_chan c = eb_chan_create(0);
+	go(
+		f();
+        eb_chan_send(c, never); // f didn't block
+	);
+	
+    go(
+        usleep(100000); // 0.1s seems plenty long
+        eb_chan_send(c, always); // f blocked always
+	);
+    
+    const void *v;
+    assert(eb_chan_recv(c, &v));
+    
+    if (v != signal) {
+        char msg[256];
+        snprintf(msg, sizeof(msg), "%s block", signal);
+        abort();
+    }
 }
 
 
-func main() {
-	const async = 1 // asynchronous channels
-	var nilch chan int
-	closedch := make(chan int)
-	close(closedch)
+int main() {
+	const int async = 1; // asynchronous channels
+    eb_chan nilch = NULL;
+	eb_chan closedch = eb_chan_create(0);
+    eb_chan_close(closedch);
 
 	// sending/receiving from a nil channel blocks
-	testBlock(always, func() {
-		nilch <- 7
-	})
-	testBlock(always, func() {
-		<-nilch
-	})
+	testBlock(always, ^{
+        eb_chan_send(nilch, (void*)7);
+	});
+	testBlock(always, ^{
+        eb_chan_recv(nilch, NULL);
+	});
 
 	// sending/receiving from a nil channel inside a select is never selected
-	testPanic(never, func() {
-		select {
-		case nilch <- 7:
-			unreachable()
-		default:
-		}
-	})
-	testPanic(never, func() {
-		select {
-		case <-nilch:
-			unreachable()
-		default:
-		}
-	})
+	testPanic(never, ^{
+        eb_chan_op nilchsend = eb_chan_send_op(NULL, (void*)7);
+        eb_chan_op *r = eb_chan_do(eb_nsec_zero, &nilchsend);
+        if (r == &nilchsend) {
+            unreachable();
+        } else {
+            // OK
+        }
+	});
+    
+	testPanic(never, ^{
+        eb_chan_op nilchrecv = eb_chan_recv_op(NULL);
+        eb_chan_op *r = eb_chan_do(eb_nsec_zero, &nilchrecv);
+        if (r == &nilchrecv) {
+            unreachable();
+        } else {
+            // OK
+        }
+	});
 
 	// sending to an async channel with free buffer space never blocks
-	testBlock(never, func() {
-		ch := make(chan int, async)
-		ch <- 7
-	})
+	testBlock(never, ^{
+		eb_chan ch = eb_chan_create(async);
+        eb_chan_send(ch, (void*)7);
+	});
 
 	// receiving from a closed channel never blocks
-	testBlock(never, func() {
-		for i := 0; i < 10; i++ {
-			if <-closedch != 0 {
-				panic("expected zero value when reading from closed channel")
+	testBlock(never, ^{
+		for (int i = 0; i < 10; i++) {
+            
+            if (eb_chan_recv(closedch, NULL)) {
+				abort();
 			}
-			if x, ok := <-closedch; x != 0 || ok {
-				println("closedch:", x, ok)
-				panic("expected 0, false from closed channel")
+            
+			if (eb_chan_recv(closedch, NULL)) {
+				abort();
 			}
 		}
-	})
-
-	// sending to a closed channel panics.
-	testPanic(always, func() {
-		closedch <- 7
-	})
-
+	});
+    
 	// receiving from a non-ready channel always blocks
-	testBlock(always, func() {
-		ch := make(chan int)
-		<-ch
-	})
+	testBlock(always, ^{
+		eb_chan ch = eb_chan_create(0);
+        eb_chan_recv(ch, NULL);
+	});
 
 	// empty selects always block
-	testBlock(always, func() {
-		select {
-		}
-	})
+	testBlock(always, ^{
+        eb_chan_do(eb_nsec_forever);
+	});
 
 	// selects with only nil channels always block
-	testBlock(always, func() {
-		select {
-		case <-nilch:
-			unreachable()
-		}
-	})
-	testBlock(always, func() {
-		select {
-		case nilch <- 7:
-			unreachable()
-		}
-	})
-	testBlock(always, func() {
-		select {
-		case <-nilch:
-			unreachable()
-		case nilch <- 7:
-			unreachable()
-		}
-	})
+	testBlock(always, ^{
+        eb_chan_op nilchrecv = eb_chan_recv_op(nilch);
+        eb_chan_do(eb_nsec_forever, &nilchrecv);
+        unreachable();
+	});
+	testBlock(always, ^{
+        eb_chan_op nilchsend = eb_chan_send_op(nilch, (void*)7);
+        eb_chan_do(eb_nsec_forever, &nilchsend);
+        unreachable();
+	});
+	testBlock(always, ^{
+        eb_chan_op nilchrecv = eb_chan_recv_op(nilch);
+        eb_chan_op nilchsend = eb_chan_send_op(nilch, (void*)7);
+        eb_chan_do(eb_nsec_forever, &nilchrecv, &nilchsend);
+        unreachable();
+	});
 
 	// selects with non-ready non-nil channels always block
-	testBlock(always, func() {
-		ch := make(chan int)
-		select {
-		case <-ch:
-			unreachable()
-		}
-	})
+	testBlock(always, ^{
+		eb_chan ch = eb_chan_create(0);
+        eb_chan_op recvop = eb_chan_recv_op(ch);
+        eb_chan_do(eb_nsec_forever, &recvop);
+        unreachable();
+	});
 
 	// selects with default cases don't block
-	testBlock(never, func() {
-		select {
-		default:
-		}
-	})
-	testBlock(never, func() {
-		select {
-		case <-nilch:
-			unreachable()
-		default:
-		}
-	})
-	testBlock(never, func() {
-		select {
-		case nilch <- 7:
-			unreachable()
-		default:
-		}
-	})
+	testBlock(never, ^{
+        eb_chan_do(eb_nsec_zero);
+	});
+	testBlock(never, ^{
+        eb_chan_op nilchrecv = eb_chan_recv_op(nilch);
+        eb_chan_do(eb_nsec_zero, &nilchrecv);
+	});
+	testBlock(never, ^{
+        eb_chan_op nilchsend = eb_chan_send_op(nilch, (void*)7);
+        eb_chan_do(eb_nsec_zero, &nilchsend);
+	});
 
 	// selects with ready channels don't block
-	testBlock(never, func() {
-		ch := make(chan int, async)
-		select {
-		case ch <- 7:
-		default:
-			unreachable()
-		}
-	})
-	testBlock(never, func() {
-		ch := make(chan int, async)
-		ch <- 7
-		select {
-		case <-ch:
-		default:
-			unreachable()
-		}
-	})
+	testBlock(never, ^{
+		eb_chan ch = eb_chan_create(async);
+        eb_chan_op sendop = eb_chan_send_op(ch, (void*)7);
+        eb_chan_op *r = eb_chan_do(eb_nsec_zero, &sendop);
+        if (r == &sendop) {
+            // OK
+        } else {
+            unreachable();
+        }
+	});
+	testBlock(never, ^{
+		eb_chan ch = eb_chan_create(async);
+        eb_chan_send(ch, (void*)7);
+        
+        eb_chan_op recvop = eb_chan_recv_op(ch);
+        eb_chan_op *r = eb_chan_do(eb_nsec_zero, &recvop);
+        if (r == &recvop) {
+            // OK
+        } else {
+            unreachable();
+        }
+	});
 
 	// selects with closed channels behave like ordinary operations
-	testBlock(never, func() {
-		select {
-		case <-closedch:
-		}
-	})
-	testBlock(never, func() {
-		select {
-		case x := (<-closedch):
-			_ = x
-		}
-	})
-	testBlock(never, func() {
-		select {
-		case x, ok := (<-closedch):
-			_, _ = x, ok
-		}
-	})
-	testPanic(always, func() {
-		select {
-		case closedch <- 7:
-		}
-	})
+	testBlock(never, ^{
+        eb_chan_op recvop = eb_chan_recv_op(closedch);
+        assert(eb_chan_do(eb_nsec_forever, &recvop) == &recvop);
+        assert(!recvop.open);
+	});
 
 	// select should not get confused if it sees itself
-	testBlock(always, func() {
-		c := make(chan int)
-		select {
-		case c <- 1:
-		case <-c:
-		}
-	})
+	testBlock(always, ^{
+		eb_chan c = eb_chan_create(0);
+        eb_chan_op sendop = eb_chan_send_op(c, (void*)1);
+        eb_chan_op recvop = eb_chan_recv_op(c);
+        eb_chan_do(eb_nsec_forever, &sendop, &recvop);
+        unreachable();
+	});
+    
+    
+    // test panicing behavior (uncomment one of these blocks)
+//	testPanic(always, ^{
+//        eb_chan_op sendop = eb_chan_send_op(closedch, (void*)7);
+//        eb_chan_do(eb_nsec_zero, &sendop);
+//	});
+    
+//	// sending to a closed channel panics.
+//	testPanic(always, ^{
+//        eb_chan_send(closedch, (void*)7);
+//	});
+    
+    
+    return 0;
 }
