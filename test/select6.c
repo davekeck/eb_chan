@@ -17,8 +17,8 @@ int main() {
     go( eb_chan_recv(c1, NULL) );
     
     go(
-        eb_chan_op c1recv = eb_chan_recv_op(c1);
-        eb_chan_op c2recv = eb_chan_recv_op(c2);
+        eb_chan_op c1recv = eb_chan_op_recv(c1);
+        eb_chan_op c2recv = eb_chan_op_recv(c2);
         eb_chan_op *r = eb_chan_do(eb_nsec_forever, &c1recv, &c2recv);
         if (r == &c1recv) {
             abort();

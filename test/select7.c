@@ -9,14 +9,14 @@ void recv1(eb_chan c) {
 }
 
 void recv2(eb_chan c) {
-    eb_chan_op recv = eb_chan_recv_op(c);
+    eb_chan_op recv = eb_chan_op_recv(c);
     assert(eb_chan_do(eb_nsec_forever, &recv) == &recv);
 }
 
 void recv3(eb_chan c) {
     eb_chan c2 = eb_chan_create(0);
-    eb_chan_op crecv = eb_chan_recv_op(c);
-    eb_chan_op c2recv = eb_chan_recv_op(c2);
+    eb_chan_op crecv = eb_chan_op_recv(c);
+    eb_chan_op c2recv = eb_chan_op_recv(c2);
     eb_chan_op *r = eb_chan_do(eb_nsec_forever, &crecv, &c2recv);
     if (r == &crecv) {
     } else if (r == &c2recv) {
@@ -39,7 +39,7 @@ void send2(RecvFunc recv) {
 	go( recv(c) );
 	usleep(10);
     
-    eb_chan_op csend = eb_chan_send_op(c, (void*)1);
+    eb_chan_op csend = eb_chan_op_send(c, (void*)1);
     assert(eb_chan_do(eb_nsec_forever, &csend) == &csend);
 }
 
@@ -50,8 +50,8 @@ void send3(RecvFunc recv) {
     
     eb_chan c2 = eb_chan_create(0);
     
-    eb_chan_op csend = eb_chan_send_op(c, (void*)1);
-    eb_chan_op c2send = eb_chan_send_op(c2, (void*)1);
+    eb_chan_op csend = eb_chan_op_send(c, (void*)1);
+    eb_chan_op c2send = eb_chan_op_send(c2, (void*)1);
     eb_chan_op *r = eb_chan_do(eb_nsec_forever, &csend, &c2send);
     if (r == &csend) {
     } else if (r == &c2send) {

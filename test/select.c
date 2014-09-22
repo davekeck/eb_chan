@@ -15,8 +15,8 @@ unsigned int GetValue() {
 int Send(eb_chan a, eb_chan b) {
 	int i = 0;
 	for (;;) {
-        eb_chan_op asend = eb_chan_send_op(a, (void*)(uintptr_t)GetValue());
-        eb_chan_op bsend = eb_chan_send_op(b, (void*)(uintptr_t)GetValue());
+        eb_chan_op asend = eb_chan_op_send(a, (void*)(uintptr_t)GetValue());
+        eb_chan_op bsend = eb_chan_op_send(b, (void*)(uintptr_t)GetValue());
         
         eb_chan_op *r = eb_chan_do(eb_nsec_zero, &asend, &bsend);
         if (r == &asend) {

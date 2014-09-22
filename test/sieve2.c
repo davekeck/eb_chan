@@ -92,8 +92,8 @@ eb_chan sendproxy(eb_chan out) {
                 e = buf[buf_idx];
 			}
             
-            eb_chan_op proxy_recv = eb_chan_recv_op(proxy);
-            eb_chan_op c_send = eb_chan_send_op(c, (void*)(intptr_t)e);
+            eb_chan_op proxy_recv = eb_chan_op_recv(proxy);
+            eb_chan_op c_send = eb_chan_op_send(c, (void*)(intptr_t)e);
             eb_chan_op *r = eb_chan_do(eb_nsec_forever, &proxy_recv, &c_send);
             if (r == &proxy_recv) {
                 assert(proxy_recv.open); // make sure that the channel's open

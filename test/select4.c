@@ -10,8 +10,8 @@ int main() {
     
     eb_chan_send(c, (void*)42);
     
-    eb_chan_op c1recv = eb_chan_recv_op(c1);
-    eb_chan_op crecv = eb_chan_recv_op(c);
+    eb_chan_op c1recv = eb_chan_op_recv(c1);
+    eb_chan_op crecv = eb_chan_op_recv(c);
     
     eb_chan_op *r = eb_chan_do(eb_nsec_forever, &c1recv, &crecv);
     if (r == &crecv) {

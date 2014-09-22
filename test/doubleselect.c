@@ -12,10 +12,10 @@
 // to two different channels.
 void sender(eb_chan c1, eb_chan c2, eb_chan c3, eb_chan c4) {
 	for (int i = 0; i < iterations; i++) {
-        eb_chan_op o1 = eb_chan_send_op(c1, (void*)(intptr_t)i);
-        eb_chan_op o2 = eb_chan_send_op(c2, (void*)(intptr_t)i);
-        eb_chan_op o3 = eb_chan_send_op(c3, (void*)(intptr_t)i);
-        eb_chan_op o4 = eb_chan_send_op(c4, (void*)(intptr_t)i);
+        eb_chan_op o1 = eb_chan_op_send(c1, (void*)(intptr_t)i);
+        eb_chan_op o2 = eb_chan_op_send(c2, (void*)(intptr_t)i);
+        eb_chan_op o3 = eb_chan_op_send(c3, (void*)(intptr_t)i);
+        eb_chan_op o4 = eb_chan_op_send(c4, (void*)(intptr_t)i);
         assert(eb_chan_do(eb_nsec_forever, &o1, &o2, &o3, &o4));
 	}
     
