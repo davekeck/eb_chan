@@ -677,51 +677,65 @@ void checka(PS U, rat *a, const char *str) {
 	}
 }
 
-int main() {
+int main(int argc, const char *argv[]) {
 	Init();
-    check(Ones, one, 5, "Ones");
-    check(Add(Ones, Ones), itor(2), 0, "Add Ones Ones");  // 1 1 1 1 1
-    check(Add(Ones, Twos), itor(3), 0, "Add Ones Twos"); // 3 3 3 3 3
-    rat *a = calloc(N, sizeof(*a));
-    PS d = Diff(Ones);
-    for (int i=0; i < N; i++) {
-        a[i] = itor(i+1);
-    }
-    checka(d, a, "Diff");  // 1 2 3 4 5
-    PS in = Integ(zero, Ones);
-    a[0] = zero;  // integration constant
-    for (int i=1; i < N; i++) {
-        a[i] = i2tor(1, i);
-    }
-    checka(in, a, "Integ");  // 0 1 1/2 1/3 1/4 1/5
-    check(Cmul(neg(one), Twos), itor(-2), 10, "CMul");  // -1 -1 -1 -1 -1
-    check(Sub(Ones, Twos), itor(-1), 0, "Sub Ones Twos");  // -1 -1 -1 -1 -1
-    PS m = Mul(Ones, Ones);
-    for (int i=0; i < N; i++) {
-        a[i] = itor(i+1);
-    }
-    checka(m, a, "Mul");  // 1 2 3 4 5
-    PS e = Exp(Ones);
-    a[0] = itor(1);
-    a[1] = itor(1);
-    a[2] = i2tor(3,2);
-    a[3] = i2tor(13,6);
-    a[4] = i2tor(73,24);
-    a[5] = i2tor(167,40);
-    a[6] = i2tor(4051,720);
-    a[7] = i2tor(37633,5040);
-    a[8] = i2tor(43817,4480);
-    a[9] = i2tor(4596553,362880);
-    checka(e, a, "Exp");  // 1 1 3/2 13/6 73/24
-    PS at = Integ(zero, MonSubst(Ones, neg(one), 2));
-    for (int c = 1, i = 0; i < N; i++) {
-        if (i%2 == 0) {
-            a[i] = zero;
-        } else {
-            a[i] = i2tor(c, i);
-            c *= -1;
+	if (argc > 1) {  // print
+		printf("Ones: "); printn(Ones, 10);
+		printf("Twos: "); printn(Twos, 10);
+		printf("Add: "); printn(Add(Ones, Twos), 10);
+		printf("Diff: "); printn(Diff(Ones), 10);
+		printf("Integ: "); printn(Integ(zero, Ones), 10);
+		printf("CMul: "); printn(Cmul(neg(one), Ones), 10);
+		printf("Sub: "); printn(Sub(Ones, Twos), 10);
+		printf("Mul: "); printn(Mul(Ones, Ones), 10);
+		printf("Exp: "); printn(Exp(Ones), 15);
+		printf("MonSubst: "); printn(MonSubst(Ones, neg(one), 2), 10);
+		printf("ATan: "); printn(Integ(zero, MonSubst(Ones, neg(one), 2)), 10);
+	} else {  // test
+        check(Ones, one, 5, "Ones");
+        check(Add(Ones, Ones), itor(2), 0, "Add Ones Ones");  // 1 1 1 1 1
+        check(Add(Ones, Twos), itor(3), 0, "Add Ones Twos"); // 3 3 3 3 3
+        rat *a = calloc(N, sizeof(*a));
+        PS d = Diff(Ones);
+        for (int i=0; i < N; i++) {
+            a[i] = itor(i+1);
         }
+        checka(d, a, "Diff");  // 1 2 3 4 5
+        PS in = Integ(zero, Ones);
+        a[0] = zero;  // integration constant
+        for (int i=1; i < N; i++) {
+            a[i] = i2tor(1, i);
+        }
+        checka(in, a, "Integ");  // 0 1 1/2 1/3 1/4 1/5
+        check(Cmul(neg(one), Twos), itor(-2), 10, "CMul");  // -1 -1 -1 -1 -1
+        check(Sub(Ones, Twos), itor(-1), 0, "Sub Ones Twos");  // -1 -1 -1 -1 -1
+        PS m = Mul(Ones, Ones);
+        for (int i=0; i < N; i++) {
+            a[i] = itor(i+1);
+        }
+        checka(m, a, "Mul");  // 1 2 3 4 5
+        PS e = Exp(Ones);
+        a[0] = itor(1);
+        a[1] = itor(1);
+        a[2] = i2tor(3,2);
+        a[3] = i2tor(13,6);
+        a[4] = i2tor(73,24);
+        a[5] = i2tor(167,40);
+        a[6] = i2tor(4051,720);
+        a[7] = i2tor(37633,5040);
+        a[8] = i2tor(43817,4480);
+        a[9] = i2tor(4596553,362880);
+        checka(e, a, "Exp");  // 1 1 3/2 13/6 73/24
+        PS at = Integ(zero, MonSubst(Ones, neg(one), 2));
+        for (int c = 1, i = 0; i < N; i++) {
+            if (i%2 == 0) {
+                a[i] = zero;
+            } else {
+                a[i] = i2tor(c, i);
+                c *= -1;
+            }
+        }
+        checka(at, a, "ATan");  // 0 -1 0 -1/3 0 -1/5
     }
-    checka(at, a, "ATan");  // 0 -1 0 -1/3 0 -1/5
     return 0;
 }
