@@ -33,11 +33,11 @@ func main() {
 		fmt.Fprintln(out, `}`)
 	}
 
-    // do(recv)
-    // do(send)
+    do(recv)
+    do(send)
     do(recvOrder)
-	// do(sendOrder)
-	// do(nonblock)
+    do(sendOrder)
+    do(nonblock)
     
     fmt.Fprintln(out, footer)
     
@@ -153,7 +153,7 @@ var recv = parse("recv", `
         assert(eb_chan_recv(c, &tmp));
         x = (int)(intptr_t)tmp;
 	{{else}}
-        {{if .Maybe}}
+        {{if .MaybeDefault}}
             timeout_dur = eb_nsec_zero;
         {{else}}
             timeout_dur = eb_nsec_forever;
@@ -244,7 +244,7 @@ var send = parse("send", `
 	{{if .Maybe}}
         eb_chan_send(c, (void*)(intptr_t)n);
 	{{else}}
-        {{if .Maybe}}
+        {{if .MaybeDefault}}
             timeout_dur = eb_nsec_zero;
         {{else}}
             timeout_dur = eb_nsec_forever;
@@ -325,7 +325,7 @@ var recvOrder = parse("recvOrder", `
             	x = m[13];
             }
     	{{else}}
-            {{if .Maybe}}
+            {{if .MaybeDefault}}
                 timeout_dur = eb_nsec_zero;
             {{else}}
                 timeout_dur = eb_nsec_forever;
@@ -411,99 +411,150 @@ var sendOrder = parse("sendOrder", `
 	{{/*  Send n one way or another, receive it into x, check that they match. */}}
 	{{/*  Check order of operations along the way by calling functions that check */}}
 	{{/*  that the argument sequence is strictly increasing. */}}
-	order = 0
+	order = 0;
 	{{if .Maybe}}
-	fc(c, 1) <- fn(n, 2)
+        eb_chan_send(fc(c, 1), (void*)(intptr_t)fn(n, 2));
 	{{else}}
-	select {
-	{{/*  Blocking or non-blocking, before the receive (same reason as in recv). */}}
-	{{if .MaybeDefault}}
-	default:
-		panic("nonblock")
+    	{
+            {{if .MaybeDefault}}
+                timeout_dur = eb_nsec_zero;
+            {{else}}
+                timeout_dur = eb_nsec_forever;
+            {{end}}
+            
+            eb_chan_op op1 = eb_chan_op_send(fc(c, 1), (void*)(intptr_t)fn(n, 2));
+            eb_chan_op op2 = eb_chan_op_send(fc(dummy, 3), (void*)(intptr_t)fn(1, 4));
+            eb_chan_op op3 = eb_chan_op_recv(fc(dummy, 5));
+            eb_chan_op op4 = eb_chan_op_send(fc(nilch, 6), (void*)(intptr_t)fn(1, 7));
+            eb_chan_op op5 = eb_chan_op_recv(fc(nilch, 8));
+            
+            eb_chan_op *r = eb_chan_do(timeout_dur,
+            	{{/*  Send c <- n.	No real special cases here, because no values come back */}}
+            	{{/*  from the send operation. */}}
+                &op1,
+        	
+                {{/*  Dummy send, receive to keep compiler from optimizing select. */}}
+            	{{if .Maybe}}
+                    &op2,
+            	{{end}}
+        	
+                {{if .Maybe}}
+                    &op3,
+            	{{end}}
+            
+            	{{/*  Nil channel send, receive to keep compiler from optimizing select. */}}
+            	{{if .Maybe}}
+                    &op4,
+            	{{end}}
+        	
+                {{if .Maybe}}
+                    &op5,
+            	{{end}}
+            );
+            
+            if (r == &op1) {
+            } else if (r == &op2) {
+                abort();
+            } else if (r == &op3) {
+                abort();
+            } else if (r == &op4) {
+                abort();
+            } else if (r == &op5) {
+            	abort();
+            } else {
+                assert(timeout_dur == eb_nsec_zero);
+            }
+    	}
 	{{end}}
-	{{/*  Send c <- n.	No real special cases here, because no values come back */}}
-	{{/*  from the send operation. */}}
-	case fc(c, 1) <- fn(n, 2):
-	{{/*  Blocking or non-blocking. */}}
-	{{if .MaybeDefault}}
-	default:
-		panic("nonblock")
-	{{end}}
-	{{/*  Dummy send, receive to keep compiler from optimizing select. */}}
-	{{if .Maybe}}
-	case fc(dummy, 3) <- fn(1, 4):
-		panic("dummy send")
-	{{end}}
-	{{if .Maybe}}
-	case <-fc(dummy, 5):
-		panic("dummy receive")
-	{{end}}
-	{{/*  Nil channel send, receive to keep compiler from optimizing select. */}}
-	{{if .Maybe}}
-	case fc(nilch, 6) <- fn(1, 7):
-		panic("nilch send")
-	{{end}}
-	{{if .Maybe}}
-	case <-fc(nilch, 8):
-		panic("nilch recv")
-	{{end}}
-	}
-	{{end}}
-	x = <-c
-	if x != n {
-		die(x)
-	}
-	n++
+    
+    assert(eb_chan_recv(c, &tmp));
+    x = (int)(intptr_t)(tmp);
+    
+    assert(x == n);
+	n++;
 `)
 
 var nonblock = parse("nonblock", `
-	x = n
+	x = n;
 	{{/*  Test various combinations of non-blocking operations. */}}
 	{{/*  Receive assignments must not edit or even attempt to compute the address of the lhs. */}}
-	select {
-	{{if .MaybeDefault}}
-	default:
-	{{end}}
-	{{if .Maybe}}
-	case dummy <- 1:
-		panic("dummy <- 1")
-	{{end}}
-	{{if .Maybe}}
-	case nilch <- 1:
-		panic("nilch <- 1")
-	{{end}}
-	{{if .Maybe}}
-	case <-dummy:
-		panic("<-dummy")
-	{{end}}
-	{{if .Maybe}}
-	case x = <-dummy:
-		panic("<-dummy x")
-	{{end}}
-	{{if .Maybe}}
-	case **(**int)(nil) = <-dummy:
-		panic("<-dummy (and didn't crash saving result!)")
-	{{end}}
-	{{if .Maybe}}
-	case <-nilch:
-		panic("<-nilch")
-	{{end}}
-	{{if .Maybe}}
-	case x = <-nilch:
-		panic("<-nilch x")
-	{{end}}
-	{{if .Maybe}}
-	case **(**int)(nil) = <-nilch:
-		panic("<-nilch (and didn't crash saving result!)")
-	{{end}}
-	{{if .MustDefault}}
-	default:
-	{{end}}
+	{
+        {{if .MaybeDefault}}
+            timeout_dur = eb_nsec_zero;
+        {{else}}
+            timeout_dur = eb_nsec_forever;
+        {{end}}
+        
+    	{{if .MustDefault}}
+            timeout_dur = eb_nsec_zero;
+    	{{end}}
+        
+        eb_chan_op op1 = eb_chan_op_send(dummy, (void*)1);
+        eb_chan_op op2 = eb_chan_op_send(nilch, (void*)1);
+        eb_chan_op op3 = eb_chan_op_recv(dummy);
+        eb_chan_op op4 = eb_chan_op_recv(dummy);
+        eb_chan_op op5 = eb_chan_op_recv(dummy);
+        eb_chan_op op6 = eb_chan_op_recv(nilch);
+        eb_chan_op op7 = eb_chan_op_recv(nilch);
+        eb_chan_op op8 = eb_chan_op_recv(nilch);
+        
+        eb_chan_op *r = eb_chan_do(timeout_dur,
+        	{{if .Maybe}}
+                &op1,
+        	{{end}}
+        
+        	{{if .Maybe}}
+                &op2,
+        	{{end}}
+        
+        	{{if .Maybe}}
+                &op3,
+        	{{end}}
+        
+        	{{if .Maybe}}
+                &op4,
+        	{{end}}
+        
+        	{{if .Maybe}}
+                &op5,
+        	{{end}}
+        
+        	{{if .Maybe}}
+                &op6,
+        	{{end}}
+        
+        	{{if .Maybe}}
+                &op7,
+        	{{end}}
+        
+        	{{if .Maybe}}
+                &op8,
+        	{{end}}
+        );
+        
+        if (r == &op1) {
+            abort();
+        } else if (r == &op2) {
+            abort();
+        } else if (r == &op3) {
+            abort();
+        } else if (r == &op4) {
+            abort();
+        } else if (r == &op5) {
+        	abort();
+        } else if (r == &op6) {
+        	abort();
+        } else if (r == &op7) {
+        	abort();
+        } else if (r == &op8) {
+        	abort();
+        } else {
+            assert(timeout_dur == eb_nsec_zero);
+        }
 	}
-	if x != n {
-		die(x)
-	}
-	n++
+    
+    assert(x == n);
+	n++;
 `)
 
 // Code for enumerating all possible paths through
