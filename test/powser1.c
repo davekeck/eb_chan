@@ -1,9 +1,5 @@
 // run
 
-// Copyright 2009 The Go Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style
-// license that can be found in the LICENSE file.
-
 // Test concurrency primitives: power series.
 
 // Power series package
@@ -13,54 +9,66 @@
 // See Squinting at Power Series by Doug McIlroy,
 //   http://www.cs.bell-labs.com/who/rsc/thread/squint.pdf
 
-package main
+#include "testglue.h"
 
-import "os"
+typedef struct  {
+	int64_t num; // numerator
+    int64_t den; // denominator
+} rat;
 
-type rat struct  {
-	num, den  int64	// numerator, denominator
+rat *rat2heap(rat x) {
+    rat *r = malloc(sizeof(*r));
+    *r = x;
+    return r;
 }
 
-func (u rat) pr() {
-	if u.den==1 {
-		print(u.num)
+rat heap2rat(rat *x) {
+    rat r = *x;
+    // not freeing here because sometimes we send global variables
+//    free(x);
+    return r;
+}
+
+void pr(rat u) {
+	if (u.den==1) {
+		printf("%jd", (intmax_t)u.num);
 	} else {
-		print(u.num, "/", u.den)
+		printf("%jd/%jd", (intmax_t)u.num, (intmax_t)u.den);
 	}
-	print(" ")
+	printf(" ");
 }
 
-func (u rat) eq(c rat) bool {
-	return u.num == c.num && u.den == c.den
+bool eq(rat u, rat c) {
+	return (u.num == c.num && u.den == c.den);
 }
 
-type dch struct {
-	req chan  int
-	dat chan  rat
-	nam int
+typedef struct {
+    eb_chan req;
+    eb_chan dat;
+    int nam;
+} dch;
+
+typedef dch *dch2[2];
+
+const char *chnames = NULL;
+int chnameserial;
+int seqno;
+
+dch *mkdch() {
+	int c = chnameserial % strlen(chnames);
+	chnameserial++;
+	dch *d = malloc(sizeof(*d));
+	d->req = eb_chan_create(0);
+	d->dat = eb_chan_create(0);
+	d->nam = c;
+	return d;
 }
 
-type dch2 [2] *dch
-
-var chnames string
-var chnameserial int
-var seqno int
-
-func mkdch() *dch {
-	c := chnameserial % len(chnames)
-	chnameserial++
-	d := new(dch)
-	d.req = make(chan int)
-	d.dat = make(chan rat)
-	d.nam = c
-	return d
-}
-
-func mkdch2() *dch2 {
-	d2 := new(dch2)
-	d2[0] = mkdch()
-	d2[1] = mkdch()
-	return d2
+dch2 *mkdch2() {
+	dch2 *d2 = malloc(sizeof(*d2));
+	(*d2)[0] = mkdch();
+	(*d2)[1] = mkdch();
+	return d2;
 }
 
 // split reads a single demand channel and replicates its
@@ -77,119 +85,141 @@ func mkdch2() *dch2 {
 // a signal on the release-wait channel tells the next newer
 // generation to begin servicing out[1].
 
-func dosplit(in *dch, out *dch2, wait chan int ) {
-	both := false	// do not service both channels
+void dosplit(dch *in, dch2 *out, eb_chan wait) {
+	bool both = false;	// do not service both channels
+    
+    eb_chan_op out0recv = eb_chan_op_recv((*out)[0]->req);
+    eb_chan_op out1recv = eb_chan_op_recv((*out)[1]->req);
+    eb_chan_op waitrecv = eb_chan_op_recv(wait);
+    eb_chan_op *r = eb_chan_do(eb_nsec_forever, &out0recv, &waitrecv);
+    if (r == &out0recv) {
+        // nothing
+    } else if (r == &waitrecv) {
+		both = true;
+        
+        eb_chan_op *r = eb_chan_do(eb_nsec_forever, &out0recv, &out1recv);
+        if (r == &out0recv) {
+            // nothing
+        } else if (r == &out1recv) {
+            // swap
+            typeof((*out)[0]) temp = (*out)[0];
+            (*out)[0] = (*out)[1];
+            (*out)[1] = temp;
+        } else {
+            abort();
+        }
+    } else {
+        abort();
+    }
 
-	select {
-	case <-out[0].req:
-		
-	case <-wait:
-		both = true
-		select {
-		case <-out[0].req:
-			
-		case <-out[1].req:
-			out[0], out[1] = out[1], out[0]
-		}
+	seqno++;
+    eb_chan_send(in->req, (void*)(intptr_t)seqno);
+	eb_chan release = eb_chan_create(0);
+	go( dosplit(in, out, release) );
+    
+    const void *dat;
+    assert(eb_chan_recv(in->dat, &dat));
+    eb_chan_send((*out)[0]->dat, dat);
+	if (!both) {
+        assert(eb_chan_recv(wait, NULL));
 	}
-
-	seqno++
-	in.req <- seqno
-	release := make(chan  int)
-	go dosplit(in, out, release)
-	dat := <-in.dat
-	out[0].dat <- dat
-	if !both {
-		<-wait
-	}
-	<-out[1].req
-	out[1].dat <- dat
-	release <- 0
+    
+    assert(eb_chan_recv((*out)[1]->req, NULL));
+    eb_chan_send((*out)[1]->dat, dat);
+    eb_chan_send(release, (void*)0);
 }
 
-func split(in *dch, out *dch2) {
-	release := make(chan int)
-	go dosplit(in, out, release)
-	release <- 0
+void split(dch *in, dch2 *out) {
+	eb_chan release = eb_chan_create(0);
+	go( dosplit(in, out, release) );
+    eb_chan_send(release, (void*)0);
 }
 
-func put(dat rat, out *dch) {
-	<-out.req
-	out.dat <- dat
+void put(rat dat, dch *out) {
+    assert(eb_chan_recv(out->req, NULL));
+    eb_chan_send(out->dat, rat2heap(dat));
 }
 
-func get(in *dch) rat {
-	seqno++
-	in.req <- seqno
-	return <-in.dat
+rat get(dch *in) {
+	seqno++;
+    eb_chan_send(in->req, (void*)(intptr_t)seqno);
+    
+    rat *v;
+    assert(eb_chan_recv(in->dat, (void*)&v));
+    return heap2rat(v);
 }
 
 // Get one rat from each of n demand channels
 
-func getn(in []*dch) []rat {
-	n := len(in)
-	if n != 2 { panic("bad n in getn") }
-	req := new([2] chan int)
-	dat := new([2] chan rat)
-	out := make([]rat, 2)
-	var i int
-	var it rat
-	for i=0; i<n; i++ {
-		req[i] = in[i].req
-		dat[i] = nil
+rat *getn(dch **in, size_t n) {
+    assert(n == 2);
+    
+    eb_chan *req = calloc(2, sizeof(*req));
+    eb_chan *dat = calloc(2, sizeof(*dat));
+    rat *out = calloc(2, sizeof(*out));
+	for (int i=0; i<n; i++) {
+		req[i] = in[i]->req;
+		dat[i] = NULL;
 	}
-	for n=2*n; n>0; n-- {
-		seqno++
-
-		select {
-		case req[0] <- seqno:
-			dat[0] = in[0].dat
-			req[0] = nil
-		case req[1] <- seqno:
-			dat[1] = in[1].dat
-			req[1] = nil
-		case it = <-dat[0]:
-			out[0] = it
-			dat[0] = nil
-		case it = <-dat[1]:
-			out[1] = it
-			dat[1] = nil
-		}
+	for (n=2*n; n>0; n--) {
+		seqno++;
+        
+        eb_chan_op op1 = eb_chan_op_send(req[0], (void*)(intptr_t)seqno);
+        eb_chan_op op2 = eb_chan_op_send(req[1], (void*)(intptr_t)seqno);
+        eb_chan_op op3 = eb_chan_op_recv(dat[0]);
+        eb_chan_op op4 = eb_chan_op_recv(dat[1]);
+        eb_chan_op *r = eb_chan_do(eb_nsec_forever, &op1, &op2, &op3, &op4);
+        
+        if (r == &op1) {
+			dat[0] = in[0]->dat;
+			req[0] = NULL;
+        } else if (r == &op2) {
+			dat[1] = in[1]->dat;
+			req[1] = NULL;
+        } else if (r == &op3) {
+			out[0] = heap2rat((rat*)r->val);
+			dat[0] = NULL;
+        } else if (r == &op4) {
+			out[1] = heap2rat((rat*)r->val);
+			dat[1] = NULL;
+        } else {
+            abort();
+        }
 	}
-	return out
+	return out;
 }
 
 // Get one rat from each of 2 demand channels
 
-func get2(in0 *dch, in1 *dch) []rat {
-	return getn([]*dch{in0, in1})
+rat *get2(dch *in0, dch *in1) {
+	return getn((dch *[]){in0, in1}, 2);
 }
 
-func copy(in *dch, out *dch) {
-	for {
-		<-out.req
-		out.dat <- get(in)
+void copy(dch *in, dch *out) {
+	for (;;) {
+        assert(eb_chan_recv(out->req, NULL));
+        eb_chan_send(out->dat, rat2heap(get(in)));
 	}
 }
 
-func repeat(dat rat, out *dch) {
-	for {
-		put(dat, out)
+void repeat(rat dat, dch *out) {
+	for (;;) {
+		put(dat, out);
 	}
 }
 
-type PS *dch	// power series
-type PS2 *[2] PS // pair of power series
+typedef dch *PS;	// power series
+typedef PS *PS2[2]; // pair of power series
 
-var Ones PS
-var Twos PS
+PS Ones;
+PS Twos;
 
-func mkPS() *dch {
-	return mkdch()
+dch *mkPS() {
+	return mkdch();
 }
 
-func mkPS2() *dch2 {
-	return mkdch2()
+dch2 *mkPS2() {
+	return mkdch2();
 }
 
 // Conventions
@@ -200,109 +230,109 @@ func mkPS2() *dch2 {
 
 // Integer gcd; needed for rational arithmetic
 
-func gcd (u, v int64) int64 {
-	if u < 0 { return gcd(-u, v) }
-	if u == 0 { return v }
-	return gcd(v%u, u)
+int64_t gcd(int64_t u, int64_t v) {
+	if (u < 0) { return gcd(-u, v); }
+	if (u == 0) { return v; }
+	return gcd(v%u, u);
 }
 
 // Make a rational from two ints and from one int
 
-func i2tor(u, v int64) rat {
-	g := gcd(u,v)
-	var r rat
-	if v > 0 {
-		r.num = u/g
-		r.den = v/g
+rat i2tor(int64_t u, int64_t v) {
+	int64_t g = gcd(u,v);
+	rat r;
+	if (v > 0) {
+		r.num = u/g;
+		r.den = v/g;
 	} else {
-		r.num = -u/g
-		r.den = -v/g
+		r.num = -u/g;
+		r.den = -v/g;
 	}
-	return r
+	return r;
 }
 
-func itor(u int64) rat {
-	return i2tor(u, 1)
+rat itor(int64_t u) {
+	return i2tor(u, 1);
 }
 
-var zero rat
-var one rat
+rat zero;
+rat one;
 
 
 // End mark and end test
 
-var finis rat
+rat finis;
 
-func end(u rat) int64 {
-	if u.den==0 { return 1 }
-	return 0
+int64_t end(rat u) {
+	if (u.den==0) { return 1; }
+	return 0;
 }
 
 // Operations on rationals
 
-func add(u, v rat) rat {
-	g := gcd(u.den,v.den)
-	return  i2tor(u.num*(v.den/g)+v.num*(u.den/g),u.den*(v.den/g))
+rat add(rat u, rat v) {
+	int64_t g = gcd(u.den,v.den);
+	return i2tor(u.num*(v.den/g)+v.num*(u.den/g),u.den*(v.den/g));
 }
 
-func mul(u, v rat) rat {
-	g1 := gcd(u.num,v.den)
-	g2 := gcd(u.den,v.num)
-	var r rat
-	r.num = (u.num/g1)*(v.num/g2)
-	r.den = (u.den/g2)*(v.den/g1)
-	return r
+rat mul(rat u, rat v) {
+	int64_t g1 = gcd(u.num,v.den);
+	int64_t g2 = gcd(u.den,v.num);
+	rat r;
+	r.num = (u.num/g1)*(v.num/g2);
+	r.den = (u.den/g2)*(v.den/g1);
+	return r;
 }
 
-func neg(u rat) rat {
-	return i2tor(-u.num, u.den)
+rat neg(rat u) {
+	return i2tor(-u.num, u.den);
 }
 
-func sub(u, v rat) rat {
-	return add(u, neg(v))
+rat sub(rat u, rat v) {
+	return add(u, neg(v));
 }
 
-func inv(u rat) rat {	// invert a rat
-	if u.num == 0 { panic("zero divide in inv") }
-	return i2tor(u.den, u.num)
+rat inv(rat u) {	// invert a rat
+    assert(u.num != 0);
+	return i2tor(u.den, u.num);
 }
 
 // print eval in floating point of PS at x=c to n terms
-func evaln(c rat, U PS, n int) {
-	xn := float64(1)
-	x := float64(c.num)/float64(c.den)
-	val := float64(0)
-	for i:=0; i<n; i++ {
-		u := get(U)
-		if end(u) != 0 {
-			break
+void evaln(rat c, PS U, int n) {
+	double xn = 1;
+	double x = (double)c.num/(double)c.den;
+	double val = 0;
+	for (int i=0; i<n; i++) {
+		rat u = get(U);
+		if (end(u) != 0) {
+			break;
 		}
-		val = val + x * float64(u.num)/float64(u.den)
-		xn = xn*x
+		val = val + x * (double)u.num/(double)u.den;
+		xn = xn*x;
 	}
-	print(val, "\n")
+	printf("%f\n", val);
 }
 
 // Print n terms of a power series
-func printn(U PS, n int) {
-	done := false
-	for ; !done && n>0; n-- {
-		u := get(U)
-		if end(u) != 0 {
-			done = true
+void printn(PS U, int n) {
+	bool done = false;
+	for (; !done && n>0; n--) {
+		rat u = get(U);
+		if (end(u) != 0) {
+			done = true;
 		} else {
-			u.pr()
+			pr(u);
 		}
 	}
-	print(("\n"))
+	printf("\n");
 }
 
 // Evaluate n terms of power series U at x=c
-func eval(c rat, U PS, n int) rat {
-	if n==0 { return zero }
-	y := get(U)
-	if end(y) != 0 { return zero }
-	return add(y,mul(c,eval(c,U,n-1)))
+rat eval(rat c, PS U, int n) {
+	if (n==0) { return zero; }
+	rat y = get(U);
+	if (end(y) != 0) { return zero; }
+	return add(y,mul(c,eval(c,U,n-1)));
 }
 
 // Power-series constructors return channels on which power
@@ -311,106 +341,118 @@ func eval(c rat, U PS, n int) rat {
 
 // Make a pair of power series identical to a given power series
 
-func Split(U PS) *dch2 {
-	UU := mkdch2()
-	go split(U,UU)
-	return UU
+dch2 *Split(PS U) {
+	dch2 *UU = mkdch2();
+	go( split(U,UU) );
+	return UU;
 }
 
 // Add two power series
-func Add(U, V PS) PS {
-	Z := mkPS()
-	go func() {
-		var uv []rat
-		for {
-			<-Z.req
-			uv = get2(U,V)
-			switch end(uv[0])+2*end(uv[1]) {
-			case 0:
-				Z.dat <- add(uv[0], uv[1])
-			case 1:
-				Z.dat <- uv[1]
-				copy(V,Z)
-			case 2:
-				Z.dat <- uv[0]
-				copy(U,Z)
-			case 3:
-				Z.dat <- finis
+PS Add(PS U, PS V) {
+	PS Z = mkPS();
+	go(
+		rat *uv;
+		for (;;) {
+            assert(eb_chan_recv(Z->req, NULL));
+			uv = get2(U,V);
+			switch (end(uv[0])+2*end(uv[1])) {
+			case 0: {
+                eb_chan_send(Z->dat, rat2heap(add(uv[0], uv[1])));
+                break;
+            }
+			case 1: {
+                eb_chan_send(Z->dat, rat2heap(uv[1]));
+				copy(V,Z);
+                break;
+            }
+			case 2: {
+                eb_chan_send(Z->dat, rat2heap(uv[0]));
+				copy(U,Z);
+                break;
+            }
+			case 3: {
+                eb_chan_send(Z->dat, &finis);
+                break;
+            }
 			}
 		}
-	}()
-	return Z
+	);
+	return Z;
 }
 
 // Multiply a power series by a constant
-func Cmul(c rat,U PS) PS {
-	Z := mkPS()
-	go func() {
-		done := false
-		for !done {
-			<-Z.req
-			u := get(U)
-			if end(u) != 0 {
-				done = true
+PS Cmul(rat c, PS U) {
+	PS Z = mkPS();
+	go(
+		bool done = false;
+		while (!done) {
+            eb_chan_recv(Z->req, NULL);
+			rat u = get(U);
+			if (end(u) != 0) {
+				done = true;
 			} else {
-				Z.dat <- mul(c,u)
+                eb_chan_send(Z->dat, rat2heap(mul(c,u)));
 			}
 		}
-		Z.dat <- finis
-	}()
-	return Z
+        eb_chan_send(Z->dat, &finis);
+	);
+	return Z;
 }
 
 // Subtract
 
-func Sub(U, V PS) PS {
-	return Add(U, Cmul(neg(one), V))
+PS Sub(PS U, PS V) {
+	return Add(U, Cmul(neg(one), V));
 }
 
 // Multiply a power series by the monomial x^n
 
-func Monmul(U PS, n int) PS {
-	Z := mkPS()
-	go func() {
-		for ; n>0; n-- { put(zero,Z) }
-		copy(U,Z)
-	}()
-	return Z
+PS Monmul(PS U, int n) {
+	PS Z = mkPS();
+	go(
+        int nn = n;
+		for (; nn>0; nn--) { put(zero,Z); }
+		copy(U,Z);
+	);
+	return Z;
 }
 
 // Multiply by x
 
-func Xmul(U PS) PS {
-	return Monmul(U,1)
+PS Xmul(PS U) {
+	return Monmul(U,1);
 }
 
-func Rep(c rat) PS {
-	Z := mkPS()
-	go repeat(c,Z)
-	return Z
+PS Rep(rat c) {
+	PS Z = mkPS();
+	go(
+        repeat(c,Z);
+    );
+	return Z;
 }
 
 // Monomial c*x^n
 
-func Mon(c rat, n int) PS {
-	Z:=mkPS()
-	go func() {
+PS Mon(rat c, int n) {
+	PS Z = mkPS();
+	go(
 		if(c.num!=0) {
-			for ; n>0; n=n-1 { put(zero,Z) }
-			put(c,Z)
+            int nn = n;
+			for (; nn>0; nn=nn-1) { put(zero,Z); }
+			put(c,Z);
 		}
-		put(finis,Z)
-	}()
-	return Z
+		put(finis,Z);
+	);
+	return Z;
 }
 
-func Shift(c rat, U PS) PS {
-	Z := mkPS()
-	go func() {
-		put(c,Z)
-		copy(U,Z)
-	}()
-	return Z
+PS Shift(rat c, PS U) {
+	PS Z = mkPS();
+	go(
+		put(c,Z);
+		copy(U,Z);
+	);
+	return Z;
 }
 
 // simple pole at 1: 1/(1-x) = 1 1 1 1 1 ...
@@ -439,83 +481,84 @@ func Poly(a []rat) PS {
 //	let V = v + x*VV
 //	then UV = u*v + x*(u*VV+v*UU) + x*x*UU*VV
 
-func Mul(U, V PS) PS {
-	Z:=mkPS()
-	go func() {
-		<-Z.req
-		uv := get2(U,V)
-		if end(uv[0])!=0 || end(uv[1]) != 0 {
-			Z.dat <- finis
+PS Mul(PS U, PS V) {
+	PS Z = mkPS();
+	go(
+        assert(eb_chan_recv(Z->req, NULL));
+		rat *uv = get2(U,V);
+		if (end(uv[0])!=0 || end(uv[1]) != 0) {
+            eb_chan_send(Z->dat, rat2heap(finis));
 		} else {
-			Z.dat <- mul(uv[0],uv[1])
-			UU := Split(U)
-			VV := Split(V)
-			W := Add(Cmul(uv[0],VV[0]),Cmul(uv[1],UU[0]))
-			<-Z.req
-			Z.dat <- get(W)
-			copy(Add(W,Mul(UU[1],VV[1])),Z)
+            eb_chan_send(Z->dat, rat2heap(mul(uv[0],uv[1])));
+			dch2 *UU = Split(U);
+			dch2 *VV = Split(V);
+			PS W = Add(Cmul(uv[0],(*VV)[0]),Cmul(uv[1],(*UU)[0]));
+            assert(eb_chan_recv(Z->req, NULL));
+            eb_chan_send(Z->dat, rat2heap(get(W)));
+			copy(Add(W,Mul((*UU)[1],(*VV)[1])),Z);
 		}
-	}()
-	return Z
+	);
+	return Z;
 }
 
 // Differentiate
 
-func Diff(U PS) PS {
-	Z:=mkPS()
-	go func() {
-		<-Z.req
-		u := get(U)
-		if end(u) == 0 {
-			done:=false
-			for i:=1; !done; i++ {
-				u = get(U)
-				if end(u) != 0 {
-					done = true
+PS Diff(PS U) {
+	PS Z = mkPS();
+	go(
+        assert(eb_chan_recv(Z->req, NULL));
+		rat u = get(U);
+		if (end(u) == 0) {
+			bool done = false;
+			for (int i=1; !done; i++) {
+				u = get(U);
+				if (end(u) != 0) {
+					done = true;
 				} else {
-					Z.dat <- mul(itor(int64(i)),u)
-					<-Z.req
+                    eb_chan_send(Z->dat, rat2heap(mul(itor(i),u)));
+					assert(eb_chan_recv(Z->req, NULL));
 				}
 			}
 		}
-		Z.dat <- finis
-	}()
-	return Z
+        eb_chan_send(Z->dat, rat2heap(finis));
+	);
+	return Z;
 }
 
 // Integrate, with const of integration
-func Integ(c rat,U PS) PS {
-	Z:=mkPS()
-	go func() {
-		put(c,Z)
-		done:=false
-		for i:=1; !done; i++ {
-			<-Z.req
-			u := get(U)
-			if end(u) != 0 { done= true }
-			Z.dat <- mul(i2tor(1,int64(i)),u)
+PS Integ(rat c, PS U) {
+	PS Z = mkPS();
+	go(
+		put(c,Z);
+		bool done = false;
+		for (int i=1; !done; i++) {
+			assert(eb_chan_recv(Z->req, NULL));
+			rat u = get(U);
+			if (end(u) != 0) { done= true; }
+            eb_chan_send(Z->dat, rat2heap(mul(i2tor(1,i),u)));
 		}
-		Z.dat <- finis
-	}()
-	return Z
+		eb_chan_send(Z->dat, rat2heap(finis));
+	);
+	return Z;
 }
 
 // Binomial theorem (1+x)^c
 
-func Binom(c rat) PS {
-	Z:=mkPS()
-	go func() {
-		n := 1
-		t := itor(1)
-		for c.num!=0 {
-			put(t,Z)
-			t = mul(mul(t,c),i2tor(1,int64(n)))
-			c = sub(c,one)
-			n++
+PS Binom(rat c) {
+	PS Z = mkPS();
+	go(
+        rat cc = c;
+		int n = 1;
+		rat t = itor(1);
+		while (cc.num!=0) {
+			put(t,Z);
+			t = mul(mul(t,cc),i2tor(1,n));
+			cc = sub(cc,one);
+			n++;
 		}
-		put(finis,Z)
-	}()
-	return Z
+		put(finis,Z);
+	);
+	return Z;
 }
 
 // Reciprocal of a power series
@@ -526,17 +569,17 @@ func Binom(c rat) PS {
 //	u*ZZ + z*UU +x*UU*ZZ = 0
 //	ZZ = -UU*(z+x*ZZ)/u
 
-func Recip(U PS) PS {
-	Z:=mkPS()
-	go func() {
-		ZZ:=mkPS2()
-		<-Z.req
-		z := inv(get(U))
-		Z.dat <- z
-		split(Mul(Cmul(neg(z),U),Shift(z,ZZ[0])),ZZ)
-		copy(ZZ[1],Z)
-	}()
-	return Z
+PS Recip(PS U) {
+	PS Z=mkPS();
+	go(
+		dch2 *ZZ=mkPS2();
+		assert(eb_chan_recv(Z->req, NULL));
+		rat z = inv(get(U));
+        eb_chan_send(Z->dat, rat2heap(z));
+		split(Mul(Cmul(neg(z),U),Shift(z,(*ZZ)[0])),ZZ);
+		copy((*ZZ)[1],Z);
+	);
+	return Z;
 }
 
 // Exponential of a power series with constant term 0
@@ -546,10 +589,10 @@ func Recip(U PS) PS {
 //	DZ = Z*DU
 //	integrate to get Z
 
-func Exp(U PS) PS {
-	ZZ := mkPS2()
-	split(Integ(one,Mul(ZZ[0],Diff(U))),ZZ)
-	return ZZ[1]
+PS Exp(PS U) {
+	dch2 *ZZ = mkPS2();
+	split(Integ(one,Mul((*ZZ)[0],Diff(U))),ZZ);
+	return (*ZZ)[1];
 }
 
 // Substitute V for x in U, where the leading term of V is zero
@@ -558,154 +601,127 @@ func Exp(U PS) PS {
 //	then S(U,V) = u + VV*S(V,UU)
 // bug: a nonzero constant term is ignored
 
-func Subst(U, V PS) PS {
-	Z:= mkPS()
-	go func() {
-		VV := Split(V)
-		<-Z.req
-		u := get(U)
-		Z.dat <- u
-		if end(u) == 0 {
-			if end(get(VV[0])) != 0 {
-				put(finis,Z)
+PS Subst(PS U, PS V) {
+	PS Z = mkPS();
+	go(
+		dch2 *VV = Split(V);
+		assert(eb_chan_recv(Z->req, NULL));
+		rat u = get(U);
+        eb_chan_send(Z->dat, rat2heap(u));
+		if (end(u) == 0) {
+			if (end(get((*VV)[0])) != 0) {
+				put(finis,Z);
 			} else {
-				copy(Mul(VV[0],Subst(U,VV[1])),Z)
+				copy(Mul((*VV)[0],Subst(U,(*VV)[1])),Z);
 			}
 		}
-	}()
-	return Z
+	);
+	return Z;
 }
 
 // Monomial Substition: U(c x^n)
 // Each Ui is multiplied by c^i and followed by n-1 zeros
 
-func MonSubst(U PS, c0 rat, n int) PS {
-	Z:= mkPS()
-	go func() {
-		c := one
-		for {
-			<-Z.req
-			u := get(U)
-			Z.dat <- mul(u, c)
-			c = mul(c, c0)
-			if end(u) != 0 {
-				Z.dat <- finis
-				break
+PS MonSubst(PS U, rat c0, int n) {
+	PS Z = mkPS();
+	go(
+		rat c = one;
+		for (;;) {
+			assert(eb_chan_recv(Z->req, NULL));
+			rat u = get(U);
+            eb_chan_send(Z->dat, rat2heap(mul(u, c)));
+			c = mul(c, c0);
+			if (end(u) != 0) {
+				eb_chan_send(Z->dat, rat2heap(finis));
+				break;
 			}
-			for i := 1; i < n; i++ {
-				<-Z.req
-				Z.dat <- zero
+			for (int i = 1; i < n; i++) {
+				assert(eb_chan_recv(Z->req, NULL));
+				eb_chan_send(Z->dat, rat2heap(zero));
 			}
 		}
-	}()
-	return Z
+	);
+	return Z;
 }
 
 
-func Init() {
-	chnameserial = -1
-	seqno = 0
-	chnames = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
-	zero = itor(0)
-	one = itor(1)
-	finis = i2tor(1,0)
-	Ones = Rep(one)
-	Twos = Rep(itor(2))
+void Init() {
+	chnameserial = -1;
+	seqno = 0;
+	chnames = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+	zero = itor(0);
+	one = itor(1);
+	finis = i2tor(1,0);
+	Ones = Rep(one);
+	Twos = Rep(itor(2));
 }
 
-func check(U PS, c rat, count int, str string) {
-	for i := 0; i < count; i++ {
-		r := get(U)
-		if !r.eq(c) {
-			print("got: ")
-			r.pr()
-			print("should get ")
-			c.pr()
-			print("\n")
-			panic(str)
+void check(PS U, rat c, int count, const char *str) {
+	for (int i = 0; i < count; i++) {
+		rat r = get(U);
+		if (!eq(r, c)) {
+			printf("got: ");
+			pr(r);
+			printf("should get ");
+			pr(c);
+			printf("\n");
+            abort();
 		}
 	}
 }
 
-const N=10
-func checka(U PS, a []rat, str string) {
-	for i := 0; i < N; i++ {
-		check(U, a[i], 1, str)
+const int N=10;
+void checka(PS U, rat *a, const char *str) {
+	for (int i = 0; i < N; i++) {
+		check(U, a[i], 1, str);
 	}
 }
 
-func main() {
-	Init()
-	if len(os.Args) > 1 {  // print
-		print("Ones: "); printn(Ones, 10)
-		print("Twos: "); printn(Twos, 10)
-		print("Add: "); printn(Add(Ones, Twos), 10)
-		print("Diff: "); printn(Diff(Ones), 10)
-		print("Integ: "); printn(Integ(zero, Ones), 10)
-		print("CMul: "); printn(Cmul(neg(one), Ones), 10)
-		print("Sub: "); printn(Sub(Ones, Twos), 10)
-		print("Mul: "); printn(Mul(Ones, Ones), 10)
-		print("Exp: "); printn(Exp(Ones), 15)
-		print("MonSubst: "); printn(MonSubst(Ones, neg(one), 2), 10)
-		print("ATan: "); printn(Integ(zero, MonSubst(Ones, neg(one), 2)), 10)
-	} else {  // test
-		check(Ones, one, 5, "Ones")
-		check(Add(Ones, Ones), itor(2), 0, "Add Ones Ones")  // 1 1 1 1 1
-		check(Add(Ones, Twos), itor(3), 0, "Add Ones Twos") // 3 3 3 3 3
-		a := make([]rat, N)
-		d := Diff(Ones)
-		for i:=0; i < N; i++ {
-			a[i] = itor(int64(i+1))
-		}
-		checka(d, a, "Diff")  // 1 2 3 4 5
-		in := Integ(zero, Ones)
-		a[0] = zero  // integration constant
-		for i:=1; i < N; i++ {
-			a[i] = i2tor(1, int64(i))
-		}
-		checka(in, a, "Integ")  // 0 1 1/2 1/3 1/4 1/5
-		check(Cmul(neg(one), Twos), itor(-2), 10, "CMul")  // -1 -1 -1 -1 -1
-		check(Sub(Ones, Twos), itor(-1), 0, "Sub Ones Twos")  // -1 -1 -1 -1 -1
-		m := Mul(Ones, Ones)
-		for i:=0; i < N; i++ {
-			a[i] = itor(int64(i+1))
-		}
-		checka(m, a, "Mul")  // 1 2 3 4 5
-		e := Exp(Ones)
-		a[0] = itor(1)
-		a[1] = itor(1)
-		a[2] = i2tor(3,2)
-		a[3] = i2tor(13,6)
-		a[4] = i2tor(73,24)
-		a[5] = i2tor(167,40)
-		a[6] = i2tor(4051,720)
-		a[7] = i2tor(37633,5040)
-		a[8] = i2tor(43817,4480)
-		a[9] = i2tor(4596553,362880)
-		checka(e, a, "Exp")  // 1 1 3/2 13/6 73/24
-		at := Integ(zero, MonSubst(Ones, neg(one), 2))
-		for c, i := 1, 0; i < N; i++ {
-			if i%2 == 0 {
-				a[i] = zero
-			} else {
-				a[i] = i2tor(int64(c), int64(i))
-				c *= -1
-			}
-		}
-		checka(at, a, "ATan")  // 0 -1 0 -1/3 0 -1/5
-/*
-		t := Revert(Integ(zero, MonSubst(Ones, neg(one), 2)))
-		a[0] = zero
-		a[1] = itor(1)
-		a[2] = zero
-		a[3] = i2tor(1,3)
-		a[4] = zero
-		a[5] = i2tor(2,15)
-		a[6] = zero
-		a[7] = i2tor(17,315)
-		a[8] = zero
-		a[9] = i2tor(62,2835)
-		checka(t, a, "Tan")  // 0 1 0 1/3 0 2/15
-*/
-	}
+int main() {
+	Init();
+    check(Ones, one, 5, "Ones");
+    check(Add(Ones, Ones), itor(2), 0, "Add Ones Ones");  // 1 1 1 1 1
+    check(Add(Ones, Twos), itor(3), 0, "Add Ones Twos"); // 3 3 3 3 3
+    rat *a = calloc(N, sizeof(*a));
+    PS d = Diff(Ones);
+    for (int i=0; i < N; i++) {
+        a[i] = itor(i+1);
+    }
+    checka(d, a, "Diff");  // 1 2 3 4 5
+    PS in = Integ(zero, Ones);
+    a[0] = zero;  // integration constant
+    for (int i=1; i < N; i++) {
+        a[i] = i2tor(1, i);
+    }
+    checka(in, a, "Integ");  // 0 1 1/2 1/3 1/4 1/5
+    check(Cmul(neg(one), Twos), itor(-2), 10, "CMul");  // -1 -1 -1 -1 -1
+    check(Sub(Ones, Twos), itor(-1), 0, "Sub Ones Twos");  // -1 -1 -1 -1 -1
+    PS m = Mul(Ones, Ones);
+    for (int i=0; i < N; i++) {
+        a[i] = itor(i+1);
+    }
+    checka(m, a, "Mul");  // 1 2 3 4 5
+    PS e = Exp(Ones);
+    a[0] = itor(1);
+    a[1] = itor(1);
+    a[2] = i2tor(3,2);
+    a[3] = i2tor(13,6);
+    a[4] = i2tor(73,24);
+    a[5] = i2tor(167,40);
+    a[6] = i2tor(4051,720);
+    a[7] = i2tor(37633,5040);
+    a[8] = i2tor(43817,4480);
+    a[9] = i2tor(4596553,362880);
+    checka(e, a, "Exp");  // 1 1 3/2 13/6 73/24
+    PS at = Integ(zero, MonSubst(Ones, neg(one), 2));
+    for (int c = 1, i = 0; i < N; i++) {
+        if (i%2 == 0) {
+            a[i] = zero;
+        } else {
+            a[i] = i2tor(c, i);
+            c *= -1;
+        }
+    }
+    checka(at, a, "ATan");  // 0 -1 0 -1/3 0 -1/5
+    return 0;
 }

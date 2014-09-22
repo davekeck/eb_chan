@@ -44,7 +44,7 @@
 		559F510C19C3A223005921EE /* test.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = test.c; path = src/test.c; sourceTree = SOURCE_ROOT; };
 		559F511519C40E46005921EE /* testglue.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = testglue.c; path = test/testglue.c; sourceTree = SOURCE_ROOT; };
 		559F511619C40E46005921EE /* testglue.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = testglue.h; path = test/testglue.h; sourceTree = SOURCE_ROOT; };
-		55D2EA4719CF737C0053E832 /* nonblock.go */ = {isa = PBXFileReference; lastKnownFileType = text; name = nonblock.go; path = test/nonblock.go; sourceTree = SOURCE_ROOT; };
+		55D2EA4819CF7FA70053E832 /* powser1.go */ = {isa = PBXFileReference; lastKnownFileType = text; name = powser1.go; path = test/powser1.go; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -99,7 +99,7 @@
 				559F511619C40E46005921EE /* testglue.h */,
 				559F511519C40E46005921EE /* testglue.c */,
 				559F510C19C3A223005921EE /* test.c */,
-				55D2EA4719CF737C0053E832 /* nonblock.go */,
+				55D2EA4819CF7FA70053E832 /* powser1.go */,
 				55501D1119A969750028A9FE /* Supporting Files */,
 			);
 			path = chantest;
