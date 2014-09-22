@@ -12,8 +12,8 @@
 		559F510E19C3A223005921EE /* eb_chan.c in Sources */ = {isa = PBXBuildFile; fileRef = 559F510619C3A223005921EE /* eb_chan.c */; };
 		559F510F19C3A223005921EE /* eb_port.c in Sources */ = {isa = PBXBuildFile; fileRef = 559F510819C3A223005921EE /* eb_port.c */; };
 		559F511019C3A223005921EE /* eb_time.c in Sources */ = {isa = PBXBuildFile; fileRef = 559F510A19C3A223005921EE /* eb_time.c */; };
-		559F511119C3A223005921EE /* test.c in Sources */ = {isa = PBXBuildFile; fileRef = 559F510C19C3A223005921EE /* test.c */; };
 		559F511719C40E46005921EE /* testglue.c in Sources */ = {isa = PBXBuildFile; fileRef = 559F511519C40E46005921EE /* testglue.c */; };
+		55D2EA4B19CFC6140053E832 /* select5.c in Sources */ = {isa = PBXBuildFile; fileRef = 55D2EA4A19CFC6140053E832 /* select5.c */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -41,10 +41,9 @@
 		559F510919C3A223005921EE /* eb_port.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = eb_port.h; path = src/eb_port.h; sourceTree = SOURCE_ROOT; };
 		559F510A19C3A223005921EE /* eb_time.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = eb_time.c; path = src/eb_time.c; sourceTree = SOURCE_ROOT; };
 		559F510B19C3A223005921EE /* eb_time.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = eb_time.h; path = src/eb_time.h; sourceTree = SOURCE_ROOT; };
-		559F510C19C3A223005921EE /* test.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = test.c; path = src/test.c; sourceTree = SOURCE_ROOT; };
 		559F511519C40E46005921EE /* testglue.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = testglue.c; path = test/testglue.c; sourceTree = SOURCE_ROOT; };
 		559F511619C40E46005921EE /* testglue.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = testglue.h; path = test/testglue.h; sourceTree = SOURCE_ROOT; };
-		55D2EA4819CF7FA70053E832 /* powser1.go */ = {isa = PBXFileReference; lastKnownFileType = text; name = powser1.go; path = test/powser1.go; sourceTree = SOURCE_ROOT; };
+		55D2EA4A19CFC6140053E832 /* select5.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = select5.c; path = test/select5.c; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -98,8 +97,7 @@
 				559F510B19C3A223005921EE /* eb_time.h */,
 				559F511619C40E46005921EE /* testglue.h */,
 				559F511519C40E46005921EE /* testglue.c */,
-				559F510C19C3A223005921EE /* test.c */,
-				55D2EA4819CF7FA70053E832 /* powser1.go */,
+				55D2EA4A19CFC6140053E832 /* select5.c */,
 				55501D1119A969750028A9FE /* Supporting Files */,
 			);
 			path = chantest;
@@ -165,9 +163,9 @@
 			buildActionMask = 2147483647;
 			files = (
 				559F510E19C3A223005921EE /* eb_chan.c in Sources */,
-				559F511119C3A223005921EE /* test.c in Sources */,
 				559F511019C3A223005921EE /* eb_time.c in Sources */,
 				559F510F19C3A223005921EE /* eb_port.c in Sources */,
+				55D2EA4B19CFC6140053E832 /* select5.c in Sources */,
 				559F511719C40E46005921EE /* testglue.c in Sources */,
 				559F510D19C3A223005921EE /* eb_assert.c in Sources */,
 			);
