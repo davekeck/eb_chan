@@ -1,0 +1,31 @@
+#!/bin/bash
+
+platform_flags=""
+if [ "$(uname)" == "Darwin" ]; then
+    # Darwin
+    true # Bash complains if we have an empty if block...
+elif [ "$(uname)" == "Linux" ]; then
+    # Linux
+    platform_flags="-lBlocksRuntime"
+fi
+
+for i in $*; do
+    clang -D _POSIX_C_SOURCE=200809L -D _BSD_SOURCE "$platform_flags" -fblocks -lpthread -I../src -std=c99 ../src/eb_chan.c ../src/eb_port.c ../src/eb_assert.c ../src/eb_time.c ../src/testglue.c "$i" -o a.out
+    
+    r=$?
+    if [ "$r" -eq 0 ]; then
+        ./a.out
+        r=$?
+    fi
+    
+    rm -f a.out
+    
+    if [ "$r" -eq 0 ]; then
+        echo "$i: success"
+    else
+        echo "$i: fail"
+        exit 1
+    fi
+done
+
+exit 0

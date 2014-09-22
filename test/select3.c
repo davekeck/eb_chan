@@ -12,8 +12,6 @@ void unreachable() {
     abort();
 }
 
-typedef void(^VoidBlock)();
-
 // Calls f and verifies that f always/never panics depending on signal.
 void testPanic(const char *signal, VoidBlock f) {
 	f();

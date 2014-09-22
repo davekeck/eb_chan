@@ -305,7 +305,7 @@ void test6(int c) {
 void myWait() {
 	usleep(10);
 	while (changeNproc(0) != 0) {
-		usleep(1000);
+		usleep(10);
 	}
 }
 

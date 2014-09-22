@@ -102,7 +102,7 @@ void dosplit(dch *in, dch2 *out, eb_chan wait) {
             // nothing
         } else if (r == &out1recv) {
             // swap
-            typeof((*out)[0]) temp = (*out)[0];
+            dch *temp = (*out)[0];
             (*out)[0] = (*out)[1];
             (*out)[1] = temp;
         } else {

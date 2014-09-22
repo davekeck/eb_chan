@@ -49,6 +49,6 @@ int main() {
         const void *x;
         assert(eb_chan_recv(primes, &x));
         assert((int)(intptr_t)x == a[i]);
-        printf("%ju good (%p)\n", (uintmax_t)i, x);
+//        printf("%ju good (%p)\n", (uintmax_t)i, x);
 	}
 }

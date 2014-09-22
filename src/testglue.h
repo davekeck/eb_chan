@@ -6,12 +6,19 @@
 #include <pthread.h>
 #include <stdio.h>
 #include <unistd.h>
-#include <Block.h>
+#include <string.h>
 #include <strings.h>
-#include <mach/mach.h>
-#include <mach/message.h>
-#include <mach/kern_return.h>
-#include <mach/task_info.h>
+#include <Block.h>
+
+#if __MACH__
+    #define DARWIN 1
+    #include <mach/mach.h>
+    #include <mach/message.h>
+    #include <mach/kern_return.h>
+    #include <mach/task_info.h>
+#elif __linux__
+    #define LINUX 1
+#endif
 
 typedef void (^VoidBlock)();
 void spawnThread(VoidBlock b);

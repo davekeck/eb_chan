@@ -17,7 +17,7 @@ void AsynchFifo() {
         assert((size_t)val == i);
 	}
     
-    printf("AsynchFifo returned\n");
+//    printf("AsynchFifo returned\n");
 }
 
 
@@ -29,7 +29,7 @@ void Chain(eb_chan ch, int val, eb_chan in, eb_chan out) {
     assert((int)(intptr_t)recvd_val == val);
     
     eb_chan_send(out, (const void *)1);
-    printf("Chain returned\n");
+//    printf("Chain returned\n");
 }
 
 // thread together a daisy chain to read the elements in sequence
@@ -48,7 +48,7 @@ void SynchFifo() {
         eb_chan_send(ch, (const void *)i);
 	}
     eb_chan_recv(in, NULL);
-    printf("SynchFifo returned\n");
+//    printf("SynchFifo returned\n");
 }
 
 int main() {
