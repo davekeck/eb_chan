@@ -44,6 +44,7 @@
 		559F511519C40E46005921EE /* testglue.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = testglue.c; path = test/testglue.c; sourceTree = SOURCE_ROOT; };
 		559F511619C40E46005921EE /* testglue.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = testglue.h; path = test/testglue.h; sourceTree = SOURCE_ROOT; };
 		55D2EA4A19CFC6140053E832 /* select5.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = select5.c; path = test/select5.c; sourceTree = SOURCE_ROOT; };
+		55D2EA4C19CFE5180053E832 /* select5.go */ = {isa = PBXFileReference; lastKnownFileType = text; name = select5.go; path = test/select5.go; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -98,6 +99,7 @@
 				559F511619C40E46005921EE /* testglue.h */,
 				559F511519C40E46005921EE /* testglue.c */,
 				55D2EA4A19CFC6140053E832 /* select5.c */,
+				55D2EA4C19CFE5180053E832 /* select5.go */,
 				55501D1119A969750028A9FE /* Supporting Files */,
 			);
 			path = chantest;
