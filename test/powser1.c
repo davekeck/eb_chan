@@ -1,4 +1,4 @@
-// run
+// DONE
 
 // Test concurrency primitives: power series.
 
