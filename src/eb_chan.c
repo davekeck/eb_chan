@@ -717,22 +717,22 @@ eb_chan_op *eb_chan_do_list(eb_nsec timeout, eb_chan_op *const ops[], size_t nop
     // TODO: randomize iteration by shuffling input array once (upon entry)
         assert(ops);
     
-    // TODO: figure out a (much) faster way to randomize the ops!
-    // TEMP START
-        /* ## Shuffle our input array */
-        eb_chan_op *rops[nops];
-        /* No need to shuffle arrays that have 0 or 1 elements */
-        if (nops > 1) {
-            memcpy(rops, ops, nops*sizeof(*rops));
-            for (size_t i = 0; i < nops; i++) {
-                size_t ridx = random() % nops;
-                eb_chan_op *tmp = rops[ridx];
-                rops[ridx] = rops[i];
-                rops[i] = tmp;
-            }
-            ops = rops;
-        }
-    // TEMP END
+//    // TODO: figure out a (much) faster way to randomize the ops!
+//    // TEMP START
+//        /* ## Shuffle our input array */
+//        eb_chan_op *rops[nops];
+//        /* No need to shuffle arrays that have 0 or 1 elements */
+//        if (nops > 1) {
+//            memcpy(rops, ops, nops*sizeof(*rops));
+//            for (size_t i = 0; i < nops; i++) {
+//                size_t ridx = random() % nops;
+//                eb_chan_op *tmp = rops[ridx];
+//                rops[ridx] = rops[i];
+//                rops[i] = tmp;
+//            }
+//            ops = rops;
+//        }
+//    // TEMP END
     
     bool co[nops];
     memset(co, 0, sizeof(co));
