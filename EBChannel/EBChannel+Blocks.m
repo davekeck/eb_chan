@@ -41,7 +41,7 @@
         }
     }
     
-    eb_assert_or_recover(handler, return);
+    eb_assert_or_bail(handler, "Couldn't find handler");
     handler([r open], [r obj]);
 }
 

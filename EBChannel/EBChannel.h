@@ -8,7 +8,7 @@
 typedef enum {
     EBChannelResultOK,      /* Success */
     EBChannelResultClosed,  /* Failed because the channel is closed */
-    EBChannelResultStalled, /* Failed because the send/recv couldn't proceed without blocking */
+    EBChannelResultStalled, /* Failed because the send/recv couldn't proceed without blocking (applies to -trySend:/-tryRecv:) */
 } EBChannelResult;
 
 @interface EBChannel : NSObject

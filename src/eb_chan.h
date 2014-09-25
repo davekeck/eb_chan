@@ -16,7 +16,7 @@ typedef struct {
 typedef enum {
     eb_chan_ret_ok,         /* Success */
     eb_chan_ret_closed,     /* Failed because the channel is closed */
-    eb_chan_ret_stalled,    /* Failed because the send/recv couldn't proceed without blocking */
+    eb_chan_ret_stalled,    /* Failed because the send/recv couldn't proceed without blocking (applies to _try_send()/_try_recv()) */
 } eb_chan_ret;
 
 /* ## Channel creation/lifecycle */
@@ -25,7 +25,7 @@ eb_chan eb_chan_retain(eb_chan c);
 void eb_chan_release(eb_chan c);
 
 /* ## Channel closing */
-/* Returns _ok on success, or _fail if the channel was already closed. */
+/* Returns _ok on success, or _closed if the channel was already closed. */
 eb_chan_ret eb_chan_close(eb_chan c);
 
 /* ## Getters */
