@@ -555,17 +555,14 @@ var nonblock = parse("nonblock", `
 	        	{{/*  closedch0 */}}
 	        	{{if .Maybe}}
 	            	&op_ch0A,
+                {{else}}
+                    &op_ch1A,
 	        	{{end}}
+                
 	        	{{if .Maybe}}
 	            	&op_ch0B,
-	        	{{end}}
-
-	        	{{/*  closedch1 */}}
-	        	{{if .Maybe}}
-	            	&op_ch1A,
-	        	{{end}}
-	        	{{if .Maybe}}
-	            	&op_ch1B,
+                {{else}}
+                    &op_ch1B,
 	        	{{end}}
 	        );
 	        
