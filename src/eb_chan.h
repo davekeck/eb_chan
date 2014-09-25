@@ -1,7 +1,6 @@
 #pragma once
 #include <stddef.h>
 #include <stdbool.h>
-#include <assert.h>
 #include "eb_time.h"
 
 /* ## Types */
