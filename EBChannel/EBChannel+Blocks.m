@@ -18,63 +18,35 @@
     return op;
 }
 
-+ (void)select: (NSArray *)opsAndHandlersArray {
-    NSParameterAssert(opsAndHandlersArray);
-    NSParameterAssert(!([opsAndHandlersArray count]%2));
-    
-    id opsAndHandlers[[opsAndHandlersArray count]];
-    NSUInteger i = 0;
-    for (id o in opsAndHandlersArray) {
-        opsAndHandlers[i] = o;
-        i++;
-    }
++ (void)select: (NSArray *)opsAndHandlers {
+        NSParameterAssert(opsAndHandlers);
+        NSParameterAssert(!([opsAndHandlers count]%2)); /* Every op must have a handler, so we must have an even number of objects. */
     
     EBChannelOp *defaultOp = [self default];
-    NSUInteger maxNops = [opsAndHandlersArray count]/2;
-    eb_chan_op_t *ops[maxNops];
-    NSUInteger nops = 0;
-    BOOL block = YES;
-    for (NSUInteger i = 0; i < maxNops; i++) {
-        EBChannelOp *objcOp = opsAndHandlers[i*2];
-        if (objcOp == defaultOp) {
-            block = NO;
+    NSTimeInterval timeout = -1;
+    NSMutableArray *ops = [NSMutableArray new];
+    for (NSUInteger i = 0; i < [opsAndHandlers count]; i += 2) {
+        EBChannelOp *op = opsAndHandlers[i];
+        if (op == defaultOp) {
+            /* The op set has a default op, so change the timeout to 0 */
+            timeout = 0;
         } else {
-            eb_chan_op_t *op = &((EBChannelOp *)opsAndHandlers[i*2])->_op;
-            /* Reset every recv op's object */
-            if (!op->send) {
-                [(id)op->val release];
-                op->val = nil;
-            }
-            ops[i] = op;
-            nops++;
+            [ops addObject: op];
         }
     }
     
-    eb_chan_op_t *r = (block ? eb_chan_do(ops, nops) : eb_chan_try(ops, nops));
-        /* Either we're non-blocking and therefore r can be nil, or we're blocking and a r cannot be nil */
-        EBAssertOrRecover(!block || r, return);
-    
-    /* If we're non-blocking and r==nil, then make r our default op's eb_chan_op_t. */
-    if (!r) {
-        r = &defaultOp->_op;
-    }
-    
-    /* At this point, r can't be nil! */
-    eb_assert_or_bail(r, "No r!");
-    
-    if (r->send) {
-        /* Send ops retain the object on behalf of the receiver */
-        [(id)r->val retain];
-    }
-    
-    for (NSUInteger i = 0; i < nops; i++) {
-        EBChannelOp *op = opsAndHandlers[i*2];
-        if (r == &op->_op) {
-            EBChannelHandler handler = opsAndHandlers[(i*2)+1];
-            handler(r->val);
+    EBChannelOp *r = [EBChannel select: ops timeout: timeout];
+    EBChannelHandler handler = nil;
+    for (NSUInteger i = 0; i < [opsAndHandlers count]; i += 2) {
+        EBChannelOp *op = opsAndHandlers[i];
+        if ((r && r == op) || (!r && op == defaultOp)) {
+            handler = opsAndHandlers[i+1];
             break;
         }
     }
+    
+    eb_assert_or_recover(handler, return);
+    handler([r obj]);
 }
 
 @end

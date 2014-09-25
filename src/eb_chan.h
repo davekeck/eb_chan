@@ -26,12 +26,12 @@ size_t eb_chan_buf_cap(eb_chan c);
 size_t eb_chan_buf_len(eb_chan c);
 
 /* ## Performing operations */
-eb_chan_op *eb_chan_do_list(eb_nsec timeout, eb_chan_op *const ops[], size_t nops);
+eb_chan_op *eb_chan_select_list(eb_nsec timeout, eb_chan_op *const ops[], size_t nops);
 
-/* ## Convenience functions */
-#define eb_chan_do(timeout, ...) ({                                                                 \
-    eb_chan_op *const eb_chan_do_ops[] = {__VA_ARGS__};                                             \
-    eb_chan_do_list(timeout, eb_chan_do_ops, (sizeof(eb_chan_do_ops) / sizeof(*eb_chan_do_ops)));   \
+/* ## Convenience wrappers */
+#define eb_chan_select(timeout, ...) ({                                                                 \
+    eb_chan_op *const eb_chan_select_ops[] = {__VA_ARGS__};                                             \
+    eb_chan_select_list(timeout, eb_chan_select_ops, (sizeof(eb_chan_select_ops) / sizeof(*eb_chan_select_ops)));   \
 })
 
 /* Returns an initialized send op */
@@ -47,13 +47,13 @@ static inline eb_chan_op eb_chan_op_recv(eb_chan c) {
 /* Sends a value on a channel, blocking until it can do so. */
 static inline void eb_chan_send(eb_chan c, const void *val) {
     eb_chan_op op = eb_chan_op_send(c, val);
-    assert(eb_chan_do(eb_nsec_forever, &op));
+    assert(eb_chan_select(eb_nsec_forever, &op));
 }
 
 /* Sends a value on a channel and returns true, or returns false if the value couldn't be sent without blocking. */
 static inline bool eb_chan_try_send(eb_chan c, const void *val) {
     eb_chan_op op = eb_chan_op_send(c, val);
-    return (eb_chan_do(eb_nsec_zero, &op) != NULL);
+    return (eb_chan_select(eb_nsec_zero, &op) != NULL);
 }
 
 /* Receives a value from a channel, blocking until it can do so.
@@ -61,7 +61,7 @@ static inline bool eb_chan_try_send(eb_chan c, const void *val) {
    'val' is only valid if true is returned. */
 static inline bool eb_chan_recv(eb_chan c, const void **val) {
     eb_chan_op op = eb_chan_op_recv(c);
-    assert(eb_chan_do(eb_nsec_forever, &op));
+    assert(eb_chan_select(eb_nsec_forever, &op));
     if (val) {
         *val = op.val;
     }
@@ -73,7 +73,7 @@ static inline bool eb_chan_recv(eb_chan c, const void **val) {
    'val' is only valid if 'open' is true. */
 static inline bool eb_chan_try_recv(eb_chan c, bool *open, const void **val) {
     eb_chan_op op = eb_chan_op_recv(c);
-    bool result = (eb_chan_do(eb_nsec_zero, &op) != NULL);
+    bool result = (eb_chan_select(eb_nsec_zero, &op) != NULL);
     if (result) {
         if (open) {
             *open = op.open;

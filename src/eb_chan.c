@@ -713,7 +713,7 @@ static inline op_result try_op(const do_state *state, eb_chan_op *op, size_t op_
     return op_result_next;
 }
 
-eb_chan_op *eb_chan_do_list(eb_nsec timeout, eb_chan_op *const ops[], size_t nops) {
+eb_chan_op *eb_chan_select_list(eb_nsec timeout, eb_chan_op *const ops[], size_t nops) {
     // TODO: randomize iteration by shuffling input array once (upon entry)
         assert(ops);
     

@@ -7,10 +7,13 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		5532505E19D3664400F67BC6 /* eb_assert.c in Sources */ = {isa = PBXBuildFile; fileRef = 5532505519D3664400F67BC6 /* eb_assert.c */; };
+		5532505F19D3664400F67BC6 /* eb_chan.c in Sources */ = {isa = PBXBuildFile; fileRef = 5532505819D3664400F67BC6 /* eb_chan.c */; };
+		5532506019D3664400F67BC6 /* eb_port.c in Sources */ = {isa = PBXBuildFile; fileRef = 5532505A19D3664400F67BC6 /* eb_port.c */; };
+		5532506119D3664400F67BC6 /* eb_time.c in Sources */ = {isa = PBXBuildFile; fileRef = 5532505C19D3664400F67BC6 /* eb_time.c */; };
+		5532506519D368C500F67BC6 /* EBChannel+Blocks.m in Sources */ = {isa = PBXBuildFile; fileRef = 5532506419D368C500F67BC6 /* EBChannel+Blocks.m */; };
+		5532506819D3829000F67BC6 /* testglue.c in Sources */ = {isa = PBXBuildFile; fileRef = 5532506619D3829000F67BC6 /* testglue.c */; };
 		55914714197F957700856379 /* libEBFoundation.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 5591470F197F955A00856379 /* libEBFoundation.a */; };
-		55A4FF21199DAB7800D02D71 /* eb_chan.c in Sources */ = {isa = PBXBuildFile; fileRef = 55A4FF1F199DAB7800D02D71 /* eb_chan.c */; };
-		55A4FF25199DD98F00D02D71 /* eb_port.c in Sources */ = {isa = PBXBuildFile; fileRef = 55A4FF23199DD98F00D02D71 /* eb_port.c */; };
-		55A4FF28199E4EBC00D02D71 /* eb_assert.c in Sources */ = {isa = PBXBuildFile; fileRef = 55A4FF27199E4EBC00D02D71 /* eb_assert.c */; };
 		55E31411197652FB00D44328 /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 55E31410197652FB00D44328 /* Cocoa.framework */; };
 		55E3141B197652FB00D44328 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 55E31419197652FB00D44328 /* InfoPlist.strings */; };
 		55E3141D197652FB00D44328 /* main.m in Sources */ = {isa = PBXBuildFile; fileRef = 55E3141C197652FB00D44328 /* main.m */; };
@@ -57,13 +60,20 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		5532505519D3664400F67BC6 /* eb_assert.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = eb_assert.c; path = src/eb_assert.c; sourceTree = SOURCE_ROOT; };
+		5532505619D3664400F67BC6 /* eb_assert.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = eb_assert.h; path = src/eb_assert.h; sourceTree = SOURCE_ROOT; };
+		5532505719D3664400F67BC6 /* eb_atomic.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = eb_atomic.h; path = src/eb_atomic.h; sourceTree = SOURCE_ROOT; };
+		5532505819D3664400F67BC6 /* eb_chan.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = eb_chan.c; path = src/eb_chan.c; sourceTree = SOURCE_ROOT; };
+		5532505919D3664400F67BC6 /* eb_chan.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = eb_chan.h; path = src/eb_chan.h; sourceTree = SOURCE_ROOT; };
+		5532505A19D3664400F67BC6 /* eb_port.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = eb_port.c; path = src/eb_port.c; sourceTree = SOURCE_ROOT; };
+		5532505B19D3664400F67BC6 /* eb_port.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = eb_port.h; path = src/eb_port.h; sourceTree = SOURCE_ROOT; };
+		5532505C19D3664400F67BC6 /* eb_time.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = eb_time.c; path = src/eb_time.c; sourceTree = SOURCE_ROOT; };
+		5532505D19D3664400F67BC6 /* eb_time.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = eb_time.h; path = src/eb_time.h; sourceTree = SOURCE_ROOT; };
+		5532506319D368C500F67BC6 /* EBChannel+Blocks.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = "EBChannel+Blocks.h"; sourceTree = "<group>"; };
+		5532506419D368C500F67BC6 /* EBChannel+Blocks.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = "EBChannel+Blocks.m"; sourceTree = "<group>"; };
+		5532506619D3829000F67BC6 /* testglue.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = testglue.c; path = src/testglue.c; sourceTree = SOURCE_ROOT; };
+		5532506719D3829000F67BC6 /* testglue.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = testglue.h; path = src/testglue.h; sourceTree = SOURCE_ROOT; };
 		55914709197F955900856379 /* EBFoundation.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = EBFoundation.xcodeproj; path = "../Open-source Stuff/EBFoundation/EBFoundation.xcodeproj"; sourceTree = "<group>"; };
-		55A4FF1F199DAB7800D02D71 /* eb_chan.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = eb_chan.c; sourceTree = "<group>"; };
-		55A4FF20199DAB7800D02D71 /* eb_chan.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = eb_chan.h; sourceTree = "<group>"; };
-		55A4FF23199DD98F00D02D71 /* eb_port.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = eb_port.c; sourceTree = "<group>"; };
-		55A4FF24199DD98F00D02D71 /* eb_port.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = eb_port.h; sourceTree = "<group>"; };
-		55A4FF26199E4EBC00D02D71 /* eb_assert.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = eb_assert.h; sourceTree = "<group>"; };
-		55A4FF27199E4EBC00D02D71 /* eb_assert.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = eb_assert.c; sourceTree = "<group>"; };
 		55E3140D197652FB00D44328 /* EBChannel.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = EBChannel.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		55E31410197652FB00D44328 /* Cocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Cocoa.framework; path = System/Library/Frameworks/Cocoa.framework; sourceTree = SDKROOT; };
 		55E31413197652FB00D44328 /* AppKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AppKit.framework; path = System/Library/Frameworks/AppKit.framework; sourceTree = SDKROOT; };
@@ -163,14 +173,21 @@
 			children = (
 				55E31422197652FB00D44328 /* EBAppDelegate.h */,
 				55E31423197652FB00D44328 /* EBAppDelegate.m */,
-				55A4FF26199E4EBC00D02D71 /* eb_assert.h */,
-				55A4FF27199E4EBC00D02D71 /* eb_assert.c */,
-				55A4FF24199DD98F00D02D71 /* eb_port.h */,
-				55A4FF23199DD98F00D02D71 /* eb_port.c */,
-				55A4FF20199DAB7800D02D71 /* eb_chan.h */,
-				55A4FF1F199DAB7800D02D71 /* eb_chan.c */,
+				5532506619D3829000F67BC6 /* testglue.c */,
+				5532506719D3829000F67BC6 /* testglue.h */,
+				5532505519D3664400F67BC6 /* eb_assert.c */,
+				5532505619D3664400F67BC6 /* eb_assert.h */,
+				5532505719D3664400F67BC6 /* eb_atomic.h */,
+				5532505819D3664400F67BC6 /* eb_chan.c */,
+				5532505919D3664400F67BC6 /* eb_chan.h */,
+				5532505A19D3664400F67BC6 /* eb_port.c */,
+				5532505B19D3664400F67BC6 /* eb_port.h */,
+				5532505C19D3664400F67BC6 /* eb_time.c */,
+				5532505D19D3664400F67BC6 /* eb_time.h */,
 				55E314441976532800D44328 /* EBChannel.h */,
 				55E314451976532800D44328 /* EBChannel.m */,
+				5532506319D368C500F67BC6 /* EBChannel+Blocks.h */,
+				5532506419D368C500F67BC6 /* EBChannel+Blocks.m */,
 				55E31425197652FB00D44328 /* MainMenu.xib */,
 				55E31428197652FC00D44328 /* Images.xcassets */,
 				55E31417197652FB00D44328 /* Supporting Files */,
@@ -332,11 +349,14 @@
 			buildActionMask = 2147483647;
 			files = (
 				55E314461976532800D44328 /* EBChannel.m in Sources */,
-				55A4FF25199DD98F00D02D71 /* eb_port.c in Sources */,
+				5532505F19D3664400F67BC6 /* eb_chan.c in Sources */,
+				5532506119D3664400F67BC6 /* eb_time.c in Sources */,
 				55E3141D197652FB00D44328 /* main.m in Sources */,
-				55A4FF21199DAB7800D02D71 /* eb_chan.c in Sources */,
-				55A4FF28199E4EBC00D02D71 /* eb_assert.c in Sources */,
+				5532506019D3664400F67BC6 /* eb_port.c in Sources */,
 				55E31424197652FB00D44328 /* EBAppDelegate.m in Sources */,
+				5532506519D368C500F67BC6 /* EBChannel+Blocks.m in Sources */,
+				5532506819D3829000F67BC6 /* testglue.c in Sources */,
+				5532505E19D3664400F67BC6 /* eb_assert.c in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

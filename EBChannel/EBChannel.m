@@ -7,16 +7,29 @@
 #import "eb_chan.h"
 #import "eb_assert.h"
 
-@implementation EBChannelOp
+@interface EBChannel () {
+    @public
+    eb_chan _chan;
+}
+@end
 
-- (instancetype)initWithChannel: (eb_chan_t)chan send: (BOOL)send obj: (id)obj {
+@implementation EBChannelOp {
+    @public
+    EBChannel *_chan;
+    eb_chan_op _op;
+}
+
+- (instancetype)initWithChannel: (EBChannel *)chan send: (BOOL)send obj: (id)obj {
         NSParameterAssert(chan);
+        NSParameterAssert((bool)send == (bool)obj); /* If we're sending, we better have an object, or vice versa. */
     
     if (!(self = [super init])) {
         return nil;
     }
     
-    _op.chan = chan;
+    _chan = [chan retain];
+    
+    _op.chan = _chan->_chan;
     _op.send = send;
     _op.val = [obj retain];
     
@@ -27,11 +40,12 @@
     [(id)_op.val release];
     _op.val = nil;
     
+    _op.chan = nil;
+    
+    [_chan release];
+    _chan = nil;
+    
     [super dealloc];
-}
-
-- (eb_chan_op_t *)op {
-    return &_op;
 }
 
 - (id)obj {
@@ -40,9 +54,7 @@
 
 @end
 
-@implementation EBChannel {
-    eb_chan_t _chan;
-}
+@implementation EBChannel
 
 #pragma mark - Creation -
 - (instancetype)initWithBufferCapacity: (NSUInteger)bufferCapacity {
@@ -66,59 +78,57 @@
 }
 
 #pragma mark - Methods -
-NS_INLINE EBChannelOp *doOps(NSArray *opsArray, BOOL block) {
-        NSCParameterAssert(opsArray);
++ (EBChannelOp *)select: (NSArray *)opsArray timeout: (NSTimeInterval)timeout {
+        NSParameterAssert(opsArray);
     
     size_t nops = [opsArray count];
-    eb_chan_op_t *ops[nops];
-    for (NSUInteger i = 0; i < nops; i++) {
-        /* Reset every recv op's object */
-        eb_chan_op_t *op = &((EBChannelOp *)opsArray[i])->_op;
-        if (!op->send) {
+    eb_chan_op *ops[nops];
+    NSUInteger i = 0;
+    for (EBChannelOp *opObj in opsArray) {
+        eb_chan_op *op = &opObj->_op;
+        if (op->send) {
+            /* Send ops retain their object on behalf of the receiver. We have to retain it before the actual
+               send occurs, otherwise there's a race where the object could be released and deallocated on
+               the other end before we retain it here, and then we retain it here, but we crash because the
+               object was already deallocated. */
+            [(id)op->val retain];
+        } else {
+            /* Reset receive ops' values before we start the _select() call, because the receive's val may be
+               replaced if the op executes, in which case we'll have lost the ooportunity to release the old
+               value. */
             [(id)op->val release];
             op->val = nil;
         }
+        
         ops[i] = op;
+        i++;
     }
     
-    eb_chan_op_t *r = (block ? eb_chan_do(ops, nops) : eb_chan_try(ops, nops));
+    eb_nsec nsecTimeout = (timeout < 0 ? eb_nsec_forever : (eb_nsec)(timeout * eb_nsec_per_sec));
+    eb_chan_op *r = eb_chan_select_list(nsecTimeout, ops, nops);
         /* Either we're non-blocking and it doesn't matter whether an op completed, or we're blocking and an op did complete */
-        EBAssertOrRecover(!block || r, return nil);
+        EBAssertOrRecover(nsecTimeout != eb_nsec_forever || r, return nil);
     
     EBChannelOp *result = nil;
-    if (r) {
-        if (r->send) {
-            /* Send ops retain the object on behalf of the receiver */
-            [(id)r->val retain];
+    for (EBChannelOp *opObj in opsArray) {
+        eb_chan_op *op = &opObj->_op;
+        if (r == op) {
+            result = opObj;
+        } else if (op->send) {
+            /* Release the send ops' values for each send op that didn't execute. */
+            [(id)op->val release];
         }
-        
-        for (EBChannelOp *op in opsArray) {
-            if (r == &op->_op) {
-                result = op;
-                break;
-            }
-        }
-        
-        eb_assert_or_bail(result, "Couldn't find op!");
     }
     
     return result;
 }
 
-+ (EBChannelOp *)do: (NSArray *)ops {
-    return doOps(ops, YES);
+- (EBChannelOp *)sendOp: (id)obj {
+    return [[[EBChannelOp alloc] initWithChannel: self send: YES obj: obj] autorelease];
 }
 
-+ (EBChannelOp *)try: (NSArray *)ops {
-    return doOps(ops, NO);
-}
-
-- (EBChannelOp *)send: (id)obj {
-    return [[[EBChannelOp alloc] initWithChannel: _chan send: YES obj: obj] autorelease];
-}
-
-- (EBChannelOp *)recv {
-    return [[[EBChannelOp alloc] initWithChannel: _chan send: NO obj: nil] autorelease];
+- (EBChannelOp *)recvOp {
+    return [[[EBChannelOp alloc] initWithChannel: self send: NO obj: nil] autorelease];
 }
 
 - (void)close {
@@ -127,11 +137,11 @@ NS_INLINE EBChannelOp *doOps(NSArray *opsArray, BOOL block) {
 
 #pragma mark - Getters -
 - (NSUInteger)bufferCapacity {
-    return eb_chan_get_buf_cap(_chan);
+    return eb_chan_buf_cap(_chan);
 }
 
 - (NSUInteger)bufferLength {
-    return eb_chan_get_buf_len(_chan);
+    return eb_chan_buf_len(_chan);
 }
 
 @end
