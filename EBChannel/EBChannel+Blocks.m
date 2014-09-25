@@ -1,7 +1,3 @@
-//#if __has_feature(objc_arc)
-//  #error For performance, EBChannel must be compiled with ARC disabled. (To do so, use the -fno-objc-arc compiler flag for this file.)
-//#endif
-
 #import "EBChannel+Blocks.h"
 #import <EBFoundation/EBFoundation.h>
 #import "eb_assert.h"
@@ -46,7 +42,7 @@
     }
     
     eb_assert_or_recover(handler, return);
-    handler([r obj]);
+    handler([r open], [r obj]);
 }
 
 @end

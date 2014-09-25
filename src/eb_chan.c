@@ -258,30 +258,28 @@ void eb_chan_release(eb_chan c) {
 }
 
 #pragma mark - Channel closing -
-void eb_chan_close(eb_chan c) {
+eb_chan_ret eb_chan_close(eb_chan c) {
     assert(c);
     
-    bool done = false;
-    while (!done) {
+    eb_chan_ret result = eb_chan_ret_stalled;
+    while (result == eb_chan_ret_stalled) {
         eb_port signal_port = NULL;
         eb_spinlock_lock(&c->lock);
-                eb_assert_or_bail(c->state != chanstate_closed, "Illegal close of already-closed channel.");
-                eb_assert_or_bail(c->state != chanstate_send && c->state != chanstate_ack, "Illegal close of channel with send in progress.");
-            
             if (c->state == chanstate_open) {
                 c->state = chanstate_closed;
-                done = true;
-            } else if (c->state == chanstate_recv) {
+                result = eb_chan_ret_ok;
+            } else if (c->state == chanstate_closed) {
+                result = eb_chan_ret_closed;
+            } else if (c->state == chanstate_send || c->state == chanstate_recv) {
                 if (c->unbuf_port) {
                     signal_port = eb_port_retain(c->unbuf_port);
                 }
-                
                 c->state = chanstate_closed;
-                done = true;
+                result = eb_chan_ret_ok;
             }
         eb_spinlock_unlock(&c->lock);
         
-        /* Wake up the recv */
+        /* Wake up the send/recv */
         if (signal_port) {
             eb_port_signal(signal_port);
             eb_port_release(signal_port);
@@ -289,9 +287,13 @@ void eb_chan_close(eb_chan c) {
         }
     }
     
-    /* Wake up the sends/recvs. (It's illegal to have senders at this point, and we'll wind up aborting if we do...) */
-    port_list_signal_first(c->sends, NULL);
-    port_list_signal_first(c->recvs, NULL);
+    if (result == eb_chan_ret_ok) {
+        /* Wake up the sends/recvs so that they see the channel's now closed */
+        port_list_signal_first(c->sends, NULL);
+        port_list_signal_first(c->recvs, NULL);
+    }
+    
+    return result;
 }
 
 #pragma mark - Getters -
@@ -369,14 +371,19 @@ static inline op_result send_buf(const do_state *state, eb_chan_op *op, size_t o
     eb_chan c = op->chan;
     op_result result = op_result_next;
     
-    /* Verify that the channel is open */
-    eb_assert_or_bail(c->state == chanstate_open, "Illegal send on non-open channel");
-    
-    if (c->buf_len < c->buf_cap) {
+    if (c->buf_len < c->buf_cap || c->state == chanstate_closed) {
         /* It looks like our channel's in an acceptable state, so try to acquire the lock */
         if (eb_spinlock_try(&c->lock)) {
+            /* Sanity-check the channel's state */
+            eb_assert_or_bail(c->state == chanstate_open || c->state == chanstate_closed, "Invalid channel state");
+            
             bool signal_recv = false;
-            if (c->buf_len < c->buf_cap) {
+            if (c->state == chanstate_closed) {
+                /* ## Sending, buffered, channel closed */
+                /* Set our op's state and our return value */
+                op->open = false;
+                result = op_result_complete;
+            } else if (c->buf_len < c->buf_cap) {
                 /* ## Sending, buffered, channel open, buffer has space */
                 /* Notify the channel's recvs if our buffer is going from empty to non-empty */
                 signal_recv = (!c->buf_len);
@@ -384,7 +391,8 @@ static inline op_result send_buf(const do_state *state, eb_chan_op *op, size_t o
                 size_t idx = (c->buf_idx + c->buf_len) % c->buf_cap;
                 c->buf[idx] = op->val;
                 c->buf_len++;
-                /* Set our flag signifying that we completed this op. */
+                /* Set our op's state and our return value */
+                op->open = true;
                 result = op_result_complete;
             }
             
@@ -419,20 +427,18 @@ static inline op_result recv_buf(const do_state *state, eb_chan_op *op, size_t o
                 /* ## Receiving, buffered, buffer non-empty */
                 /* Notify the channel's sends if our buffer is going from full to not-full */
                 signal_send = (c->buf_len == c->buf_cap);
-                /* Set our op's state signifying that we received a value */
+                /* Set our op's state and our return value */
                 op->open = true;
                 op->val = c->buf[c->buf_idx];
-                /* Update chan's buffer */
+                result = op_result_complete;
+                /* Update chan's buffer. (Updating buf_idx needs to come after we use it!) */
                 c->buf_len--;
                 c->buf_idx = (c->buf_idx + 1) % c->buf_cap;
-                /* Set our flag signifying that we completed this op. */
-                result = op_result_complete;
             } else if (c->state == chanstate_closed) {
                 /* ## Receiving, buffered, buffer empty, channel closed */
-                /* Set our op's state signifying that it completed because the channel's closed */
+                /* Set our op's state and our return value */
                 op->open = false;
                 op->val = NULL;
-                /* We completed this op so set our return value! */
                 result = op_result_complete;
             }
             
@@ -479,8 +485,9 @@ static inline op_result send_unbuf(const do_state *state, eb_chan_op *op, size_t
                 /* Signal a recv since one of them can continue now */
                 signal_recv = true;
             } else if (c->state == chanstate_closed) {
-                /* Sending on a closed channel -- not allowed! */
-                eb_assert_or_bail(c->state != chanstate_closed, "Illegal send on closed channel");
+                /* Set our op's state and our return value */
+                op->open = false;
+                result = op_result_complete;
             } else if (c->state == chanstate_send && c->unbuf_op == op) {
                 /* We own the send op that's in progress, so assign chan's unbuf_port */
                 /* Verify that the unbuf_state matches our 'id' parameter. If this assertion fails, it means there's likely
@@ -497,11 +504,10 @@ static inline op_result send_unbuf(const do_state *state, eb_chan_op *op, size_t
                 /* Sanity check -- make sure the op is a recv */
                 eb_assert_or_bail(!c->unbuf_op->send, "Op isn't a recv as expected");
                 
+                /* Set the recv op's value. This needs to happen before we transition out of the _recv state, otherwise the unbuf_op may no longer be valid! */
+                c->unbuf_op->val = op->val;
                 /* Acknowledge the receive */
                 c->state = chanstate_ack;
-                /* Set our op's fields */
-                c->unbuf_op->open = true;
-                c->unbuf_op->val = op->val;
                 /* Get a reference to the unbuf_port that needs to be signaled */
                 eb_port signal_port = (c->unbuf_port ? eb_port_retain(c->unbuf_port) : NULL);
                 eb_spinlock_unlock(&c->lock);
@@ -526,7 +532,8 @@ static inline op_result send_unbuf(const do_state *state, eb_chan_op *op, size_t
                                 c->state = chanstate_open;
                                 /* We reset our state to _open, so signal a send since it can proceed now. */
                                 signal_recv = true;
-                                /* We completed this op! */
+                                /* Set our op's state and our return value */
+                                op->open = true;
                                 result = op_result_complete;
                                 /* Breaking here so that we skip the _unlock() call, because we unlock the spinlock outside
                                    of our large if-statement. */
@@ -555,6 +562,8 @@ static inline op_result send_unbuf(const do_state *state, eb_chan_op *op, size_t
                 eb_assert_or_bail(c->unbuf_state == state, "unbuf_state invalid");
                 /* A recv is polling for chan's state to change, so update it to signal that we're done sending! */
                 c->state = chanstate_done;
+                /* Set our op's state and our return value */
+                op->open = true;
                 result = op_result_complete;
             }
             
@@ -601,10 +610,9 @@ static inline op_result recv_unbuf(const do_state *state, eb_chan_op *op, size_t
                 /* Signal a send since one of them can continue now */
                 signal_send = true;
             } else if (c->state == chanstate_closed) {
-                /* Set our op's state signifying that we're returning the value due to a closed channel */
+                /* Set our op's state and our return value */
                 op->open = false;
                 op->val = NULL;
-                /* We completed this op! */
                 result = op_result_complete;
             } else if (c->state == chanstate_send && c->unbuf_state != state) {
                 /* We verified (immediately above) that the send isn't part of the same op pool (we can't do unbuffered
@@ -613,11 +621,10 @@ static inline op_result recv_unbuf(const do_state *state, eb_chan_op *op, size_t
                 /* Sanity check -- make sure the op is a send */
                 eb_assert_or_bail(c->unbuf_op->send, "Op isn't a send as expected");
                 
+                /* Get the op's value. This needs to happen before we transition out of the _send state, otherwise the unbuf_op may no longer be valid! */
+                op->val = c->unbuf_op->val;
                 /* Acknowledge the send */
                 c->state = chanstate_ack;
-                /* Set our op's fields */
-                op->open = true;
-                op->val = c->unbuf_op->val;
                 /* Get a reference to the unbuf_port that needs to be signaled */
                 eb_port signal_port = (c->unbuf_port ? eb_port_retain(c->unbuf_port) : NULL);
                 eb_spinlock_unlock(&c->lock);
@@ -642,7 +649,8 @@ static inline op_result recv_unbuf(const do_state *state, eb_chan_op *op, size_t
                                 c->state = chanstate_open;
                                 /* We reset our state to _open, so signal a recv since it can proceed now. */
                                 signal_send = true;
-                                /* We completed this op! */
+                                /* Set our op's state and our return value */
+                                op->open = true;
                                 result = op_result_complete;
                                 /* Breaking here so that we skip the _unlock() call, because we unlock the spinlock outside
                                    of our large if-statement. */
@@ -680,6 +688,8 @@ static inline op_result recv_unbuf(const do_state *state, eb_chan_op *op, size_t
                 eb_assert_or_bail(c->unbuf_state == state, "unbuf_state invalid");
                 /* A send is polling for chan's state to change, so update it to signal that we're done sending! */
                 c->state = chanstate_done;
+                /* Set our op's state and our return value */
+                op->open = true;
                 result = op_result_complete;
             }
             
@@ -713,6 +723,45 @@ static inline op_result try_op(const do_state *state, eb_chan_op *op, size_t op_
     return op_result_next;
 }
 
+eb_chan_ret eb_chan_send(eb_chan c, const void *val) {
+    eb_chan_op op = eb_chan_op_send(c, val);
+    eb_assert_or_bail(eb_chan_select(eb_nsec_forever, &op) == &op, "Invalid select() return value");
+    return (op.open ? eb_chan_ret_ok : eb_chan_ret_closed);
+}
+
+eb_chan_ret eb_chan_try_send(eb_chan c, const void *val) {
+    eb_chan_op op = eb_chan_op_send(c, val);
+    eb_chan_op *r = eb_chan_select(eb_nsec_zero, &op);
+    eb_assert_or_bail(r == NULL || r == &op, "Invalid select() return value");
+    if (r) {
+        return (op.open ? eb_chan_ret_ok : eb_chan_ret_closed);
+    }
+    return eb_chan_ret_stalled;
+}
+
+eb_chan_ret eb_chan_recv(eb_chan c, const void **val) {
+    eb_chan_op op = eb_chan_op_recv(c);
+    eb_assert_or_bail(eb_chan_select(eb_nsec_forever, &op) == &op, "Invalid select() return value");
+    if (op.open && val) {
+        *val = op.val;
+    }
+    return (op.open ? eb_chan_ret_ok : eb_chan_ret_closed);
+}
+
+eb_chan_ret eb_chan_try_recv(eb_chan c, const void **val) {
+    eb_chan_op op = eb_chan_op_recv(c);
+    eb_chan_op *r = eb_chan_select(eb_nsec_zero, &op);
+    eb_assert_or_bail(r == NULL || r == &op, "Invalid select() return value");
+    if (r) {
+        if (op.open && val) {
+            *val = op.val;
+        }
+        return (op.open ? eb_chan_ret_ok : eb_chan_ret_closed);
+    }
+    return eb_chan_ret_stalled;
+}
+
+#pragma mark - Multiplexing -
 eb_chan_op *eb_chan_select_list(eb_nsec timeout, eb_chan_op *const ops[], size_t nops) {
     // TODO: randomize iteration by shuffling input array once (upon entry)
         assert(ops);

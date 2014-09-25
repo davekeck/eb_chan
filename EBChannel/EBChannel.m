@@ -21,31 +21,29 @@
 
 - (instancetype)initWithChannel: (EBChannel *)chan send: (BOOL)send obj: (id)obj {
         NSParameterAssert(chan);
-        NSParameterAssert((bool)send == (bool)obj); /* If we're sending, we better have an object, or vice versa. */
     
     if (!(self = [super init])) {
         return nil;
     }
     
     _chan = [chan retain];
-    
-    _op.chan = _chan->_chan;
-    _op.send = send;
-    _op.val = [obj retain];
+    _op = (eb_chan_op){.chan = _chan->_chan, .send = send, .val = [obj retain]};
     
     return self;
 }
 
 - (void)dealloc {
     [(id)_op.val release];
-    _op.val = nil;
-    
-    _op.chan = nil;
-    
     [_chan release];
+    
+    _op = (eb_chan_op){.chan = NULL, .send = NO, .val = nil};
     _chan = nil;
     
     [super dealloc];
+}
+
+- (BOOL)open {
+    return _op.open;
 }
 
 - (id)obj {
@@ -77,7 +75,61 @@
     [super dealloc];
 }
 
-#pragma mark - Methods -
+- (EBChannelResult)close {
+    eb_chan_ret r = eb_chan_close(_chan);
+    eb_assert_or_bail(r == eb_chan_ret_ok || r == eb_chan_ret_closed, "Unknown return value");
+    if (r == eb_chan_ret_ok) {
+        return EBChannelResultOK;
+    }
+    return EBChannelResultClosed;
+}
+
+#pragma mark - Getters -
+- (NSUInteger)bufferCapacity {
+    return eb_chan_buf_cap(_chan);
+}
+
+- (NSUInteger)bufferLength {
+    return eb_chan_buf_len(_chan);
+}
+
+#pragma mark - Sending/receiving -
+- (EBChannelResult)send: (id)obj {
+    EBChannelOp *r = [EBChannel select: @[[self sendOp: obj]] timeout: -1];
+    eb_assert_or_bail(r, "Invalid select return value");
+    return (r->_op.open ? EBChannelResultOK : EBChannelResultClosed);
+}
+
+- (EBChannelResult)trySend: (id)obj {
+    EBChannelOp *r = [EBChannel select: @[[self sendOp: obj]] timeout: 0];
+    if (r) {
+        return (r->_op.open ? EBChannelResultOK : EBChannelResultClosed);
+    }
+    return EBChannelResultStalled;
+}
+
+- (EBChannelResult)recv: (id *)obj {
+    EBChannelOp *r = [EBChannel select: @[[self recvOp]] timeout: -1];
+    eb_assert_or_bail(r, "Invalid select return value");
+    if (r->_op.open && obj) {
+        *obj = r->_op.val;
+    }
+    
+    return (r->_op.open ? EBChannelResultOK : EBChannelResultClosed);
+}
+
+- (EBChannelResult)tryRecv: (id *)obj {
+    EBChannelOp *r = [EBChannel select: @[[self recvOp]] timeout: 0];
+    if (r) {
+        if (r->_op.open && obj) {
+            *obj = r->_op.val;
+        }
+        return (r->_op.open ? EBChannelResultOK : EBChannelResultClosed);
+    }
+    return EBChannelResultStalled;
+}
+
+#pragma mark - Multiplexing -
 + (EBChannelOp *)select: (NSArray *)opsArray timeout: (NSTimeInterval)timeout {
         NSParameterAssert(opsArray);
     
@@ -129,19 +181,6 @@
 
 - (EBChannelOp *)recvOp {
     return [[[EBChannelOp alloc] initWithChannel: self send: NO obj: nil] autorelease];
-}
-
-- (void)close {
-    eb_chan_close(_chan);
-}
-
-#pragma mark - Getters -
-- (NSUInteger)bufferCapacity {
-    return eb_chan_buf_cap(_chan);
-}
-
-- (NSUInteger)bufferLength {
-    return eb_chan_buf_len(_chan);
 }
 
 @end

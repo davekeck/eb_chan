@@ -1,7 +1,7 @@
 #import <Foundation/Foundation.h>
 #import "EBChannel.h"
 
-typedef void(^EBChannelHandler)(id obj);
+typedef void(^EBChannelHandler)(BOOL open, id obj);
 
 @interface EBChannel (Blocks)
 

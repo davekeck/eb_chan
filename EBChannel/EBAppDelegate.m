@@ -12,12 +12,21 @@ EBChannel *gChan = nil;
 void threadDoSend()
 {
     for (size_t i = 0; i < NTRIALS; i++) @autoreleasepool {
-        [EBChannel select: @[
-            [gChan sendOp: @(i)],
-            ^(id obj){
-//                NSLog(@"SEND: %@", obj);
-            }
-        ]];
+        EBChannelResult r = [gChan send: @(i)];
+        assert(r == EBChannelResultOK || r == EBChannelResultClosed);
+        if (r == EBChannelResultOK) {
+//            NSLog(@"SEND: SEND");
+        } else {
+            NSLog(@"SEND: CLOSED");
+            return;
+        }
+        
+//        [EBChannel select: @[
+//            [gChan sendOp: @(i)],
+//            ^(BOOL open, id obj){
+////                NSLog(@"SEND: %@", obj);
+//            }
+//        ]];
     }
 }
 
@@ -25,19 +34,31 @@ void threadTryRecv()
 {
     __block size_t count = 0;
     eb_nsec startTime = eb_time_now();
-    for (;;) @autoreleasepool {
-        [EBChannel select: @[
-            [gChan recvOp],
-            ^(id obj){
-//                NSLog(@"RECV: %@", obj);
-                count++;
-            },
-            
-            [EBChannel default],
-            ^{
-//                NSLog(@"NO RECV");
-            }
-        ]];
+    while (count < NTRIALS) @autoreleasepool {
+        id obj = nil;
+        EBChannelResult r = [gChan tryRecv: &obj];
+        if (r == EBChannelResultOK) {
+            NSLog(@"TRYRECV: RECV (%@)", obj);
+            count++;
+        } else if (r == EBChannelResultStalled) {
+//            NSLog(@"TRYRECV: STALLED");
+        } else if (r == EBChannelResultClosed) {
+            NSLog(@"TRYRECV: CLOSED");
+            return;
+        }
+        
+//        [EBChannel select: @[
+//            [gChan recvOp],
+//            ^(BOOL open, id obj){
+////                NSLog(@"RECV: %@", obj);
+//                count++;
+//            },
+//            
+//            [EBChannel default],
+//            ^{
+////                NSLog(@"NO RECV");
+//            }
+//        ]];
         
         if (count == NTRIALS) {
             break;
@@ -48,35 +69,54 @@ void threadTryRecv()
     exit(0);
 }
 
-void threadDoRecv()
-{
+void threadDoRecv() {
     for (size_t i = 0; i < NTRIALS; i++) @autoreleasepool {
-        [EBChannel select: @[
-            [gChan recvOp],
-            ^(id obj){
-//                NSLog(@"RECV: %@", obj);
-            }
-        ]];
+        id obj = nil;
+        EBChannelResult r = [gChan recv: &obj];
+        assert(r == EBChannelResultOK || r == EBChannelResultClosed);
+        if (r == EBChannelResultOK) {
+            NSLog(@"RECV: RECV (%@)", obj);
+        } else {
+            NSLog(@"RECV: CLOSED");
+            return;
+        }
+        
+//        [EBChannel select: @[
+//            [gChan recvOp],
+//            ^(BOOL open, id obj){
+////                NSLog(@"RECV: %@", obj);
+//            }
+//        ]];
     }
 }
 
-void threadTrySend()
-{
+void threadTrySend() {
     __block size_t count = 0;
     eb_nsec startTime = eb_time_now();
-    for (;;) @autoreleasepool {
-        [EBChannel select: @[
-            [gChan sendOp: @"hello"],
-            ^(id obj){
-//                NSLog(@"SEND: %@", obj);
-                count++;
-            },
-            
-            [EBChannel default],
-            ^{
-//                NSLog(@"NO SEND");
-            }
-        ]];
+    while (count < NTRIALS) @autoreleasepool {
+        EBChannelResult r = [gChan trySend: @"hallo"];
+        if (r == EBChannelResultOK) {
+//            NSLog(@"TRYSEND: SEND");
+            count++;
+        } else if (r == EBChannelResultStalled) {
+//                NSLog(@"TRYSEND: STALLED");
+        } else if (r == EBChannelResultClosed) {
+            NSLog(@"TRYSEND: CLOSED");
+            return;
+        }
+        
+//        [EBChannel select: @[
+//            [gChan sendOp: @"hello"],
+//            ^(BOOL open, id obj){
+////                NSLog(@"SEND: %@", obj);
+//                count++;
+//            },
+//            
+//            [EBChannel default],
+//            ^{
+////                NSLog(@"NO SEND");
+//            }
+//        ]];
         
         if (count == NTRIALS) {
             break;
@@ -87,10 +127,17 @@ void threadTrySend()
     exit(0);
 }
 
-void threadSend()
-{
+void threadSend() {
     for (size_t i = 0; i < NTRIALS; i++) @autoreleasepool {
-        [EBChannel select: @[[gChan sendOp: [[NSString alloc] initWithFormat: @"%ju", (uintmax_t)i]]] timeout: -1];
+//        assert([gChan send: ([[NSString alloc] initWithFormat: @"%ju", (uintmax_t)i])] == EBChannelResultOK);
+        
+        EBChannelResult r = [gChan send: ([[NSString alloc] initWithFormat: @"%ju", (uintmax_t)i])];
+        if (r != EBChannelResultOK) {
+            NSLog(@"SEND RET: %d", r);
+            break;
+        }
+        
+//        [EBChannel select: @[[gChan sendOp: [[NSString alloc] initWithFormat: @"%ju", (uintmax_t)i]]] timeout: -1];
     }
     
 //    NSArray *ops = @[[gChan sendOp: @"hallo"]];
@@ -101,19 +148,21 @@ void threadSend()
 //    for (size_t i = 0; i < NTRIALS; i++) {
 //        [EBChannel select: @[
 //            [gChan sendOp: @"hallo"],
-//            ^(id obj){
+//            ^(BOOL open, id obj){
 ////                NSLog(@"SEND: %@", obj);
 //            }
 //        ]];
 //    }
 }
 
-void threadRecv()
-{
+void threadRecv() {
     eb_nsec startTime = eb_time_now();
-    NSArray *ops = @[[gChan recvOp]];
-    for (size_t i = 0; i < NTRIALS; i++) {
-        [EBChannel select: ops timeout: -1];
+    for (size_t i = 0; i < NTRIALS; i++) @autoreleasepool {
+        EBChannelResult r = [gChan recv: nil];
+        if (r != EBChannelResultOK) {
+            NSLog(@"RECV RET: %d", r);
+            break;
+        }
     }
     NSLog(@"elapsed: %f (%ju iterations)", ((double)(eb_time_now() - startTime) / eb_nsec_per_sec), (uintmax_t)NTRIALS);
     
@@ -121,7 +170,7 @@ void threadRecv()
 //    for (size_t i = 0; i < NTRIALS; i++) {
 //        [EBChannel select: @[
 //            [gChan recvOp],
-//            ^(id obj){
+//            ^(BOOL open, id obj){
 ////                NSLog(@"RECV: %@", obj);
 //            }
 //        ]];
@@ -129,19 +178,18 @@ void threadRecv()
 //    NSLog(@"elapsed: %f (%ju iterations)", ((double)(eb_time_now() - startTime) / eb_nsec_per_sec), (uintmax_t)NTRIALS);
 }
 
-void thread()
-{
+void thread() {
     eb_nsec startTime = eb_time_now();
     for (size_t i = 0; i < NTRIALS; i++) @autoreleasepool {
         [EBChannel select: @[
             [gChan sendOp: @(i)],
-            ^(id obj){
-//                NSLog(@"SEND: %@", obj);
+            ^(BOOL open, id obj){
+                NSLog(@"SEND: %d / %@", open, obj);
             },
             
             [gChan recvOp],
-            ^(id obj){
-//                NSLog(@"RECV: %@", obj);
+            ^(BOOL open, id obj){
+                NSLog(@"RECV: %d / %@", open, obj);
             }
         ]];
     }
@@ -150,8 +198,7 @@ void thread()
 //    exit(0);
 }
 
-void timeoutTest()
-{
+void timeoutTest() {
     eb_nsec startTime = eb_time_now();
     EBChannelOp *r = [EBChannel select: @[[gChan recvOp]] timeout: 2.5];
     NSLog(@"(%@) elapsed: %f (%ju iterations)", r, ((double)(eb_time_now() - startTime) / eb_nsec_per_sec), (uintmax_t)NTRIALS);
@@ -162,13 +209,13 @@ void deadlock(EBChannel *a, EBChannel *b) {
     for (;;) @autoreleasepool {
         [EBChannel select: @[
             [a sendOp: @"xxx"],
-            ^(id obj){
-                NSLog(@"A SEND: %@", obj);
+            ^(BOOL open, id obj){
+//                NSLog(@"A SEND: %d / %@", open, obj);
             },
             
             [b recvOp],
-            ^(id obj){
-                NSLog(@"B RECV: %@", obj);
+            ^(BOOL open, id obj){
+//                NSLog(@"B RECV: %d / %@", open, obj);
             }
         ]];
     }
@@ -182,7 +229,7 @@ void deadlock(EBChannel *a, EBChannel *b) {
     
 //    go( threadDoSend() );
 //    go( threadTryRecv() );
-    
+//    
 //    go( threadTrySend() );
 //    go( threadDoRecv() );
     
@@ -190,9 +237,16 @@ void deadlock(EBChannel *a, EBChannel *b) {
 //    go_pool( threadSend() );
 //    go_pool( threadSend() );
 //    
+//    
 //    go_pool( threadRecv() );
 //    go_pool( threadRecv() );
 //    go_pool( threadRecv() );
+    
+    
+    
+//    sleep(5);
+//    assert([gChan close] == EBChannelResultOK);
+    
     
 //    go( thread() );
 //    go( thread() );
@@ -212,7 +266,8 @@ void deadlock(EBChannel *a, EBChannel *b) {
     go_pool( timeoutTest() );
     
     usleep(500000);
-    [gChan close];
+    assert([gChan close] == EBChannelResultOK);
+//    assert([gChan close] == EBChannelResultOK);
 }
 
 @end
