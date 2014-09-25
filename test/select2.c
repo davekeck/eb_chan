@@ -14,7 +14,7 @@ void receiver(eb_chan c, eb_chan dummy, int n) {
 	for (int i = 0; i < n; i++) {
         eb_chan_op crecv = eb_chan_op_recv(c);
         eb_chan_op drecv = eb_chan_op_recv(dummy);
-        eb_chan_op *r = eb_chan_do(eb_nsec_forever, &crecv, &drecv);
+        eb_chan_op *r = eb_chan_select(eb_nsec_forever, &crecv, &drecv);
         if (r == &crecv) {
             // nothing
         } else {

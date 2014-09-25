@@ -1,5 +1,4 @@
 #import <Foundation/Foundation.h>
-#import "eb_chan.h"
 
 @interface EBChannelOp : NSObject
 - (BOOL)open; /* YES if the op completed due to a successful send/recv operation, NO if the op completed because the channel is closed. */

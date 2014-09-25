@@ -91,6 +91,8 @@ int x = 0;
 const void *tmp = NULL;
 const void *i = NULL;
 eb_chan dummy = NULL;
+eb_chan closedch0 = NULL;
+eb_chan closedch1 = NULL;
 eb_nsec timeout_dur = eb_nsec_zero;
 
 #define M_SIZE 256
@@ -130,6 +132,12 @@ void die(int x) {
 int main() {
     c = eb_chan_create(1);
     dummy = eb_chan_create(0);
+    
+    closedch0 = eb_chan_create(0);
+    assert(eb_chan_close(closedch0) == eb_chan_ret_ok);
+    
+    closedch1 = eb_chan_create(1);
+    assert(eb_chan_close(closedch1) == eb_chan_ret_ok);
 `
 
 const footer = `
@@ -146,415 +154,455 @@ func parse(name, s string) *template.Template {
 }
 
 var recv = parse("recv", `
-	{{/*  Send n, receive it one way or another into x, check that they match. */}}
-    eb_chan_send(c, (void*)(intptr_t)n);
-    
-	{{if .Maybe}}
-        assert(eb_chan_recv(c, &tmp));
-        x = (int)(intptr_t)tmp;
-	{{else}}
-        {{if .MaybeDefault}}
-            timeout_dur = eb_nsec_zero;
-        {{else}}
-            timeout_dur = eb_nsec_forever;
-        {{end}}
-        
-    	{
-        	{{/*  Receive from c.  Different cases are direct, indirect, :=, interface, and map assignment. */}}
-            eb_chan_op op1 = eb_chan_op_recv(c);
-            eb_chan_op op2 = eb_chan_op_recv(c);
-            eb_chan_op op3 = eb_chan_op_recv(c);
-            eb_chan_op op4 = eb_chan_op_recv(c);
-            eb_chan_op op5 = eb_chan_op_recv(c);
-            eb_chan_op op6 = eb_chan_op_send(dummy, (void*)1);
-            eb_chan_op op7 = eb_chan_op_recv(dummy);
-            eb_chan_op op8 = eb_chan_op_send(nilch, (void*)1);
-            eb_chan_op op9 = eb_chan_op_recv(nilch);
-            
-            eb_chan_op *r = eb_chan_do(timeout_dur,
-                {{if .Maybe}}
-            	    &op1,
-            	{{else}}
-                    {{if .Maybe}}
-                	    &op2,
-                	{{else}}
-                        {{if .Maybe}}
-                        	&op3,
-                    	{{else}}
-                            {{if .Maybe}}
-                            	&op4,
-                        	{{else}}
-                            	&op5,
-                        	{{end}}
-                        {{end}}
-                    {{end}}
-                {{end}}
-                
-            	{{/*  Dummy send, receive to keep compiler from optimizing select. */}}
-            	{{if .Maybe}}
-                	&op6,
-            	{{end}}
-            	{{if .Maybe}}
-                	&op7,
-            	{{end}}
-                
-            	{{/*  Nil channel send, receive to keep compiler from optimizing select. */}}
-            	{{if .Maybe}}
-                	&op8,
-            	{{end}}
-            	{{if .Maybe}}
-                	&op9,
-            	{{end}}
-            );
-            
-            if (r == &op1) {
-                x = (int)(intptr_t)r->val;
-            } else if (r == &op2) {
-                *f(&x) = (int)(intptr_t)r->val;
-            } else if (r == &op3) {
-                int y = (int)(intptr_t)r->val;
-                x = y;
-            } else if (r == &op4) {
-                i = r->val;
-                x = (int)(intptr_t)i;
-            } else if (r == &op5) {
-                m[13] = (int)(intptr_t)r->val;
-                x = m[13];
-            } else if (r == &op6) {
-                abort();
-            } else if (r == &op7) {
-                abort();
-            } else if (r == &op8) {
-                abort();
-            } else if (r == &op9) {
-                abort();
-            } else {
-                assert(timeout_dur == eb_nsec_zero);
-            }
-    	}
-	{{end}}
-    
-    assert(x == n);
-    
-	n++;
+	{
+		{{/*  Send n, receive it one way or another into x, check that they match. */}}
+	    assert(eb_chan_send(c, (void*)(intptr_t)n) == eb_chan_ret_ok);
+	    
+		{{if .Maybe}}
+	        assert(eb_chan_recv(c, &tmp) == eb_chan_ret_ok);
+	        x = (int)(intptr_t)tmp;
+		{{else}}
+	        {{if .MaybeDefault}}
+	            timeout_dur = eb_nsec_zero;
+	        {{else}}
+	            timeout_dur = eb_nsec_forever;
+	        {{end}}
+	        
+	    	{
+	        	{{/*  Receive from c.  Different cases are direct, indirect, :=, interface, and map assignment. */}}
+	            eb_chan_op op1 = eb_chan_op_recv(c);
+	            eb_chan_op op2 = eb_chan_op_recv(c);
+	            eb_chan_op op3 = eb_chan_op_recv(c);
+	            eb_chan_op op4 = eb_chan_op_recv(c);
+	            eb_chan_op op5 = eb_chan_op_recv(c);
+	            eb_chan_op op6 = eb_chan_op_send(dummy, (void*)1);
+	            eb_chan_op op7 = eb_chan_op_recv(dummy);
+	            eb_chan_op op8 = eb_chan_op_send(nilch, (void*)1);
+	            eb_chan_op op9 = eb_chan_op_recv(nilch);
+	            
+	            eb_chan_op *r = eb_chan_select(timeout_dur,
+	                {{if .Maybe}}
+	            	    &op1,
+	            	{{else}}
+	                    {{if .Maybe}}
+	                	    &op2,
+	                	{{else}}
+	                        {{if .Maybe}}
+	                        	&op3,
+	                    	{{else}}
+	                            {{if .Maybe}}
+	                            	&op4,
+	                        	{{else}}
+	                            	&op5,
+	                        	{{end}}
+	                        {{end}}
+	                    {{end}}
+	                {{end}}
+	                
+	            	{{/*  Dummy send, receive to keep compiler from optimizing select. */}}
+	            	{{if .Maybe}}
+	                	&op6,
+	            	{{end}}
+	            	{{if .Maybe}}
+	                	&op7,
+	            	{{end}}
+	                
+	            	{{/*  Nil channel send, receive to keep compiler from optimizing select. */}}
+	            	{{if .Maybe}}
+	                	&op8,
+	            	{{end}}
+	            	{{if .Maybe}}
+	                	&op9,
+	            	{{end}}
+	            );
+	            
+	            if (r == &op1) {
+	                x = (int)(intptr_t)r->val;
+	            } else if (r == &op2) {
+	                *f(&x) = (int)(intptr_t)r->val;
+	            } else if (r == &op3) {
+	                int y = (int)(intptr_t)r->val;
+	                x = y;
+	            } else if (r == &op4) {
+	                i = r->val;
+	                x = (int)(intptr_t)i;
+	            } else if (r == &op5) {
+	                m[13] = (int)(intptr_t)r->val;
+	                x = m[13];
+	            } else if (r == &op6) {
+	                abort();
+	            } else if (r == &op7) {
+	                abort();
+	            } else if (r == &op8) {
+	                abort();
+	            } else if (r == &op9) {
+	                abort();
+	            } else {
+	                assert(timeout_dur == eb_nsec_zero);
+	            }
+	    	}
+		{{end}}
+	    
+	    assert(x == n);
+	    
+		n++;
+    }
 `)
 
 var send = parse("send", `
-	{{/*  Send n one way or another, receive it into x, check that they match. */}}
-	{{if .Maybe}}
-        eb_chan_send(c, (void*)(intptr_t)n);
-	{{else}}
-        {{if .MaybeDefault}}
-            timeout_dur = eb_nsec_zero;
-        {{else}}
-            timeout_dur = eb_nsec_forever;
-        {{end}}
-        
-    	{
-            eb_chan_op op1 = eb_chan_op_send(c, (void*)(intptr_t)n);
-            eb_chan_op op2 = eb_chan_op_send(dummy, (void*)1);
-            eb_chan_op op3 = eb_chan_op_recv(dummy);
-            eb_chan_op op4 = eb_chan_op_send(nilch, (void*)1);
-            eb_chan_op op5 = eb_chan_op_recv(nilch);
-            
-            eb_chan_op *r = eb_chan_do(timeout_dur,
-            	{{/*  Send c <- n.	No real special cases here, because no values come back */}}
-            	{{/*  from the send operation. */}}
-                &op1,
-                
-                {{/*  Dummy send, receive to keep compiler from optimizing select. */}}
-            	{{if .Maybe}}
-                	&op2,
-            	{{end}}
-        	    
-                {{if .Maybe}}
-                	&op3,
-            	{{end}}
-        	    
-                {{/*  Nil channel send, receive to keep compiler from optimizing select. */}}
-            	{{if .Maybe}}
-                	&op4,
-            	{{end}}
-                
-            	{{if .Maybe}}
-                	&op5,
-            	{{end}}
-            );
-            
-            if (r == &op1) {
-            } else if (r == &op2) {
-            } else if (r == &op3) {
-            } else if (r == &op4) {
-            } else if (r == &op5) {
-            } else {
-                assert(timeout_dur == eb_nsec_zero);
-            }
-	    }
-	{{end}}
-    
-    assert(eb_chan_recv(c, &tmp));
-    x = (int)(intptr_t)(tmp);
-	
-    assert(x == n);
-    
-	n++;
+	{
+		{{/*  Send n one way or another, receive it into x, check that they match. */}}
+		{{if .Maybe}}
+	        assert(eb_chan_send(c, (void*)(intptr_t)n) == eb_chan_ret_ok);
+		{{else}}
+	        {{if .MaybeDefault}}
+	            timeout_dur = eb_nsec_zero;
+	        {{else}}
+	            timeout_dur = eb_nsec_forever;
+	        {{end}}
+	        
+	    	{
+	            eb_chan_op op1 = eb_chan_op_send(c, (void*)(intptr_t)n);
+	            eb_chan_op op2 = eb_chan_op_send(dummy, (void*)1);
+	            eb_chan_op op3 = eb_chan_op_recv(dummy);
+	            eb_chan_op op4 = eb_chan_op_send(nilch, (void*)1);
+	            eb_chan_op op5 = eb_chan_op_recv(nilch);
+	            
+	            eb_chan_op *r = eb_chan_select(timeout_dur,
+	            	{{/*  Send c <- n.	No real special cases here, because no values come back */}}
+	            	{{/*  from the send operation. */}}
+	                &op1,
+	                
+	                {{/*  Dummy send, receive to keep compiler from optimizing select. */}}
+	            	{{if .Maybe}}
+	                	&op2,
+	            	{{end}}
+	        	    
+	                {{if .Maybe}}
+	                	&op3,
+	            	{{end}}
+	        	    
+	                {{/*  Nil channel send, receive to keep compiler from optimizing select. */}}
+	            	{{if .Maybe}}
+	                	&op4,
+	            	{{end}}
+	                
+	            	{{if .Maybe}}
+	                	&op5,
+	            	{{end}}
+	            );
+	            
+	            if (r == &op1) {
+	            } else if (r == &op2) {
+	            } else if (r == &op3) {
+	            } else if (r == &op4) {
+	            } else if (r == &op5) {
+	            } else {
+	                assert(timeout_dur == eb_nsec_zero);
+	            }
+		    }
+		{{end}}
+	    
+	    assert(eb_chan_recv(c, &tmp) == eb_chan_ret_ok);
+	    x = (int)(intptr_t)(tmp);
+		
+	    assert(x == n);
+	    
+		n++;
+    }
 `)
 
 var recvOrder = parse("recvOrder", `
-	{{/*  Send n, receive it one way or another into x, check that they match. */}}
-	{{/*  Check order of operations along the way by calling functions that check */}}
-	{{/*  that the argument sequence is strictly increasing. */}}
-	order = 0;
-    eb_chan_send(c, (void*)(intptr_t)n);
-    
-	{{if .Maybe}}
-    	{{/*  Outside of select, left-to-right rule applies. */}}
-    	{{/*  (Inside select, assignment waits until case is chosen, */}}
-    	{{/*  so right hand side happens before anything on left hand side. */}}
-        {
-            int *fpr = fp(&x, 1);
-            assert(eb_chan_recv(fc(c, 2), &tmp));
-        	*fpr = (int)(intptr_t)tmp;
-        }
-	{{else}}
-        {{if .Maybe}}
-            {
-                int *fpr = &m[fn(13, 1)];
-                assert(eb_chan_recv(fc(c, 2), &tmp));
-            	*fpr = (int)(intptr_t)tmp;
-            	x = m[13];
-            }
-    	{{else}}
-            {{if .MaybeDefault}}
-                timeout_dur = eb_nsec_zero;
-            {{else}}
-                timeout_dur = eb_nsec_forever;
-            {{end}}
-            
-        	{
-                eb_chan_op op1 = eb_chan_op_recv(fc(c, 1));
-                eb_chan_op op2 = eb_chan_op_recv(fc(c, 2));
-                eb_chan_op op3 = eb_chan_op_recv(fc(c, 3));
-                eb_chan_op op4 = eb_chan_op_recv(fc(c, 4));
-                eb_chan_op op5 = eb_chan_op_send(fc(dummy, 5), (void*)(intptr_t)fn(1, 6));
-                eb_chan_op op6 = eb_chan_op_recv(fc(dummy, 7));
-                eb_chan_op op7 = eb_chan_op_send(fc(nilch, 8), (void*)(intptr_t)fn(1, 9));
-                eb_chan_op op8 = eb_chan_op_recv(fc(nilch, 10));
-                
-                eb_chan_op *r = eb_chan_do(timeout_dur,
-                	{{/*  Receive from c.  Different cases are direct, indirect, :=, interface, and map assignment. */}}
-                	{{if .Maybe}}
-                        &op1,
-                	{{else}}
-                        {{if .Maybe}}
-                    	    &op2,
-                    	{{else}}
-                            {{if .Maybe}}
-                                &op3,
-                        	{{else}}
-                                &op4,
-                        	{{end}}
-                        {{end}}
-                    {{end}}
-                
-                	{{/*  Dummy send, receive to keep compiler from optimizing select. */}}
-                	{{if .Maybe}}
-                        &op5,
-                	{{end}}
-                
-                	{{if .Maybe}}
-                        &op6,
-                	{{end}}
-            	
-                    {{/*  Nil channel send, receive to keep compiler from optimizing select. */}}
-                	{{if .Maybe}}
-                        &op7,
-                	{{end}}
-                
-                	{{if .Maybe}}
-                        &op8,
-                	{{end}}
-                );
-                
-                if (r == &op1) {
-                    *fp(&x, 100) = (int)(intptr_t)r->val;
-                } else if (r == &op2) {
-                    int y = (int)(intptr_t)r->val;
-                    x = y;
-                } else if (r == &op3) {
-                    i = r->val;
-                    x = (int)(intptr_t)i;
-                } else if (r == &op4) {
-                    m[fn(13, 100)] = (int)(intptr_t)r->val;
-                    x = m[13];
-                } else if (r == &op5) {
-                	abort();
-                } else if (r == &op6) {
-                	abort();
-                } else if (r == &op7) {
-                	abort();
-                } else if (r == &op8) {
-                	abort();
-                } else {
-                    assert(timeout_dur == eb_nsec_zero);
-                }
-        	}
-    	{{end}}
-    {{end}}
-    
-	assert(x == n);
-    
-	n++;
+	{
+		{{/*  Send n, receive it one way or another into x, check that they match. */}}
+		{{/*  Check order of operations along the way by calling functions that check */}}
+		{{/*  that the argument sequence is strictly increasing. */}}
+		order = 0;
+	    assert(eb_chan_send(c, (void*)(intptr_t)n) == eb_chan_ret_ok);
+	    
+		{{if .Maybe}}
+	    	{{/*  Outside of select, left-to-right rule applies. */}}
+	    	{{/*  (Inside select, assignment waits until case is chosen, */}}
+	    	{{/*  so right hand side happens before anything on left hand side. */}}
+	        {
+	            int *fpr = fp(&x, 1);
+	            assert(eb_chan_recv(fc(c, 2), &tmp) == eb_chan_ret_ok);
+	        	*fpr = (int)(intptr_t)tmp;
+	        }
+		{{else}}
+	        {{if .Maybe}}
+	            {
+	                int *fpr = &m[fn(13, 1)];
+	                assert(eb_chan_recv(fc(c, 2), &tmp) == eb_chan_ret_ok);
+	            	*fpr = (int)(intptr_t)tmp;
+	            	x = m[13];
+	            }
+	    	{{else}}
+	            {{if .MaybeDefault}}
+	                timeout_dur = eb_nsec_zero;
+	            {{else}}
+	                timeout_dur = eb_nsec_forever;
+	            {{end}}
+	            
+	        	{
+	                eb_chan_op op1 = eb_chan_op_recv(fc(c, 1));
+	                eb_chan_op op2 = eb_chan_op_recv(fc(c, 2));
+	                eb_chan_op op3 = eb_chan_op_recv(fc(c, 3));
+	                eb_chan_op op4 = eb_chan_op_recv(fc(c, 4));
+	                eb_chan_op op5 = eb_chan_op_send(fc(dummy, 5), (void*)(intptr_t)fn(1, 6));
+	                eb_chan_op op6 = eb_chan_op_recv(fc(dummy, 7));
+	                eb_chan_op op7 = eb_chan_op_send(fc(nilch, 8), (void*)(intptr_t)fn(1, 9));
+	                eb_chan_op op8 = eb_chan_op_recv(fc(nilch, 10));
+	                
+	                eb_chan_op *r = eb_chan_select(timeout_dur,
+	                	{{/*  Receive from c.  Different cases are direct, indirect, :=, interface, and map assignment. */}}
+	                	{{if .Maybe}}
+	                        &op1,
+	                	{{else}}
+	                        {{if .Maybe}}
+	                    	    &op2,
+	                    	{{else}}
+	                            {{if .Maybe}}
+	                                &op3,
+	                        	{{else}}
+	                                &op4,
+	                        	{{end}}
+	                        {{end}}
+	                    {{end}}
+	                
+	                	{{/*  Dummy send, receive to keep compiler from optimizing select. */}}
+	                	{{if .Maybe}}
+	                        &op5,
+	                	{{end}}
+	                
+	                	{{if .Maybe}}
+	                        &op6,
+	                	{{end}}
+	            	
+	                    {{/*  Nil channel send, receive to keep compiler from optimizing select. */}}
+	                	{{if .Maybe}}
+	                        &op7,
+	                	{{end}}
+	                
+	                	{{if .Maybe}}
+	                        &op8,
+	                	{{end}}
+	                );
+	                
+	                if (r == &op1) {
+	                    *fp(&x, 100) = (int)(intptr_t)r->val;
+	                } else if (r == &op2) {
+	                    int y = (int)(intptr_t)r->val;
+	                    x = y;
+	                } else if (r == &op3) {
+	                    i = r->val;
+	                    x = (int)(intptr_t)i;
+	                } else if (r == &op4) {
+	                    m[fn(13, 100)] = (int)(intptr_t)r->val;
+	                    x = m[13];
+	                } else if (r == &op5) {
+	                	abort();
+	                } else if (r == &op6) {
+	                	abort();
+	                } else if (r == &op7) {
+	                	abort();
+	                } else if (r == &op8) {
+	                	abort();
+	                } else {
+	                    assert(timeout_dur == eb_nsec_zero);
+	                }
+	        	}
+	    	{{end}}
+	    {{end}}
+	    
+		assert(x == n);
+	    
+		n++;
+    }
 `)
 
 var sendOrder = parse("sendOrder", `
-	{{/*  Send n one way or another, receive it into x, check that they match. */}}
-	{{/*  Check order of operations along the way by calling functions that check */}}
-	{{/*  that the argument sequence is strictly increasing. */}}
-	order = 0;
-	{{if .Maybe}}
-        eb_chan_send(fc(c, 1), (void*)(intptr_t)fn(n, 2));
-	{{else}}
-    	{
-            {{if .MaybeDefault}}
-                timeout_dur = eb_nsec_zero;
-            {{else}}
-                timeout_dur = eb_nsec_forever;
-            {{end}}
-            
-            eb_chan_op op1 = eb_chan_op_send(fc(c, 1), (void*)(intptr_t)fn(n, 2));
-            eb_chan_op op2 = eb_chan_op_send(fc(dummy, 3), (void*)(intptr_t)fn(1, 4));
-            eb_chan_op op3 = eb_chan_op_recv(fc(dummy, 5));
-            eb_chan_op op4 = eb_chan_op_send(fc(nilch, 6), (void*)(intptr_t)fn(1, 7));
-            eb_chan_op op5 = eb_chan_op_recv(fc(nilch, 8));
-            
-            eb_chan_op *r = eb_chan_do(timeout_dur,
-            	{{/*  Send c <- n.	No real special cases here, because no values come back */}}
-            	{{/*  from the send operation. */}}
-                &op1,
-        	
-                {{/*  Dummy send, receive to keep compiler from optimizing select. */}}
-            	{{if .Maybe}}
-                    &op2,
-            	{{end}}
-        	
-                {{if .Maybe}}
-                    &op3,
-            	{{end}}
-            
-            	{{/*  Nil channel send, receive to keep compiler from optimizing select. */}}
-            	{{if .Maybe}}
-                    &op4,
-            	{{end}}
-        	
-                {{if .Maybe}}
-                    &op5,
-            	{{end}}
-            );
-            
-            if (r == &op1) {
-            } else if (r == &op2) {
-                abort();
-            } else if (r == &op3) {
-                abort();
-            } else if (r == &op4) {
-                abort();
-            } else if (r == &op5) {
-            	abort();
-            } else {
-                assert(timeout_dur == eb_nsec_zero);
-            }
-    	}
-	{{end}}
-    
-    assert(eb_chan_recv(c, &tmp));
-    x = (int)(intptr_t)(tmp);
-    
-    assert(x == n);
-	n++;
+	{
+		{{/*  Send n one way or another, receive it into x, check that they match. */}}
+		{{/*  Check order of operations along the way by calling functions that check */}}
+		{{/*  that the argument sequence is strictly increasing. */}}
+		order = 0;
+		{{if .Maybe}}
+	        assert(eb_chan_send(fc(c, 1), (void*)(intptr_t)fn(n, 2)) == eb_chan_ret_ok);
+		{{else}}
+	    	{
+	            {{if .MaybeDefault}}
+	                timeout_dur = eb_nsec_zero;
+	            {{else}}
+	                timeout_dur = eb_nsec_forever;
+	            {{end}}
+	            
+	            eb_chan_op op1 = eb_chan_op_send(fc(c, 1), (void*)(intptr_t)fn(n, 2));
+	            eb_chan_op op2 = eb_chan_op_send(fc(dummy, 3), (void*)(intptr_t)fn(1, 4));
+	            eb_chan_op op3 = eb_chan_op_recv(fc(dummy, 5));
+	            eb_chan_op op4 = eb_chan_op_send(fc(nilch, 6), (void*)(intptr_t)fn(1, 7));
+	            eb_chan_op op5 = eb_chan_op_recv(fc(nilch, 8));
+	            
+	            eb_chan_op *r = eb_chan_select(timeout_dur,
+	            	{{/*  Send c <- n.	No real special cases here, because no values come back */}}
+	            	{{/*  from the send operation. */}}
+	                &op1,
+	        	
+	                {{/*  Dummy send, receive to keep compiler from optimizing select. */}}
+	            	{{if .Maybe}}
+	                    &op2,
+	            	{{end}}
+	        	
+	                {{if .Maybe}}
+	                    &op3,
+	            	{{end}}
+	            
+	            	{{/*  Nil channel send, receive to keep compiler from optimizing select. */}}
+	            	{{if .Maybe}}
+	                    &op4,
+	            	{{end}}
+	        	
+	                {{if .Maybe}}
+	                    &op5,
+	            	{{end}}
+	            );
+	            
+	            if (r == &op1) {
+	            } else if (r == &op2) {
+	                abort();
+	            } else if (r == &op3) {
+	                abort();
+	            } else if (r == &op4) {
+	                abort();
+	            } else if (r == &op5) {
+	            	abort();
+	            } else {
+	                assert(timeout_dur == eb_nsec_zero);
+	            }
+	    	}
+		{{end}}
+	    
+	    assert(eb_chan_recv(c, &tmp) == eb_chan_ret_ok);
+	    x = (int)(intptr_t)(tmp);
+	    
+	    assert(x == n);
+		n++;
+    }
 `)
 
 var nonblock = parse("nonblock", `
-	x = n;
-	{{/*  Test various combinations of non-blocking operations. */}}
-	{{/*  Receive assignments must not edit or even attempt to compute the address of the lhs. */}}
 	{
-        {{if .MaybeDefault}}
-            timeout_dur = eb_nsec_zero;
-        {{else}}
-            timeout_dur = eb_nsec_forever;
-        {{end}}
-        
-    	{{if .MustDefault}}
-            timeout_dur = eb_nsec_zero;
-    	{{end}}
-        
-        eb_chan_op op1 = eb_chan_op_send(dummy, (void*)1);
-        eb_chan_op op2 = eb_chan_op_send(nilch, (void*)1);
-        eb_chan_op op3 = eb_chan_op_recv(dummy);
-        eb_chan_op op4 = eb_chan_op_recv(dummy);
-        eb_chan_op op5 = eb_chan_op_recv(dummy);
-        eb_chan_op op6 = eb_chan_op_recv(nilch);
-        eb_chan_op op7 = eb_chan_op_recv(nilch);
-        eb_chan_op op8 = eb_chan_op_recv(nilch);
-        
-        eb_chan_op *r = eb_chan_do(timeout_dur,
-        	{{if .Maybe}}
-                &op1,
-        	{{end}}
-        
-        	{{if .Maybe}}
-                &op2,
-        	{{end}}
-        
-        	{{if .Maybe}}
-                &op3,
-        	{{end}}
-        
-        	{{if .Maybe}}
-                &op4,
-        	{{end}}
-        
-        	{{if .Maybe}}
-                &op5,
-        	{{end}}
-        
-        	{{if .Maybe}}
-                &op6,
-        	{{end}}
-        
-        	{{if .Maybe}}
-                &op7,
-        	{{end}}
-        
-        	{{if .Maybe}}
-                &op8,
-        	{{end}}
-        );
-        
-        if (r == &op1) {
-            abort();
-        } else if (r == &op2) {
-            abort();
-        } else if (r == &op3) {
-            abort();
-        } else if (r == &op4) {
-            abort();
-        } else if (r == &op5) {
-        	abort();
-        } else if (r == &op6) {
-        	abort();
-        } else if (r == &op7) {
-        	abort();
-        } else if (r == &op8) {
-        	abort();
-        } else {
-            assert(timeout_dur == eb_nsec_zero);
-        }
-	}
-    
-    assert(x == n);
-	n++;
+		x = n;
+		{{/*  Test various combinations of non-blocking operations. */}}
+		{{/*  Receive assignments must not edit or even attempt to compute the address of the lhs. */}}
+		{
+	        {{if .MaybeDefault}}
+	            timeout_dur = eb_nsec_zero;
+	        {{else}}
+	            timeout_dur = eb_nsec_forever;
+	        {{end}}
+	        
+	    	{{if .MustDefault}}
+	            timeout_dur = eb_nsec_zero;
+	    	{{end}}
+	        
+	        eb_chan_op op1 = eb_chan_op_send(dummy, (void*)1);
+	        eb_chan_op op2 = eb_chan_op_send(nilch, (void*)1);
+	        eb_chan_op op3 = eb_chan_op_recv(dummy);
+	        eb_chan_op op4 = eb_chan_op_recv(dummy);
+	        eb_chan_op op5 = eb_chan_op_recv(dummy);
+	        eb_chan_op op6 = eb_chan_op_recv(nilch);
+	        eb_chan_op op7 = eb_chan_op_recv(nilch);
+	        eb_chan_op op8 = eb_chan_op_recv(nilch);
+	        eb_chan_op op_ch0A = eb_chan_op_send(closedch0, (void*)2);
+	        eb_chan_op op_ch0B = eb_chan_op_recv(closedch0);
+	        eb_chan_op op_ch1A = eb_chan_op_send(closedch1, (void*)3);
+	        eb_chan_op op_ch1B = eb_chan_op_recv(closedch1);
+	        
+	        eb_chan_op *r = eb_chan_select(timeout_dur,
+	        	{{if .Maybe}}
+	                &op1,
+	        	{{end}}
+	        
+	        	{{if .Maybe}}
+	                &op2,
+	        	{{end}}
+	        
+	        	{{if .Maybe}}
+	                &op3,
+	        	{{end}}
+	        
+	        	{{if .Maybe}}
+	                &op4,
+	        	{{end}}
+	        
+	        	{{if .Maybe}}
+	                &op5,
+	        	{{end}}
+	        
+	        	{{if .Maybe}}
+	                &op6,
+	        	{{end}}
+	        
+	        	{{if .Maybe}}
+	                &op7,
+	        	{{end}}
+	        
+	        	{{if .Maybe}}
+	                &op8,
+	        	{{end}}
+	            
+	        	{{/*  closedch0 */}}
+	        	{{if .Maybe}}
+	            	&op_ch0A,
+	        	{{end}}
+	        	{{if .Maybe}}
+	            	&op_ch0B,
+	        	{{end}}
+
+	        	{{/*  closedch1 */}}
+	        	{{if .Maybe}}
+	            	&op_ch1A,
+	        	{{end}}
+	        	{{if .Maybe}}
+	            	&op_ch1B,
+	        	{{end}}
+	        );
+	        
+	        if (r == &op1) {
+	            abort();
+	        } else if (r == &op2) {
+	            abort();
+	        } else if (r == &op3) {
+	            abort();
+	        } else if (r == &op4) {
+	            abort();
+	        } else if (r == &op5) {
+	        	abort();
+	        } else if (r == &op6) {
+	        	abort();
+	        } else if (r == &op7) {
+	        	abort();
+	        } else if (r == &op8) {
+	        	abort();
+	        } else if (r == &op_ch0A) {
+	            assert(!r->open);
+	            assert(r->val == (void*)2);
+	        } else if (r == &op_ch0B) {
+	            assert(!r->open);
+	        } else if (r == &op_ch1A) {
+	            assert(!r->open);
+	            assert(r->val == (void*)3);
+	        } else if (r == &op_ch1B) {
+	            assert(!r->open);
+	        } else {
+	            assert(timeout_dur == eb_nsec_zero);
+	        }
+		}
+	    
+	    assert(x == n);
+		n++;
+    }
 `)
 
 // Code for enumerating all possible paths through

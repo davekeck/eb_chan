@@ -7,7 +7,7 @@
 
 void f(eb_chan left, eb_chan right) {
     const void *val;
-    assert(eb_chan_recv(right, &val));
+    assert(eb_chan_recv(right, &val) == eb_chan_ret_ok);
     eb_chan_send(left, val);
 }
 

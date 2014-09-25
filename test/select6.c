@@ -19,7 +19,7 @@ int main() {
     go(
         eb_chan_op c1recv = eb_chan_op_recv(c1);
         eb_chan_op c2recv = eb_chan_op_recv(c2);
-        eb_chan_op *r = eb_chan_do(eb_nsec_forever, &c1recv, &c2recv);
+        eb_chan_op *r = eb_chan_select(eb_nsec_forever, &c1recv, &c2recv);
         if (r == &c1recv) {
             abort();
         } else if (r == &c2recv) {
@@ -28,11 +28,11 @@ int main() {
             abort();
         }
         
-        assert(eb_chan_recv(c1, NULL));
+        assert(eb_chan_recv(c1, NULL) == eb_chan_ret_ok);
     );
     
     go( eb_chan_send(c2, (void*)true) );
-    assert(eb_chan_recv(c3, NULL));
+    assert(eb_chan_recv(c3, NULL) == eb_chan_ret_ok);
     
     eb_chan_send(c1, (void*)true);
     eb_chan_send(c1, (void*)true);

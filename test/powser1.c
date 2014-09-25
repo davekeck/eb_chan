@@ -91,13 +91,13 @@ void dosplit(dch *in, dch2 *out, eb_chan wait) {
     eb_chan_op out0recv = eb_chan_op_recv((*out)[0]->req);
     eb_chan_op out1recv = eb_chan_op_recv((*out)[1]->req);
     eb_chan_op waitrecv = eb_chan_op_recv(wait);
-    eb_chan_op *r = eb_chan_do(eb_nsec_forever, &out0recv, &waitrecv);
+    eb_chan_op *r = eb_chan_select(eb_nsec_forever, &out0recv, &waitrecv);
     if (r == &out0recv) {
         // nothing
     } else if (r == &waitrecv) {
 		both = true;
         
-        eb_chan_op *r = eb_chan_do(eb_nsec_forever, &out0recv, &out1recv);
+        eb_chan_op *r = eb_chan_select(eb_nsec_forever, &out0recv, &out1recv);
         if (r == &out0recv) {
             // nothing
         } else if (r == &out1recv) {
@@ -118,13 +118,13 @@ void dosplit(dch *in, dch2 *out, eb_chan wait) {
 	go( dosplit(in, out, release) );
     
     const void *dat;
-    assert(eb_chan_recv(in->dat, &dat));
+    assert(eb_chan_recv(in->dat, &dat) == eb_chan_ret_ok);
     eb_chan_send((*out)[0]->dat, dat);
 	if (!both) {
-        assert(eb_chan_recv(wait, NULL));
+        assert(eb_chan_recv(wait, NULL) == eb_chan_ret_ok);
 	}
     
-    assert(eb_chan_recv((*out)[1]->req, NULL));
+    assert(eb_chan_recv((*out)[1]->req, NULL) == eb_chan_ret_ok);
     eb_chan_send((*out)[1]->dat, dat);
     eb_chan_send(release, (void*)0);
 }
@@ -136,7 +136,7 @@ void split(dch *in, dch2 *out) {
 }
 
 void put(rat dat, dch *out) {
-    assert(eb_chan_recv(out->req, NULL));
+    assert(eb_chan_recv(out->req, NULL) == eb_chan_ret_ok);
     eb_chan_send(out->dat, rat2heap(dat));
 }
 
@@ -145,7 +145,7 @@ rat get(dch *in) {
     eb_chan_send(in->req, (void*)(intptr_t)seqno);
     
     rat *v;
-    assert(eb_chan_recv(in->dat, (void*)&v));
+    assert(eb_chan_recv(in->dat, (void*)&v) == eb_chan_ret_ok);
     return heap2rat(v);
 }
 
@@ -168,7 +168,7 @@ rat *getn(dch **in, size_t n) {
         eb_chan_op op2 = eb_chan_op_send(req[1], (void*)(intptr_t)seqno);
         eb_chan_op op3 = eb_chan_op_recv(dat[0]);
         eb_chan_op op4 = eb_chan_op_recv(dat[1]);
-        eb_chan_op *r = eb_chan_do(eb_nsec_forever, &op1, &op2, &op3, &op4);
+        eb_chan_op *r = eb_chan_select(eb_nsec_forever, &op1, &op2, &op3, &op4);
         
         if (r == &op1) {
 			dat[0] = in[0]->dat;
@@ -197,7 +197,7 @@ rat *get2(dch *in0, dch *in1) {
 
 void copy(dch *in, dch *out) {
 	for (;;) {
-        assert(eb_chan_recv(out->req, NULL));
+        assert(eb_chan_recv(out->req, NULL) == eb_chan_ret_ok);
         eb_chan_send(out->dat, rat2heap(get(in)));
 	}
 }
@@ -353,7 +353,7 @@ PS Add(PS U, PS V) {
 	go(
 		rat *uv;
 		for (;;) {
-            assert(eb_chan_recv(Z->req, NULL));
+            assert(eb_chan_recv(Z->req, NULL) == eb_chan_ret_ok);
 			uv = get2(U,V);
 			switch (end(uv[0])+2*end(uv[1])) {
 			case 0: {
@@ -484,7 +484,7 @@ func Poly(a []rat) PS {
 PS Mul(PS U, PS V) {
 	PS Z = mkPS();
 	go(
-        assert(eb_chan_recv(Z->req, NULL));
+        assert(eb_chan_recv(Z->req, NULL) == eb_chan_ret_ok);
 		rat *uv = get2(U,V);
 		if (end(uv[0])!=0 || end(uv[1]) != 0) {
             eb_chan_send(Z->dat, rat2heap(finis));
@@ -493,7 +493,7 @@ PS Mul(PS U, PS V) {
 			dch2 *UU = Split(U);
 			dch2 *VV = Split(V);
 			PS W = Add(Cmul(uv[0],(*VV)[0]),Cmul(uv[1],(*UU)[0]));
-            assert(eb_chan_recv(Z->req, NULL));
+            assert(eb_chan_recv(Z->req, NULL) == eb_chan_ret_ok);
             eb_chan_send(Z->dat, rat2heap(get(W)));
 			copy(Add(W,Mul((*UU)[1],(*VV)[1])),Z);
 		}
@@ -506,7 +506,7 @@ PS Mul(PS U, PS V) {
 PS Diff(PS U) {
 	PS Z = mkPS();
 	go(
-        assert(eb_chan_recv(Z->req, NULL));
+        assert(eb_chan_recv(Z->req, NULL) == eb_chan_ret_ok);
 		rat u = get(U);
 		if (end(u) == 0) {
 			bool done = false;
@@ -516,7 +516,7 @@ PS Diff(PS U) {
 					done = true;
 				} else {
                     eb_chan_send(Z->dat, rat2heap(mul(itor(i),u)));
-					assert(eb_chan_recv(Z->req, NULL));
+					assert(eb_chan_recv(Z->req, NULL) == eb_chan_ret_ok);
 				}
 			}
 		}
@@ -532,7 +532,7 @@ PS Integ(rat c, PS U) {
 		put(c,Z);
 		bool done = false;
 		for (int i=1; !done; i++) {
-			assert(eb_chan_recv(Z->req, NULL));
+			assert(eb_chan_recv(Z->req, NULL) == eb_chan_ret_ok);
 			rat u = get(U);
 			if (end(u) != 0) { done= true; }
             eb_chan_send(Z->dat, rat2heap(mul(i2tor(1,i),u)));
@@ -573,7 +573,7 @@ PS Recip(PS U) {
 	PS Z=mkPS();
 	go(
 		dch2 *ZZ=mkPS2();
-		assert(eb_chan_recv(Z->req, NULL));
+		assert(eb_chan_recv(Z->req, NULL) == eb_chan_ret_ok);
 		rat z = inv(get(U));
         eb_chan_send(Z->dat, rat2heap(z));
 		split(Mul(Cmul(neg(z),U),Shift(z,(*ZZ)[0])),ZZ);
@@ -605,7 +605,7 @@ PS Subst(PS U, PS V) {
 	PS Z = mkPS();
 	go(
 		dch2 *VV = Split(V);
-		assert(eb_chan_recv(Z->req, NULL));
+		assert(eb_chan_recv(Z->req, NULL) == eb_chan_ret_ok);
 		rat u = get(U);
         eb_chan_send(Z->dat, rat2heap(u));
 		if (end(u) == 0) {
@@ -627,7 +627,7 @@ PS MonSubst(PS U, rat c0, int n) {
 	go(
 		rat c = one;
 		for (;;) {
-			assert(eb_chan_recv(Z->req, NULL));
+			assert(eb_chan_recv(Z->req, NULL) == eb_chan_ret_ok);
 			rat u = get(U);
             eb_chan_send(Z->dat, rat2heap(mul(u, c)));
 			c = mul(c, c0);
@@ -636,7 +636,7 @@ PS MonSubst(PS U, rat c0, int n) {
 				break;
 			}
 			for (int i = 1; i < n; i++) {
-				assert(eb_chan_recv(Z->req, NULL));
+				assert(eb_chan_recv(Z->req, NULL) == eb_chan_ret_ok);
 				eb_chan_send(Z->dat, rat2heap(zero));
 			}
 		}

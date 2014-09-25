@@ -18,7 +18,7 @@ void threadTryRecv()
     size_t count = 0;
     eb_nsec startTime = eb_time_now();
     for (;;) {
-        if (eb_chan_try_recv(gChan, NULL, NULL)) {
+        if (eb_chan_try_recv(gChan, NULL) == eb_chan_ret_ok) {
 //            printf("recv\n");
             count++;
             if (count == NTRIALS) {
@@ -36,7 +36,7 @@ void threadTryRecv()
 void threadDoRecv()
 {
     for (size_t i = 0; i < NTRIALS; i++) {
-        assert(eb_chan_recv(gChan, NULL));
+        assert(eb_chan_recv(gChan, NULL) == eb_chan_ret_ok);
     }
 }
 
@@ -66,10 +66,10 @@ void threadSend()
 
 void threadRecv()
 {
-//    assert(eb_chan_recv(gChan, NULL, eb_nsec_forever));
+//    assert(eb_chan_recv(gChan, NULL, eb_nsec_forever) == eb_chan_ret_ok);
 //    eb_nsec startTime = eb_time_now();
 //    for (size_t i = 1; i < NTRIALS; i++) {
-//        assert(eb_chan_recv(gChan, NULL, eb_nsec_forever));
+//        assert(eb_chan_recv(gChan, NULL, eb_nsec_forever) == eb_chan_ret_ok);
 //    }
 //    printf("elapsed: %f (%ju iterations)", ((double)(eb_time_now() - startTime) / eb_nsec_per_sec), (uintmax_t)NTRIALS);
 //    exit(0);
@@ -88,11 +88,11 @@ void thread()
 {
     eb_chan_op send = eb_chan_op_send(gChan, "hallo");
     eb_chan_op recv = eb_chan_op_recv(gChan);
-    assert(eb_chan_do(eb_nsec_forever, &send, &recv));
+    assert(eb_chan_select(eb_nsec_forever, &send, &recv));
     
     eb_nsec startTime = eb_time_now();
     for (size_t i = 1; i < NTRIALS; i++) {
-        assert(eb_chan_do(eb_nsec_forever, &send, &recv));
+        assert(eb_chan_select(eb_nsec_forever, &send, &recv));
     }
     
     printf("elapsed: %f (%ju iterations)\n", ((double)(eb_time_now() - startTime) / eb_nsec_per_sec), (uintmax_t)NTRIALS);
@@ -103,7 +103,7 @@ void timeoutTest()
 {
     eb_chan_op recv = eb_chan_op_recv(gChan);
     eb_nsec startTime = eb_time_now();
-    eb_chan_do(2.5 * eb_nsec_per_sec, &recv);
+    eb_chan_select(2.5 * eb_nsec_per_sec, &recv);
     printf("elapsed: %f (%ju iterations)\n", ((double)(eb_time_now() - startTime) / eb_nsec_per_sec), (uintmax_t)NTRIALS);
     
     exit(0);
@@ -113,7 +113,7 @@ void deadlock(eb_chan a, eb_chan b) {
     eb_chan_op send = eb_chan_op_send(a, "xxx");
     eb_chan_op recv = eb_chan_op_recv(b);
     for (;;) {
-        eb_chan_op *r = eb_chan_do(eb_nsec_forever, &send, &recv);
+        eb_chan_op *r = eb_chan_select(eb_nsec_forever, &send, &recv);
         if (r == &send) {
             printf("send\n");
         } else if (r == &recv) {
@@ -130,7 +130,7 @@ int main(int argc, const char * argv[])
     
 //    go( threadDoSend() );
 //    go( threadTryRecv() );
-//    
+    
 //    go( threadTrySend() );
 //    go( threadDoRecv() );
     

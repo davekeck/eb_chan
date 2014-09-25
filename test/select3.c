@@ -38,7 +38,7 @@ void testBlock(const char *signal, VoidBlock f) {
 	);
     
     const void *v;
-    assert(eb_chan_recv(c, &v));
+    assert(eb_chan_recv(c, &v) == eb_chan_ret_ok);
     
     if (v != signal) {
         char msg[256];
@@ -65,7 +65,7 @@ int main() {
 	// sending/receiving from a nil channel inside a select is never selected
 	testPanic(never, ^{
         eb_chan_op nilchsend = eb_chan_op_send(NULL, (void*)7);
-        eb_chan_op *r = eb_chan_do(eb_nsec_zero, &nilchsend);
+        eb_chan_op *r = eb_chan_select(eb_nsec_zero, &nilchsend);
         if (r == &nilchsend) {
             unreachable();
         } else {
@@ -75,7 +75,7 @@ int main() {
     
 	testPanic(never, ^{
         eb_chan_op nilchrecv = eb_chan_op_recv(NULL);
-        eb_chan_op *r = eb_chan_do(eb_nsec_zero, &nilchrecv);
+        eb_chan_op *r = eb_chan_select(eb_nsec_zero, &nilchrecv);
         if (r == &nilchrecv) {
             unreachable();
         } else {
@@ -93,11 +93,11 @@ int main() {
 	testBlock(never, ^{
 		for (int i = 0; i < 10; i++) {
             
-            if (eb_chan_recv(closedch, NULL)) {
+            if (eb_chan_recv(closedch, NULL) == eb_chan_ret_ok) {
 				abort();
 			}
             
-			if (eb_chan_recv(closedch, NULL)) {
+			if (eb_chan_recv(closedch, NULL) == eb_chan_ret_ok) {
 				abort();
 			}
 		}
@@ -111,24 +111,24 @@ int main() {
 
 	// empty selects always block
 	testBlock(always, ^{
-        eb_chan_do(eb_nsec_forever);
+        eb_chan_select(eb_nsec_forever);
 	});
 
 	// selects with only nil channels always block
 	testBlock(always, ^{
         eb_chan_op nilchrecv = eb_chan_op_recv(nilch);
-        eb_chan_do(eb_nsec_forever, &nilchrecv);
+        eb_chan_select(eb_nsec_forever, &nilchrecv);
         unreachable();
 	});
 	testBlock(always, ^{
         eb_chan_op nilchsend = eb_chan_op_send(nilch, (void*)7);
-        eb_chan_do(eb_nsec_forever, &nilchsend);
+        eb_chan_select(eb_nsec_forever, &nilchsend);
         unreachable();
 	});
 	testBlock(always, ^{
         eb_chan_op nilchrecv = eb_chan_op_recv(nilch);
         eb_chan_op nilchsend = eb_chan_op_send(nilch, (void*)7);
-        eb_chan_do(eb_nsec_forever, &nilchrecv, &nilchsend);
+        eb_chan_select(eb_nsec_forever, &nilchrecv, &nilchsend);
         unreachable();
 	});
 
@@ -136,28 +136,28 @@ int main() {
 	testBlock(always, ^{
 		eb_chan ch = eb_chan_create(0);
         eb_chan_op recvop = eb_chan_op_recv(ch);
-        eb_chan_do(eb_nsec_forever, &recvop);
+        eb_chan_select(eb_nsec_forever, &recvop);
         unreachable();
 	});
 
 	// selects with default cases don't block
 	testBlock(never, ^{
-        eb_chan_do(eb_nsec_zero);
+        eb_chan_select(eb_nsec_zero);
 	});
 	testBlock(never, ^{
         eb_chan_op nilchrecv = eb_chan_op_recv(nilch);
-        eb_chan_do(eb_nsec_zero, &nilchrecv);
+        eb_chan_select(eb_nsec_zero, &nilchrecv);
 	});
 	testBlock(never, ^{
         eb_chan_op nilchsend = eb_chan_op_send(nilch, (void*)7);
-        eb_chan_do(eb_nsec_zero, &nilchsend);
+        eb_chan_select(eb_nsec_zero, &nilchsend);
 	});
 
 	// selects with ready channels don't block
 	testBlock(never, ^{
 		eb_chan ch = eb_chan_create(async);
         eb_chan_op sendop = eb_chan_op_send(ch, (void*)7);
-        eb_chan_op *r = eb_chan_do(eb_nsec_zero, &sendop);
+        eb_chan_op *r = eb_chan_select(eb_nsec_zero, &sendop);
         if (r == &sendop) {
             // OK
         } else {
@@ -169,7 +169,7 @@ int main() {
         eb_chan_send(ch, (void*)7);
         
         eb_chan_op recvop = eb_chan_op_recv(ch);
-        eb_chan_op *r = eb_chan_do(eb_nsec_zero, &recvop);
+        eb_chan_op *r = eb_chan_select(eb_nsec_zero, &recvop);
         if (r == &recvop) {
             // OK
         } else {
@@ -180,7 +180,7 @@ int main() {
 	// selects with closed channels behave like ordinary operations
 	testBlock(never, ^{
         eb_chan_op recvop = eb_chan_op_recv(closedch);
-        assert(eb_chan_do(eb_nsec_forever, &recvop) == &recvop);
+        assert(eb_chan_select(eb_nsec_forever, &recvop) == &recvop);
         assert(!recvop.open);
 	});
 
@@ -189,7 +189,7 @@ int main() {
 		eb_chan c = eb_chan_create(0);
         eb_chan_op sendop = eb_chan_op_send(c, (void*)1);
         eb_chan_op recvop = eb_chan_op_recv(c);
-        eb_chan_do(eb_nsec_forever, &sendop, &recvop);
+        eb_chan_select(eb_nsec_forever, &sendop, &recvop);
         unreachable();
 	});
     
@@ -197,7 +197,7 @@ int main() {
     // test panicing behavior (uncomment one of these blocks)
 //	testPanic(always, ^{
 //        eb_chan_op sendop = eb_chan_op_send(closedch, (void*)7);
-//        eb_chan_do(eb_nsec_zero, &sendop);
+//        eb_chan_select(eb_nsec_zero, &sendop);
 //	});
     
 //	// sending to a closed channel panics.

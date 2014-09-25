@@ -7,7 +7,7 @@
 
 void i32receiver(eb_chan c, eb_chan strobe) {
     const void *v;
-    assert(eb_chan_recv(c, &v));
+    assert(eb_chan_recv(c, &v) == eb_chan_ret_ok);
     assert(v == (void*)123);
     
     eb_chan_send(strobe, (void*)true);
@@ -20,7 +20,7 @@ void i32sender(eb_chan c, eb_chan strobe) {
 
 void i64receiver(eb_chan c, eb_chan strobe) {
     const void *v;
-    assert(eb_chan_recv(c, &v));
+    assert(eb_chan_recv(c, &v) == eb_chan_ret_ok);
     assert(v == (void*)123456);
     
     eb_chan_send(strobe, (void*)true);
@@ -33,7 +33,7 @@ void i64sender(eb_chan c, eb_chan strobe) {
 
 void breceiver(eb_chan c, eb_chan strobe) {
     const void *v;
-    assert(eb_chan_recv(c, &v));
+    assert(eb_chan_recv(c, &v) == eb_chan_ret_ok);
     assert(v == (void*)true);
     
     eb_chan_send(strobe, (void*)true);
@@ -46,7 +46,7 @@ void bsender(eb_chan c, eb_chan strobe) {
 
 void sreceiver(eb_chan c, eb_chan strobe) {
     const void *v;
-    assert(eb_chan_recv(c, &v));
+    assert(eb_chan_recv(c, &v) == eb_chan_ret_ok);
     assert(!strcmp(v, "hello"));
     
     eb_chan_send(strobe, (void*)true);
@@ -79,7 +79,7 @@ int main() {
 		eb_chan cs = eb_chan_create(buffer);
         
         eb_chan_op c32recv = eb_chan_op_recv(c32);
-        eb_chan_op *r32 = eb_chan_do(eb_nsec_zero, &c32recv);
+        eb_chan_op *r32 = eb_chan_select(eb_nsec_zero, &c32recv);
         if (r32 == &c32recv) {
             abort();
         } else {
@@ -87,7 +87,7 @@ int main() {
         }
         
         eb_chan_op c64recv = eb_chan_op_recv(c64);
-        eb_chan_op *r64 = eb_chan_do(eb_nsec_zero, &c64recv);
+        eb_chan_op *r64 = eb_chan_select(eb_nsec_zero, &c64recv);
         if (r64 == &c64recv) {
             abort();
         } else {
@@ -95,7 +95,7 @@ int main() {
         }
         
         eb_chan_op cbrecv = eb_chan_op_recv(cb);
-        eb_chan_op *rb = eb_chan_do(eb_nsec_zero, &cbrecv);
+        eb_chan_op *rb = eb_chan_select(eb_nsec_zero, &cbrecv);
         if (rb == &cbrecv) {
             abort();
         } else {
@@ -103,7 +103,7 @@ int main() {
         }
         
         eb_chan_op csrecv = eb_chan_op_recv(cs);
-        eb_chan_op *rs = eb_chan_do(eb_nsec_zero, &csrecv);
+        eb_chan_op *rs = eb_chan_select(eb_nsec_zero, &csrecv);
         if (rs == &csrecv) {
             abort();
         } else {
@@ -115,7 +115,7 @@ int main() {
 	Send32:
 		for (;;) {
             eb_chan_op send = eb_chan_op_send(c32, (void*)123);
-            eb_chan_op *r = eb_chan_do(eb_nsec_zero, &send);
+            eb_chan_op *r = eb_chan_select(eb_nsec_zero, &send);
             
             if (r == &send) {
                 break;
@@ -136,7 +136,7 @@ int main() {
 	Recv32:
 		for (;;) {
             eb_chan_op recv = eb_chan_op_recv(c32);
-            eb_chan_op *r = eb_chan_do(eb_nsec_zero, &recv);
+            eb_chan_op *r = eb_chan_select(eb_nsec_zero, &recv);
             
             if (r == &recv) {
                 assert(recv.open);
@@ -160,7 +160,7 @@ int main() {
 	Send64:
 		for (;;) {
             eb_chan_op send = eb_chan_op_send(c64, (void*)123456);
-            eb_chan_op *r = eb_chan_do(eb_nsec_zero, &send);
+            eb_chan_op *r = eb_chan_select(eb_nsec_zero, &send);
             
             if (r == &send) {
                 break;
@@ -181,7 +181,7 @@ int main() {
 	Recv64:
 		for (;;) {
             eb_chan_op recv = eb_chan_op_recv(c64);
-            eb_chan_op *r = eb_chan_do(eb_nsec_zero, &recv);
+            eb_chan_op *r = eb_chan_select(eb_nsec_zero, &recv);
             
             if (r == &recv) {
                 assert(recv.open);
@@ -204,7 +204,7 @@ int main() {
 	SendBool:
 		for (;;) {
             eb_chan_op send = eb_chan_op_send(cb, (void*)true);
-            eb_chan_op *r = eb_chan_do(eb_nsec_zero, &send);
+            eb_chan_op *r = eb_chan_select(eb_nsec_zero, &send);
             
             if (r == &send) {
                 break;
@@ -224,7 +224,7 @@ int main() {
 	RecvBool:
 		for (;;) {
             eb_chan_op recv = eb_chan_op_recv(cb);
-            eb_chan_op *r = eb_chan_do(eb_nsec_zero, &recv);
+            eb_chan_op *r = eb_chan_select(eb_nsec_zero, &recv);
             
             if (r == &recv) {
                 assert(recv.open);
@@ -246,7 +246,7 @@ int main() {
 	SendString:
 		for (;;) {
             eb_chan_op send = eb_chan_op_send(cs, (void*)"hello");
-            eb_chan_op *r = eb_chan_do(eb_nsec_zero, &send);
+            eb_chan_op *r = eb_chan_select(eb_nsec_zero, &send);
             
             if (r == &send) {
                 break;
@@ -266,7 +266,7 @@ int main() {
 	RecvString:
 		for (;;) {
             eb_chan_op recv = eb_chan_op_recv(cs);
-            eb_chan_op *r = eb_chan_do(eb_nsec_zero, &recv);
+            eb_chan_op *r = eb_chan_select(eb_nsec_zero, &recv);
             
             if (r == &recv) {
                 assert(recv.open);

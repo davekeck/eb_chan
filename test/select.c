@@ -18,7 +18,7 @@ int Send(eb_chan a, eb_chan b) {
         eb_chan_op asend = eb_chan_op_send(a, (void*)(uintptr_t)GetValue());
         eb_chan_op bsend = eb_chan_op_send(b, (void*)(uintptr_t)GetValue());
         
-        eb_chan_op *r = eb_chan_do(eb_nsec_zero, &asend, &bsend);
+        eb_chan_op *r = eb_chan_select(eb_nsec_zero, &asend, &bsend);
         if (r == &asend) {
             i++;
             a = NULL;
@@ -42,8 +42,8 @@ int main() {
     assert(Send(a, b) == 2);
     
     const void *av, *bv;
-    assert(eb_chan_recv(a, &av));
-    assert(eb_chan_recv(b, &bv));
+    assert(eb_chan_recv(a, &av) == eb_chan_ret_ok);
+    assert(eb_chan_recv(b, &bv) == eb_chan_ret_ok);
     assert(((uintptr_t)av | (uintptr_t)bv) == 3);
     
     assert(Send(a, NULL) == 1);

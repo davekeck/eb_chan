@@ -13,7 +13,7 @@ int main() {
     eb_chan_op c1recv = eb_chan_op_recv(c1);
     eb_chan_op crecv = eb_chan_op_recv(c);
     
-    eb_chan_op *r = eb_chan_do(eb_nsec_forever, &c1recv, &crecv);
+    eb_chan_op *r = eb_chan_select(eb_nsec_forever, &c1recv, &crecv);
     if (r == &crecv) {
         assert(crecv.val == (void*)42);
     } else {
