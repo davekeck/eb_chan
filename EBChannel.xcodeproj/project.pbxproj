@@ -12,7 +12,7 @@
 		5532506019D3664400F67BC6 /* eb_port.c in Sources */ = {isa = PBXBuildFile; fileRef = 5532505A19D3664400F67BC6 /* eb_port.c */; };
 		5532506119D3664400F67BC6 /* eb_time.c in Sources */ = {isa = PBXBuildFile; fileRef = 5532505C19D3664400F67BC6 /* eb_time.c */; };
 		5532506519D368C500F67BC6 /* EBChannel+Blocks.m in Sources */ = {isa = PBXBuildFile; fileRef = 5532506419D368C500F67BC6 /* EBChannel+Blocks.m */; };
-		5532506819D3829000F67BC6 /* testglue.c in Sources */ = {isa = PBXBuildFile; fileRef = 5532506619D3829000F67BC6 /* testglue.c */; };
+		5564A48419D5A03D0084F909 /* testglue.c in Sources */ = {isa = PBXBuildFile; fileRef = 5564A48219D5A03D0084F909 /* testglue.c */; };
 		55914714197F957700856379 /* libEBFoundation.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 5591470F197F955A00856379 /* libEBFoundation.a */; };
 		55E31411197652FB00D44328 /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 55E31410197652FB00D44328 /* Cocoa.framework */; };
 		55E3141B197652FB00D44328 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 55E31419197652FB00D44328 /* InfoPlist.strings */; };
@@ -71,8 +71,8 @@
 		5532505D19D3664400F67BC6 /* eb_time.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = eb_time.h; path = src/eb_time.h; sourceTree = SOURCE_ROOT; };
 		5532506319D368C500F67BC6 /* EBChannel+Blocks.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = "EBChannel+Blocks.h"; sourceTree = "<group>"; };
 		5532506419D368C500F67BC6 /* EBChannel+Blocks.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = "EBChannel+Blocks.m"; sourceTree = "<group>"; };
-		5532506619D3829000F67BC6 /* testglue.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = testglue.c; path = src/testglue.c; sourceTree = SOURCE_ROOT; };
-		5532506719D3829000F67BC6 /* testglue.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = testglue.h; path = src/testglue.h; sourceTree = SOURCE_ROOT; };
+		5564A48219D5A03D0084F909 /* testglue.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = testglue.c; path = test/testglue.c; sourceTree = SOURCE_ROOT; };
+		5564A48319D5A03D0084F909 /* testglue.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = testglue.h; path = test/testglue.h; sourceTree = SOURCE_ROOT; };
 		55914709197F955900856379 /* EBFoundation.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = EBFoundation.xcodeproj; path = "../Open-source Stuff/EBFoundation/EBFoundation.xcodeproj"; sourceTree = "<group>"; };
 		55E3140D197652FB00D44328 /* EBChannel.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = EBChannel.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		55E31410197652FB00D44328 /* Cocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Cocoa.framework; path = System/Library/Frameworks/Cocoa.framework; sourceTree = SDKROOT; };
@@ -173,8 +173,8 @@
 			children = (
 				55E31422197652FB00D44328 /* EBAppDelegate.h */,
 				55E31423197652FB00D44328 /* EBAppDelegate.m */,
-				5532506619D3829000F67BC6 /* testglue.c */,
-				5532506719D3829000F67BC6 /* testglue.h */,
+				5564A48219D5A03D0084F909 /* testglue.c */,
+				5564A48319D5A03D0084F909 /* testglue.h */,
 				5532505519D3664400F67BC6 /* eb_assert.c */,
 				5532505619D3664400F67BC6 /* eb_assert.h */,
 				5532505719D3664400F67BC6 /* eb_atomic.h */,
@@ -355,7 +355,7 @@
 				5532506019D3664400F67BC6 /* eb_port.c in Sources */,
 				55E31424197652FB00D44328 /* EBAppDelegate.m in Sources */,
 				5532506519D368C500F67BC6 /* EBChannel+Blocks.m in Sources */,
-				5532506819D3829000F67BC6 /* testglue.c in Sources */,
+				5564A48419D5A03D0084F909 /* testglue.c in Sources */,
 				5532505E19D3664400F67BC6 /* eb_assert.c in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

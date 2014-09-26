@@ -32,3 +32,5 @@ typedef int tg_spinlock; /* Initialized with TG_SPINLOCK_INIT */
 #define tg_spinlock_try(l) tg_atomic_compare_and_swap(l, 0, 1)
 #define tg_spinlock_lock(l) while (!tg_spinlock_try(l))
 #define tg_spinlock_unlock(l) tg_atomic_compare_and_swap(l, 1, 0)
+
+eb_nsec eb_time_now();

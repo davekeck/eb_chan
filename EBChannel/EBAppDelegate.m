@@ -233,14 +233,14 @@ void deadlock(EBChannel *a, EBChannel *b) {
 //    go( threadTrySend() );
 //    go( threadDoRecv() );
     
-//    go_pool( threadSend() );
-//    go_pool( threadSend() );
-//    go_pool( threadSend() );
-//    
-//    
-//    go_pool( threadRecv() );
-//    go_pool( threadRecv() );
-//    go_pool( threadRecv() );
+    go_pool( threadSend() );
+    go_pool( threadSend() );
+    go_pool( threadSend() );
+    
+    
+    go_pool( threadRecv() );
+    go_pool( threadRecv() );
+    go_pool( threadRecv() );
     
     
     
@@ -263,10 +263,10 @@ void deadlock(EBChannel *a, EBChannel *b) {
 //    go( deadlock(a,b) );
 //    go( deadlock(b,a) );
     
-    go_pool( timeoutTest() );
-    
-    usleep(500000);
-    assert([gChan close] == EBChannelResultOK);
+//    go_pool( timeoutTest() );
+//    
+//    usleep(500000);
+//    assert([gChan close] == EBChannelResultOK);
 //    assert([gChan close] == EBChannelResultOK);
 }
 
