@@ -177,28 +177,31 @@ Usage:
     /* Process the implementation */
     impl := ""
     implPath := findImplPath(rootHeaderPath)
-    if implPath != "" {
-        innerImpl, _, err := replaceIncludes(implPath, true, true, history)
-        if err != nil {
-            fmt.Printf("%v\n", err)
-            os.Exit(1)
-        }
-        
-        impl += innerImpl
+    if implPath == "" {
+        fmt.Printf("Failed to find implementation for %v\n", filepath.Base(rootHeaderPath))
+        os.Exit(1)
     }
+    
+    tmp, _, err := replaceIncludes(implPath, true, true, history)
+    if err != nil {
+        fmt.Printf("%v\n", err)
+        os.Exit(1)
+    }
+    impl += tmp
     
     /* Finally, append any remaining implementations for every header that we visited from the root header. */
     for _, headerPath := range headerPaths {
         implPath := findImplPath(headerPath)
-        if implPath != "" {
-            innerImpl, _, err := replaceIncludes(implPath, true, true, history)
-            if err != nil {
-                fmt.Printf("%v\n", err)
-                os.Exit(1)
-            }
-            
-            impl += innerImpl
+        if implPath == "" {
+            continue
         }
+        
+        tmp, _, err := replaceIncludes(implPath, true, true, history)
+        if err != nil {
+            fmt.Printf("%v\n", err)
+            os.Exit(1)
+        }
+        impl += tmp
     }
     
     prefix := kSeparator+kCommentPrefix+kHeaderMsg
@@ -208,5 +211,21 @@ Usage:
     prefix += kSeparator+"\n"
     header = prefix+header
     
-    fmt.Printf("%v\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\nmewow\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n%v", header, impl)
+    outHeaderPath := stripExt(rootHeaderPath)+"_merged"+filepath.Ext(rootHeaderPath)
+    outImplPath := stripExt(implPath)+"_merged"+filepath.Ext(implPath)
+    
+    const kPerm = 0644
+    err = ioutil.WriteFile(outHeaderPath, []byte(header), kPerm)
+    if err != nil {
+        fmt.Printf("ioutil.WriteFile failed: %v\n", err)
+        os.Exit(1)
+    }
+    
+    err = ioutil.WriteFile(outImplPath, []byte(impl), kPerm)
+    if err != nil {
+        fmt.Printf("ioutil.WriteFile failed: %v\n", err)
+        os.Exit(1)
+    }
+    
+    fmt.Printf("Wrote:\n  %v\n  %v\n", outHeaderPath, outImplPath)
 }
