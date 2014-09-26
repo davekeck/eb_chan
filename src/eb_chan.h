@@ -1,6 +1,7 @@
 #ifndef EB_CHAN_H
 #define EB_CHAN_H
 
+#include <stddef.h>
 #include <stdbool.h>
 #include "eb_nsec.h"
 

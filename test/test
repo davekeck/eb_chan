@@ -10,7 +10,7 @@ elif [ "$(uname)" == "Linux" ]; then
 fi
 
 for i in $*; do
-    clang -D _POSIX_C_SOURCE=200809L -D _BSD_SOURCE "$platform_flags" -fblocks -lpthread -I../src -std=c99 ../src/eb_chan.c ../src/eb_port.c ../src/eb_assert.c ../src/eb_time.c ../src/testglue.c "$i" -o a.out
+    clang -D _POSIX_C_SOURCE=200809L -D _BSD_SOURCE "$platform_flags" -fblocks -lpthread -I../src -I../merge_src -std=c99 ../merge_src/eb_chan.c ../src/testglue.c "$i" -o a.out
     
     r=$?
     if [ "$r" -eq 0 ]; then

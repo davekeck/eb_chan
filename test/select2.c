@@ -47,27 +47,38 @@ size_t get_memory_usage(void) {
     #endif
 }
 
-#define iterations 100000
+#define ITER 10
+#define COUNT 100000
 
 int main() {
     eb_chan c = eb_chan_create(0);
     eb_chan dummy = eb_chan_create(0);
     
     // warm up
-	go( sender(c, iterations) );
-	receiver(c, dummy, iterations);
-    size_t mem1 = get_memory_usage();
-//    printf("mem1: %ju\n", (uintmax_t)mem1);
+	go( sender(c, (ITER+1)*COUNT) );
     
-	// second time shouldn't increase footprint by much
-	go( sender(c, iterations) );
-	receiver(c, dummy, iterations);
-    size_t mem2 = get_memory_usage();
-//    printf("mem2: %ju\n", (uintmax_t)mem2);
     
-	if (mem2 > mem1 && mem2-mem1 >= iterations) {
-		printf("BUG: too much memory for %ju selects: %ju\n", (uintmax_t)iterations, (uintmax_t)(mem2 - mem1));
-	}
+    size_t mem[ITER];
+    
+    // warm up
+    receiver(c, dummy, COUNT);
+    sleep(1);
+    
+    for (size_t i = 0; i < ITER; i++) {
+        mem[i] = get_memory_usage();
+        receiver(c, dummy, COUNT);
+    }
+    
+    // starting at index 1 so that i-1 is always valid
+    size_t i = 0;
+    for (i = 1; i < ITER; i++) {
+        if (mem[i] > mem[i-1] && mem[i]-mem[i-1] >= COUNT) {
+            printf("BUG: too much memory used between iteration %ju and %ju for selects: %ju\n", (uintmax_t)i-1, (uintmax_t)i, (uintmax_t)(mem[i]-mem[i-1]));
+        }
+        
+//        printf("mem[%ju]: %ju\n", (uintmax_t)i-1, (uintmax_t)mem[i-1]);
+    }
+//    printf("mem[%ju]: %ju\n", (uintmax_t)i-1, (uintmax_t)mem[i-1]);
     
     return 0;
 }
