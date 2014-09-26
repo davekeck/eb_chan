@@ -72,16 +72,16 @@ func findImplPath(filePath string) string {
     filePathNoExt := stripExt(filePath)
     for _, ext := range kImplExts {
         implPath, err := normalizedPath(filePathNoExt+ext)
-        if err == nil {
+        if err == nil && !sameFile(filePath, implPath) {
             return implPath
         }
     }
     return ""
 }
 
-func replaceIncludes(filePath string, root bool, impl bool, history map[string]bool) (result string, paths []string, error) {
+func replaceIncludes(filePath string, root bool, impl bool, history map[string]bool) (result string, paths []string, err error) {
     /* Check whether we've visited this file yet. If not, mark it in our history */
-    filePath, err := normalizedPath(filePath)
+    filePath, err = normalizedPath(filePath)
     if err != nil {
         return "", []string{}, err
     }
@@ -98,8 +98,8 @@ func replaceIncludes(filePath string, root bool, impl bool, history map[string]b
     }
     
     lines := strings.Split(strings.TrimSpace(string(b)), "\n")
-    result := kSeparator+kCommentPrefix+filepath.Base(filePath)+"\n"+kSeparator+"\n"
-    paths := []string{filePath}
+    result = kSeparator+kCommentPrefix+filepath.Base(filePath)+"\n"+kSeparator+"\n"
+    paths = []string{filePath}
     for _, line := range lines {
         /* Ignore `#pragma once` lines */
         parts := strings.Split(strings.TrimSpace(line), ` `)
@@ -140,10 +140,10 @@ func replaceIncludes(filePath string, root bool, impl bool, history map[string]b
     return result, paths, nil
 }
 
-func mergeSrc(headerPath string) (header, headerName, impl, implName, err error) {
-    headerPath, err := normalizedPath(headerPath)
+func mergeSrc(headerPath string) (header, headerName, impl, implName string, err error) {
+    headerPath, err = normalizedPath(headerPath)
     if err != nil {
-        return "", "", "", "" err
+        return "", "", "", "", err
     }
     
     implPath := findImplPath(headerPath)
@@ -167,7 +167,7 @@ func mergeSrc(headerPath string) (header, headerName, impl, implName, err error)
         if err == nil && err2 != nil {
             err = err2
         }
-    }
+    }()
 
     history := map[string]bool{}
     
@@ -179,13 +179,7 @@ func mergeSrc(headerPath string) (header, headerName, impl, implName, err error)
     }
     
     /* Process the implementation */
-    impl := ""
-    implPath := findImplPath(headerPath)
-    if implPath == "" {
-        fmt.Printf("Failed to find implementation for %v\n", filepath.Base(headerPath))
-        os.Exit(1)
-    }
-    
+    impl = ""
     s, _, err := replaceIncludes(implPath, true, true, history)
     if err != nil {
         fmt.Printf("%v\n", err)
