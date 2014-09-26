@@ -28,46 +28,67 @@ func extractIncludeFilename(line string) string {
     return parts[1]
 }
 
-func filename2NormalizedPath(filename string) (string, error) {
-    r, err := filepath.Abs(filename)
+func getBasePath(path string) (string, error) {
+    r, err := filepath.Abs(path)
     if err != nil {
         return "", fmt.Errorf("filepath.Abs() failed: %v", err)
     }
-    
+    // TODO: need to strip file extension!
     r = filepath.Clean(r)
     return r, nil
 }
 
-func substituteIncludes(path string, history map[string]bool) (string, error) {
-    b, err := ioutil.ReadFile(path)
+func substituteIncludes(filename string, history map[string]bool) (string, error) {
+    basePath, err := getBasePath(filename)
     if err != nil {
-        return "", fmt.Errorf("ioutil.ReadFile() failed: %v", err)
+        return "", err
     }
     
-    lines := strings.Split(string(b), "\n")
-    result := ""
-    for _, line := range lines {
-        incFilename := extractIncludeFilename(line)
-        if incFilename != "" {
-            /* We've found an #include "..." line, so generate the full file path to use as our key into our history map. */
-            path, err := filename2NormalizedPath(incFilename)
-            if err != nil {
-                return "", err
-            }
-            
-            /* If we haven't visited this header yet, paste its content in place of the #include. */
-            if !history[path] {
-                history[path] = true
-                s, err := substituteIncludes(incFilename, history)
+    /* If we've already visited this file, short-circuit. Otherwise, make note that we've visited it, and continue on. */
+    if history[basePath] {
+        return "", nil
+    } else {
+        history[basePath] = true
+    }
+    
+    foundOne := false
+    paths := []string{basePath+".h", basePath+".c"}
+    for _, path := range paths {
+        b, err := ioutil.ReadFile(path)
+        if err != nil {
+            continue
+        }
+        
+        foundOne = true
+        lines := strings.Split(string(b), "\n")
+        result := ""
+        for _, line := range lines {
+            incFilename := extractIncludeFilename(line)
+            if incFilename != "" {
+                /* We've found an #include "..." line, so generate the full file path to use as our key into our history map. */
+                path, err := filename2NormalizedPath(incFilename)
                 if err != nil {
                     return "", err
                 }
-                result += s
+                
+                /* If we haven't visited this header yet, paste its content in place of the #include. */
+                if !history[path] {
+                    history[path] = true
+                    s, err := substituteIncludes(incFilename, history)
+                    if err != nil {
+                        return "", err
+                    }
+                    result += s
+                }
+            } else {
+                /* Not an #include "..." line */
+                result += line+"\n"
             }
-        } else {
-            /* Not an #include "..." line */
-            result += line+"\n"
         }
+    }
+    
+    if !foundOne {
+        return "", fmt.Errorf(`failed to find any files matching "%v"`, err)
     }
     
     return result, nil
