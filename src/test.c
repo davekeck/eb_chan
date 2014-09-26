@@ -1,5 +1,6 @@
 #include "testglue.h"
 #include "eb_chan.h"
+#include "eb_time.h"
 
 #define NTRIALS 1000000
 

@@ -1,7 +1,7 @@
 #pragma once
 #include <stddef.h>
 #include <stdbool.h>
-#include "eb_time.h"
+#include "eb_nsec.h"
 
 typedef struct eb_port *eb_port;
 
