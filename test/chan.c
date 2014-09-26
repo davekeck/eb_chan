@@ -20,12 +20,12 @@ typedef struct {
 } Chan;
 
 int nproc = 0;
-eb_spinlock nprocLock = EB_SPINLOCK_INIT;
+tg_spinlock nprocLock = TG_SPINLOCK_INIT;
 int cval = 0;
 int end = 10000;
 int totr = 0;
 int tots = 0;
-eb_spinlock totLock = EB_SPINLOCK_INIT;
+tg_spinlock totLock = TG_SPINLOCK_INIT;
 Chan *nc = NULL;
 
 void init() {
@@ -34,10 +34,10 @@ void init() {
 }
 
 int changeNproc(int adjust) {
-    eb_spinlock_lock(&nprocLock);
+    tg_spinlock_lock(&nprocLock);
 	nproc += adjust;
 	int ret = nproc;
-    eb_spinlock_unlock(&nprocLock);
+    tg_spinlock_unlock(&nprocLock);
 	return ret;
 }
 
@@ -70,9 +70,9 @@ int expect(int v, int v0) {
 
 bool sendOnChan(Chan *c) {
 	//	print("send ", c.sv, "\n");
-    eb_spinlock_lock(&totLock);
+    tg_spinlock_lock(&totLock);
 	tots++;
-    eb_spinlock_unlock(&totLock);
+    tg_spinlock_unlock(&totLock);
 	c->sv = expect(c->sv, c->sv);
 	if (c->sv == end) {
 		c->sc = NULL;
@@ -96,9 +96,9 @@ void mySend(Chan *c) {
 
 bool recvOnChan(Chan *c, int v)  {
 	//	print("recv ", v, "\n");
-    eb_spinlock_lock(&totLock);
+    tg_spinlock_lock(&totLock);
 	totr++;
-    eb_spinlock_unlock(&totLock);
+    tg_spinlock_unlock(&totLock);
 	c->rv = expect(c->rv, v);
 	if (c->rv == end) {
 		c->rc = NULL;

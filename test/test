@@ -1,5 +1,7 @@
 #!/bin/bash
 
+go run ../merge_src.go ../src/eb_chan.h
+
 platform_flags=""
 if [ "$(uname)" == "Darwin" ]; then
     # Darwin
@@ -10,7 +12,11 @@ elif [ "$(uname)" == "Linux" ]; then
 fi
 
 for i in $*; do
-    clang -D _POSIX_C_SOURCE=200809L -D _BSD_SOURCE "$platform_flags" -fblocks -lpthread -I../src -I../merge_src -std=c99 ../merge_src/eb_chan.c ../src/testglue.c "$i" -o a.out
+    if [ "$i" = "testglue.c" ]; then
+        continue
+    fi
+    
+    clang -D _POSIX_C_SOURCE=200809L -D _BSD_SOURCE "$platform_flags" -fblocks -lpthread -Imerge_src -std=c99 merge_src/eb_chan.c testglue.c "$i" -o a.out
     
     r=$?
     if [ "$r" -eq 0 ]; then

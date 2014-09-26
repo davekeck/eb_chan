@@ -12,7 +12,6 @@
 		559F510E19C3A223005921EE /* eb_chan.c in Sources */ = {isa = PBXBuildFile; fileRef = 559F510619C3A223005921EE /* eb_chan.c */; };
 		559F510F19C3A223005921EE /* eb_port.c in Sources */ = {isa = PBXBuildFile; fileRef = 559F510819C3A223005921EE /* eb_port.c */; };
 		559F511019C3A223005921EE /* eb_time.c in Sources */ = {isa = PBXBuildFile; fileRef = 559F510A19C3A223005921EE /* eb_time.c */; };
-		55A8CC0919D08ACB005A68EF /* testglue.c in Sources */ = {isa = PBXBuildFile; fileRef = 55A8CC0719D08ACA005A68EF /* testglue.c */; };
 		55D2EA4E19CFEFFD0053E832 /* test.c in Sources */ = {isa = PBXBuildFile; fileRef = 55D2EA4D19CFEFFD0053E832 /* test.c */; };
 /* End PBXBuildFile section */
 
@@ -41,8 +40,6 @@
 		559F510919C3A223005921EE /* eb_port.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = eb_port.h; path = src/eb_port.h; sourceTree = SOURCE_ROOT; };
 		559F510A19C3A223005921EE /* eb_time.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = eb_time.c; path = src/eb_time.c; sourceTree = SOURCE_ROOT; };
 		559F510B19C3A223005921EE /* eb_time.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = eb_time.h; path = src/eb_time.h; sourceTree = SOURCE_ROOT; };
-		55A8CC0719D08ACA005A68EF /* testglue.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = testglue.c; path = src/testglue.c; sourceTree = SOURCE_ROOT; };
-		55A8CC0819D08ACB005A68EF /* testglue.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = testglue.h; path = src/testglue.h; sourceTree = SOURCE_ROOT; };
 		55D2EA4D19CFEFFD0053E832 /* test.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = test.c; path = src/test.c; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
@@ -96,8 +93,6 @@
 				5564A47F19D58C220084F909 /* eb_nsec.h */,
 				559F510B19C3A223005921EE /* eb_time.h */,
 				559F510A19C3A223005921EE /* eb_time.c */,
-				55A8CC0819D08ACB005A68EF /* testglue.h */,
-				55A8CC0719D08ACA005A68EF /* testglue.c */,
 				55D2EA4D19CFEFFD0053E832 /* test.c */,
 			);
 			path = chantest;
@@ -159,7 +154,6 @@
 				559F510F19C3A223005921EE /* eb_port.c in Sources */,
 				55D2EA4E19CFEFFD0053E832 /* test.c in Sources */,
 				559F510D19C3A223005921EE /* eb_assert.c in Sources */,
-				55A8CC0919D08ACB005A68EF /* testglue.c in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
