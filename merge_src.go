@@ -217,13 +217,13 @@ Usage:
     const kPerm = 0644
     err = ioutil.WriteFile(outHeaderPath, []byte(header), kPerm)
     if err != nil {
-        fmt.Printf("ioutil.WriteFile failed: %v\n", err)
+        fmt.Printf("ioutil.WriteFile() failed: %v\n", err)
         os.Exit(1)
     }
     
     err = ioutil.WriteFile(outImplPath, []byte(impl), kPerm)
     if err != nil {
-        fmt.Printf("ioutil.WriteFile failed: %v\n", err)
+        fmt.Printf("ioutil.WriteFile() failed: %v\n", err)
         os.Exit(1)
     }
     
