@@ -97,9 +97,15 @@ func replaceIncludes(filePath string, root bool, impl bool, history map[string]b
     }
     
     lines := strings.Split(strings.TrimSpace(string(b)), "\n")
-    result := kSeparator+kCommentPrefix+filePath+"\n"+kSeparator+"\n"
+    result := kSeparator+kCommentPrefix+filepath.Base(filePath)+"\n"+kSeparator+"\n"
     paths := []string{filePath}
     for _, line := range lines {
+        /* Ignore `#pragma once` lines */
+        parts := strings.Split(strings.TrimSpace(line), ` `)
+        if parts[0] == "#pragma" && parts[1] == "once" {
+            continue
+        }
+        
         incPath := getIncPath(line)
         /* Avoid including the root file's header */
         if incPath != "" && (!root || !sameFile(stripExt(filePath)+".h", incPath)) {
@@ -125,7 +131,7 @@ func replaceIncludes(filePath string, root bool, impl bool, history map[string]b
                 }
             }
         } else {
-            /* Not an #include "..." line, so just append it to our output */
+            /* Just a normal line of code so just append it to our output */
             result += line+"\n"
         }
     }
@@ -196,8 +202,8 @@ Usage:
     }
     
     prefix := kSeparator+kCommentPrefix+kHeaderMsg
-    for p, _ := range history {
-        prefix += kCommentPrefix+"  "+p+"\n"
+    for filePath, _ := range history {
+        prefix += kCommentPrefix+"  "+filepath.Base(filePath)+"\n"
     }
     prefix += kSeparator+"\n"
     header = prefix+header

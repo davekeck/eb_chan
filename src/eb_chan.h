@@ -1,4 +1,6 @@
-#pragma once
+#ifndef EB_CHAN_H
+#define EB_CHAN_H
+
 #include <stddef.h>
 #include <stdbool.h>
 #include "eb_time.h"
@@ -61,3 +63,5 @@ static inline eb_chan_op eb_chan_op_send(eb_chan c, const void *val) {
 static inline eb_chan_op eb_chan_op_recv(eb_chan c) {
     return (eb_chan_op){.chan = c, .send = false, .open = false, .val = NULL};
 }
+
+#endif /* EB_CHAN_H */
