@@ -82,7 +82,7 @@ static inline void port_list_add(port_list l, eb_port p) {
             // to a certain number of ports, and that would suck...
             l->ports = realloc(l->ports, l->cap * sizeof(*(l->ports)));
             // TODO: handle allocation failures better
-            eb_assert_or_recover(l->ports, return);
+            eb_assert_or_bail(l->ports, return);
         }
         
         l->ports[l->len] = p;
