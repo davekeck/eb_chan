@@ -7,6 +7,7 @@
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
+#include <sched.h>
 // #######################################################
 // ## eb_assert.h
 // #######################################################
@@ -66,38 +67,103 @@ bool eb_port_wait(eb_port p, eb_nsec timeout);
 #include <assert.h>
 #include <errno.h>
 #include <string.h>
+// #######################################################
+// ## eb_sys.h
+// #######################################################
+
+#include <stddef.h>
 
 #if __MACH__
-    #define DARWIN 1
-    #include <mach/mach.h>
+    #define EB_SYS_DARWIN 1
 #elif __linux__
-    #define LINUX 1
-    #include <time.h>
-    #include <semaphore.h>
+    #define EB_SYS_LINUX 1
+#else
+    #error Unsupported system
 #endif
+
+/* ## Variables */
+/* Returns the number of logical cores on the machine. _init must be called for this to be valid! */
+size_t eb_sys_ncores;
+
+/* ## Functions */
+void eb_sys_init();
+// #######################################################
+// ## eb_sys.c
+// #######################################################
 
 // #######################################################
 // ## eb_atomic.h
 // #######################################################
 
-#include <assert.h>
 
 #define eb_atomic_add(ptr, delta) __sync_add_and_fetch(ptr, delta) /* Returns the new value */
 #define eb_atomic_compare_and_swap(ptr, old, new) __sync_bool_compare_and_swap(ptr, old, new)
 #define eb_atomic_barrier() __sync_synchronize()
 
-typedef int eb_spinlock; /* Initialized with EB_SPINLOCK_INIT */
+#if EB_SYS_DARWIN
+    #include <mach/mach.h>
+#elif EB_SYS_LINUX
+    #include <unistd.h>
+#endif
+
+size_t ncores() {
+    #if EB_SYS_DARWIN
+        host_basic_info_data_t info;
+        mach_msg_type_number_t count = HOST_BASIC_INFO_COUNT;
+        kern_return_t r = host_info(mach_host_self(), HOST_BASIC_INFO, (host_info_t)&info, &count);
+            eb_assert_or_recover(r == KERN_SUCCESS, return 0);
+            eb_assert_or_recover(count == HOST_BASIC_INFO_COUNT, return 0);
+            eb_assert_or_recover(info.logical_cpu > 0 && info.logical_cpu <= SIZE_MAX, return 0);
+        return (size_t)info.logical_cpu;
+    #elif EB_SYS_LINUX
+        long ncores = sysconf(_SC_NPROCESSORS_ONLN);
+            eb_assert_or_recover(logical_cpu > 0 && logical_cpu <= SIZE_MAX, return 0);
+        return (size_t)ncores;
+    #endif
+}
+
+void eb_sys_init() {
+    if (!eb_sys_ncores) {
+        eb_atomic_compare_and_swap(&eb_sys_ncores, 0, ncores());
+    }
+}
+#if EB_SYS_DARWIN
+    #include <mach/mach.h>
+#elif EB_SYS_LINUX
+    #include <time.h>
+    #include <semaphore.h>
+#endif
+// #######################################################
+// ## eb_spinlock.h
+// #######################################################
+
+#include <stdbool.h>
+#include <sched.h>
+
+/* ## Types */
+typedef int eb_spinlock;
 #define EB_SPINLOCK_INIT 0
+
+/* ## Functions */
 #define eb_spinlock_try(l) eb_atomic_compare_and_swap(l, 0, 1)
-#define eb_spinlock_lock(l) while (!eb_spinlock_try(l))
+
+#define eb_spinlock_lock(l) ({             \
+    if (eb_sys_ncores > 1) {               \
+        while (!eb_spinlock_try(l));       \
+    } else {                               \
+        while (!eb_spinlock_try(l)) {      \
+            sched_yield();                 \
+        }                                  \
+    }                                      \
+})
+
 #define eb_spinlock_unlock(l) eb_atomic_compare_and_swap(l, 1, 0)
 
 //#define eb_spinlock_try(l) __sync_lock_test_and_set(l, 1) == 0
 //#define eb_spinlock_lock(l) while (!eb_spinlock_try(l))
 //#define eb_spinlock_unlock(l) __sync_lock_release(l)
 //
-//typedef OSSpinLock eb_spinlock; /* Initialized with EB_SPINLOCK_INIT */
-//#define EB_SPINLOCK_INIT OS_SPINLOCK_INIT
+//typedef OSSpinLock eb_spinlock;
 //#define eb_spinlock_try(l) OSSpinLockTry(l)
 //#define eb_spinlock_lock(l) OSSpinLockLock(l)
 //#define eb_spinlock_unlock(l) OSSpinLockUnlock(l)
@@ -114,18 +180,14 @@ eb_nsec eb_time_now();
 
 #include <stdint.h>
 #include <stdlib.h>
-
-#if __MACH__
-    #define DARWIN 1
+#if EB_SYS_DARWIN
     #include <mach/mach_time.h>
-#elif __linux__
-    #define LINUX 1
+#elif EB_SYS_LINUX
     #include <time.h>
 #endif
 
-
 eb_nsec eb_time_now() {
-#if DARWIN
+#if EB_SYS_DARWIN
     /* Initialize k_timebase_info, thread-safely */
     static mach_timebase_info_t k_timebase_info = NULL;
     if (!k_timebase_info) {
@@ -143,7 +205,7 @@ eb_nsec eb_time_now() {
     }
     
     return ((mach_absolute_time() * k_timebase_info->numer) / k_timebase_info->denom);
-#elif LINUX
+#elif EB_SYS_LINUX
     struct timespec ts;
     int r = clock_gettime(CLOCK_MONOTONIC, &ts);
         eb_assert_or_recover(!r, return 0);
@@ -160,9 +222,9 @@ struct eb_port {
     unsigned int retain_count;
     bool sem_valid;
     bool signaled;
-    #if DARWIN
+    #if EB_SYS_DARWIN
         semaphore_t sem;
-    #elif LINUX
+    #elif EB_SYS_LINUX
         sem_t sem;
     #endif
 };
@@ -196,10 +258,10 @@ static void eb_port_free(eb_port p) {
         
         /* If we couldn't add the port to the pool, destroy the underlying semaphore. */
         if (!added_to_pool) {
-            #if DARWIN
+            #if EB_SYS_DARWIN
                 kern_return_t r = semaphore_destroy(mach_task_self(), p->sem);
                     eb_assert_or_recover(r == KERN_SUCCESS, eb_no_op);
-            #elif LINUX
+            #elif EB_SYS_LINUX
                 int r = sem_destroy(&p->sem);
                     eb_assert_or_recover(!r, eb_no_op);
             #endif
@@ -216,6 +278,7 @@ static void eb_port_free(eb_port p) {
 
 eb_port eb_port_create() {
     eb_port p = NULL;
+    
     /* First try to pop a port out of the pool */
     eb_spinlock_lock(&g_port_pool_lock);
         if (g_port_pool_len) {
@@ -234,10 +297,10 @@ eb_port eb_port_create() {
             eb_assert_or_recover(p, goto failed);
         
         /* Create the semaphore */
-        #if DARWIN
+        #if EB_SYS_DARWIN
             kern_return_t r = semaphore_create(mach_task_self(), &p->sem, SYNC_POLICY_FIFO, 0);
                 eb_assert_or_recover(r == KERN_SUCCESS, goto failed);
-        #elif LINUX
+        #elif EB_SYS_LINUX
             int r = sem_init(&p->sem, 0, 0);
                 eb_assert_or_recover(!r,  goto failed);
         #endif
@@ -269,10 +332,10 @@ void eb_port_signal(eb_port p) {
     assert(p);
     
     if (eb_atomic_compare_and_swap(&p->signaled, false, true)) {
-        #if DARWIN
+        #if EB_SYS_DARWIN
             kern_return_t r = semaphore_signal(p->sem);
                 eb_assert_or_recover(r == KERN_SUCCESS, eb_no_op);
-        #elif LINUX
+        #elif EB_SYS_LINUX
             int r = sem_post(&p->sem);
                 eb_assert_or_recover(!r, eb_no_op);
         #endif
@@ -285,11 +348,11 @@ bool eb_port_wait(eb_port p, eb_nsec timeout) {
     bool result = false;
     if (timeout == eb_nsec_zero) {
         /* ## Non-blocking */
-        #if DARWIN
+        #if EB_SYS_DARWIN
             kern_return_t r = semaphore_timedwait(p->sem, (mach_timespec_t){0, 0});
                 eb_assert_or_recover(r == KERN_SUCCESS || r == KERN_OPERATION_TIMED_OUT, eb_no_op);
             result = (r == KERN_SUCCESS);
-        #elif LINUX
+        #elif EB_SYS_LINUX
             int r = 0;
             while ((r = sem_trywait(&p->sem)) == -1 && errno == EINTR);
                 eb_assert_or_recover(!r || (r == -1 && errno == EAGAIN), eb_no_op);
@@ -297,12 +360,12 @@ bool eb_port_wait(eb_port p, eb_nsec timeout) {
         #endif
     } else if (timeout == eb_nsec_forever) {
         /* ## Blocking */
-        #if DARWIN
+        #if EB_SYS_DARWIN
             kern_return_t r;
             while ((r = semaphore_wait(p->sem)) == KERN_ABORTED);
                 eb_assert_or_recover(r == KERN_SUCCESS, eb_no_op);
             result = (r == KERN_SUCCESS);
-        #elif LINUX
+        #elif EB_SYS_LINUX
             int r;
             while ((r = sem_wait(&p->sem)) == -1 && errno == EINTR);
                 eb_assert_or_recover(!r, eb_no_op);
@@ -313,7 +376,7 @@ bool eb_port_wait(eb_port p, eb_nsec timeout) {
         eb_nsec start_time = eb_time_now();
         eb_nsec remaining_timeout = timeout;
         for (;;) {
-            #if DARWIN
+            #if EB_SYS_DARWIN
                 /* This needs to be in a loop because semaphore_timedwait() can return KERN_ABORTED, e.g. if the process receives a signal. */
                 mach_timespec_t ts = {.tv_sec = (unsigned int)(remaining_timeout / eb_nsec_per_sec), .tv_nsec = (clock_res_t)(remaining_timeout % eb_nsec_per_sec)};
                 kern_return_t r = semaphore_timedwait(p->sem, ts);
@@ -323,7 +386,7 @@ bool eb_port_wait(eb_port p, eb_nsec timeout) {
                     result = true;
                     break;
                 }
-            #elif LINUX
+            #elif EB_SYS_LINUX
                 /* Because sem_timedwait() uses the system's _REALTIME clock instead of the _MONOTONIC clock, we'll time out when
                    the system's time changes. For that reason, we check for the timeout case ourself (instead of relying on errno
                    after calling sem_timedwait()) condition ourself, using our own monotonic clock APIs (eb_time_now()), and
@@ -381,7 +444,7 @@ static inline port_list port_list_alloc(size_t cap) {
     port_list result = malloc(sizeof(*result));
         eb_assert_or_recover(result, goto failed);
     
-    result->lock = 0;
+    result->lock = EB_SPINLOCK_INIT;
     result->cap = cap;
     result->len = 0;
     result->ports = malloc(cap * sizeof(*(result->ports)));
@@ -560,12 +623,15 @@ static inline void eb_chan_free(eb_chan c) {
 eb_chan eb_chan_create(size_t buf_cap) {
     static const size_t k_init_buf_cap = 16;
     
+    /* Initialize eb_sys so that eb_sys_ncores is valid. */
+    eb_sys_init();
+    
     /* Using calloc so that the bytes are zeroed. */
     eb_chan c = calloc(1, sizeof(*c));
         eb_assert_or_recover(c, goto failed);
     
     c->retain_count = 1;
-    c->lock = 0;
+    c->lock = EB_SPINLOCK_INIT;
     c->state = chanstate_open;
     
     c->sends = port_list_alloc(k_init_buf_cap);
@@ -907,6 +973,10 @@ static inline op_result send_unbuf(const do_state *state, eb_chan_op *op, size_t
                                 break;
                             }
                         eb_spinlock_unlock(&c->lock);
+                    } else if (eb_sys_ncores == 1) {
+                        /* On uniprocessor machines, yield to the scheduler because we can't continue until another
+                           thread updates the channel's state. */
+                        sched_yield();
                     }
                 }
             } else if (c->state == chanstate_ack && c->unbuf_op == op) {
@@ -1024,6 +1094,10 @@ static inline op_result recv_unbuf(const do_state *state, eb_chan_op *op, size_t
                                 break;
                             }
                         eb_spinlock_unlock(&c->lock);
+                    } else if (eb_sys_ncores == 1) {
+                        /* On uniprocessor machines, yield to the scheduler because we can't continue until another
+                           thread updates the channel's state. */
+                        sched_yield();
                     }
                 }
             } else if (c->state == chanstate_recv && c->unbuf_op == op) {
@@ -1137,6 +1211,7 @@ eb_chan_op *eb_chan_select_list(eb_nsec timeout, eb_chan_op *const ops[], size_t
 //        }
 //    // TEMP END
     
+    const size_t k_attempt_multiplier = (eb_sys_ncores == 1 ? 0 : 500);
     bool co[nops];
     memset(co, 0, sizeof(co));
     
@@ -1153,7 +1228,14 @@ eb_chan_op *eb_chan_select_list(eb_nsec timeout, eb_chan_op *const ops[], size_t
         for (size_t i = 0; i < nops; i++) {
             eb_chan_op *op = ops[i];
             op_result r;
-            while ((r = try_op(&state, op, i)) == op_result_retry);
+            while ((r = try_op(&state, op, i)) == op_result_retry) {
+                if (eb_sys_ncores == 1) {
+                    /* On uniprocessor machines, yield to the scheduler because we can't continue until another
+                       thread updates the channel's state. */
+                    sched_yield();
+                }
+            }
+            
             /* If the op completed, we need to exit! */
             if (r == op_result_complete) {
                 result = op;
@@ -1166,7 +1248,6 @@ eb_chan_op *eb_chan_select_list(eb_nsec timeout, eb_chan_op *const ops[], size_t
         for (;;) {
             /* ## Fast path: loop over our operations to see if one of them was able to send/receive. (If not,
                we'll enter the slow path where we put our thread to sleep until we're signaled.) */
-            const size_t k_attempt_multiplier = 500;
             for (size_t i = 0; i < k_attempt_multiplier * nops; i++) {
                 size_t idx = (i % nops);
                 eb_chan_op *op = ops[idx];
@@ -1203,7 +1284,14 @@ eb_chan_op *eb_chan_select_list(eb_nsec timeout, eb_chan_op *const ops[], size_t
             for (size_t i = 0; i < nops; i++) {
                 eb_chan_op *op = ops[i];
                 op_result r;
-                while ((r = try_op(&state, op, i)) == op_result_retry);
+                while ((r = try_op(&state, op, i)) == op_result_retry) {
+                    if (eb_sys_ncores == 1) {
+                        /* On uniprocessor machines, yield to the scheduler because we can't continue until another
+                           thread updates the channel's state. */
+                        sched_yield();
+                    }
+                }
+                
                 /* If the op completed, we need to exit! */
                 if (r == op_result_complete) {
                     result = op;

@@ -1,2 +1,4 @@
 - randomize op iteration
+- speed up on uniprocessor architectures
+- add Swift wrapper
 ? support sending in-line data of constant length

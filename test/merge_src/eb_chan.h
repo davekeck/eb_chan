@@ -3,13 +3,16 @@
 // ##   eb_chan.h
 // ##   eb_assert.h
 // ##   eb_port.c
+// ##   eb_sys.c
 // ##   eb_time.c
+// ##   eb_atomic.h
+// ##   eb_spinlock.h
+// ##   eb_time.h
 // ##   eb_nsec.h
 // ##   eb_chan.c
 // ##   eb_assert.c
 // ##   eb_port.h
-// ##   eb_atomic.h
-// ##   eb_time.h
+// ##   eb_sys.h
 // #######################################################
 
 // #######################################################
@@ -70,7 +73,7 @@ eb_chan_ret eb_chan_try_recv(eb_chan c, const void **val);
 /* ## Multiplexing */
 eb_chan_op *eb_chan_select_list(eb_nsec timeout, eb_chan_op *const ops[], size_t nops);
 
-/* _select() is a convenience macro to allow supplying ops directly to _select() without having to create an array on the stack.
+/* _select() is a convenience macro that wraps _select_list() to avoid having to create an array on the stack.
    For example:
         eb_chan_op op1 = eb_chan_op_send(c1, NULL);
         eb_chan_op op2 = eb_chan_op_recv(c2);

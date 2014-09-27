@@ -3,18 +3,16 @@
 #include <assert.h>
 #include <errno.h>
 #include <string.h>
-
-#if __MACH__
-    #define DARWIN 1
+#include "eb_sys.h"
+#if EB_SYS_DARWIN
     #include <mach/mach.h>
-#elif __linux__
-    #define LINUX 1
+#elif EB_SYS_LINUX
     #include <time.h>
     #include <semaphore.h>
 #endif
-
 #include "eb_assert.h"
 #include "eb_atomic.h"
+#include "eb_spinlock.h"
 #include "eb_time.h"
 
 #define PORT_POOL_CAP 0x10
@@ -26,9 +24,9 @@ struct eb_port {
     unsigned int retain_count;
     bool sem_valid;
     bool signaled;
-    #if DARWIN
+    #if EB_SYS_DARWIN
         semaphore_t sem;
-    #elif LINUX
+    #elif EB_SYS_LINUX
         sem_t sem;
     #endif
 };
@@ -62,10 +60,10 @@ static void eb_port_free(eb_port p) {
         
         /* If we couldn't add the port to the pool, destroy the underlying semaphore. */
         if (!added_to_pool) {
-            #if DARWIN
+            #if EB_SYS_DARWIN
                 kern_return_t r = semaphore_destroy(mach_task_self(), p->sem);
                     eb_assert_or_recover(r == KERN_SUCCESS, eb_no_op);
-            #elif LINUX
+            #elif EB_SYS_LINUX
                 int r = sem_destroy(&p->sem);
                     eb_assert_or_recover(!r, eb_no_op);
             #endif
@@ -82,6 +80,7 @@ static void eb_port_free(eb_port p) {
 
 eb_port eb_port_create() {
     eb_port p = NULL;
+    
     /* First try to pop a port out of the pool */
     eb_spinlock_lock(&g_port_pool_lock);
         if (g_port_pool_len) {
@@ -100,10 +99,10 @@ eb_port eb_port_create() {
             eb_assert_or_recover(p, goto failed);
         
         /* Create the semaphore */
-        #if DARWIN
+        #if EB_SYS_DARWIN
             kern_return_t r = semaphore_create(mach_task_self(), &p->sem, SYNC_POLICY_FIFO, 0);
                 eb_assert_or_recover(r == KERN_SUCCESS, goto failed);
-        #elif LINUX
+        #elif EB_SYS_LINUX
             int r = sem_init(&p->sem, 0, 0);
                 eb_assert_or_recover(!r,  goto failed);
         #endif
@@ -135,10 +134,10 @@ void eb_port_signal(eb_port p) {
     assert(p);
     
     if (eb_atomic_compare_and_swap(&p->signaled, false, true)) {
-        #if DARWIN
+        #if EB_SYS_DARWIN
             kern_return_t r = semaphore_signal(p->sem);
                 eb_assert_or_recover(r == KERN_SUCCESS, eb_no_op);
-        #elif LINUX
+        #elif EB_SYS_LINUX
             int r = sem_post(&p->sem);
                 eb_assert_or_recover(!r, eb_no_op);
         #endif
@@ -151,11 +150,11 @@ bool eb_port_wait(eb_port p, eb_nsec timeout) {
     bool result = false;
     if (timeout == eb_nsec_zero) {
         /* ## Non-blocking */
-        #if DARWIN
+        #if EB_SYS_DARWIN
             kern_return_t r = semaphore_timedwait(p->sem, (mach_timespec_t){0, 0});
                 eb_assert_or_recover(r == KERN_SUCCESS || r == KERN_OPERATION_TIMED_OUT, eb_no_op);
             result = (r == KERN_SUCCESS);
-        #elif LINUX
+        #elif EB_SYS_LINUX
             int r = 0;
             while ((r = sem_trywait(&p->sem)) == -1 && errno == EINTR);
                 eb_assert_or_recover(!r || (r == -1 && errno == EAGAIN), eb_no_op);
@@ -163,12 +162,12 @@ bool eb_port_wait(eb_port p, eb_nsec timeout) {
         #endif
     } else if (timeout == eb_nsec_forever) {
         /* ## Blocking */
-        #if DARWIN
+        #if EB_SYS_DARWIN
             kern_return_t r;
             while ((r = semaphore_wait(p->sem)) == KERN_ABORTED);
                 eb_assert_or_recover(r == KERN_SUCCESS, eb_no_op);
             result = (r == KERN_SUCCESS);
-        #elif LINUX
+        #elif EB_SYS_LINUX
             int r;
             while ((r = sem_wait(&p->sem)) == -1 && errno == EINTR);
                 eb_assert_or_recover(!r, eb_no_op);
@@ -179,7 +178,7 @@ bool eb_port_wait(eb_port p, eb_nsec timeout) {
         eb_nsec start_time = eb_time_now();
         eb_nsec remaining_timeout = timeout;
         for (;;) {
-            #if DARWIN
+            #if EB_SYS_DARWIN
                 /* This needs to be in a loop because semaphore_timedwait() can return KERN_ABORTED, e.g. if the process receives a signal. */
                 mach_timespec_t ts = {.tv_sec = (unsigned int)(remaining_timeout / eb_nsec_per_sec), .tv_nsec = (clock_res_t)(remaining_timeout % eb_nsec_per_sec)};
                 kern_return_t r = semaphore_timedwait(p->sem, ts);
@@ -189,7 +188,7 @@ bool eb_port_wait(eb_port p, eb_nsec timeout) {
                     result = true;
                     break;
                 }
-            #elif LINUX
+            #elif EB_SYS_LINUX
                 /* Because sem_timedwait() uses the system's _REALTIME clock instead of the _MONOTONIC clock, we'll time out when
                    the system's time changes. For that reason, we check for the timeout case ourself (instead of relying on errno
                    after calling sem_timedwait()) condition ourself, using our own monotonic clock APIs (eb_time_now()), and

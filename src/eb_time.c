@@ -1,20 +1,17 @@
 #include "eb_time.h"
 #include <stdint.h>
 #include <stdlib.h>
-
-#if __MACH__
-    #define DARWIN 1
+#include "eb_sys.h"
+#if EB_SYS_DARWIN
     #include <mach/mach_time.h>
-#elif __linux__
-    #define LINUX 1
+#elif EB_SYS_LINUX
     #include <time.h>
 #endif
-
 #include "eb_assert.h"
 #include "eb_atomic.h"
 
 eb_nsec eb_time_now() {
-#if DARWIN
+#if EB_SYS_DARWIN
     /* Initialize k_timebase_info, thread-safely */
     static mach_timebase_info_t k_timebase_info = NULL;
     if (!k_timebase_info) {
@@ -32,7 +29,7 @@ eb_nsec eb_time_now() {
     }
     
     return ((mach_absolute_time() * k_timebase_info->numer) / k_timebase_info->denom);
-#elif LINUX
+#elif EB_SYS_LINUX
     struct timespec ts;
     int r = clock_gettime(CLOCK_MONOTONIC, &ts);
         eb_assert_or_recover(!r, return 0);
