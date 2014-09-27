@@ -780,10 +780,16 @@ eb_chan_ret eb_chan_try_recv(eb_chan c, const void **val) {
 eb_chan_op *eb_chan_select_list(eb_nsec timeout, eb_chan_op *const ops[], size_t nops) {
         assert(!nops || ops);
     
-    const eb_nsec start_time = eb_time_now();
-    const size_t idx_start = (nops ? (start_time/1000)%nops : 0);
-    const int8_t idx_delta = (!((start_time/10000)%2) ? 1 : -1);
-    const size_t k_attempt_multiplier = (eb_sys_ncores == 1 ? 0 : 500);
+    const size_t k_attempt_multiplier = (eb_sys_ncores == 1 ? 1 : 500);
+    eb_nsec start_time = 0;
+    size_t idx_start = 0;
+    int8_t idx_delta = 0;
+    if (nops > 1) {
+        /* Assign idx_start/idx_delta, which control the op pseudo-randomization */
+        start_time = eb_time_now();
+        idx_start = (start_time/1000)%nops;
+        idx_delta = (!((start_time/10000)%2) ? 1 : -1);
+    }
     
     bool co[nops];
     memset(co, 0, sizeof(co));
@@ -817,6 +823,10 @@ eb_chan_op *eb_chan_select_list(eb_nsec timeout, eb_chan_op *const ops[], size_t
         }
     } else {
         /* ## timeout != 0 */
+        if (timeout != eb_nsec_forever && !start_time) {
+            start_time = eb_time_now();
+        }
+        
         for (;;) {
             /* ## Fast path: loop over our operations to see if one of them was able to send/receive. (If not,
                we'll enter the slow path where we put our thread to sleep until we're signaled.) */

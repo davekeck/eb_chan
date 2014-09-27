@@ -1190,28 +1190,21 @@ eb_chan_ret eb_chan_try_recv(eb_chan c, const void **val) {
 }
 
 #pragma mark - Multiplexing -
+#define next_idx(nops, delta, idx) (delta == 1 && idx == nops-1 ? 0 : ((delta == -1 && idx == 0) ? nops-1 : idx+delta))
 eb_chan_op *eb_chan_select_list(eb_nsec timeout, eb_chan_op *const ops[], size_t nops) {
-    // TODO: randomize iteration by shuffling input array once (upon entry)
-        assert(ops);
+        assert(!nops || ops);
     
-//    // TODO: figure out a (much) faster way to randomize the ops!
-//    // TEMP START
-//        /* ## Shuffle our input array */
-//        eb_chan_op *rops[nops];
-//        /* No need to shuffle arrays that have 0 or 1 elements */
-//        if (nops > 1) {
-//            memcpy(rops, ops, nops*sizeof(*rops));
-//            for (size_t i = 0; i < nops; i++) {
-//                size_t ridx = random() % nops;
-//                eb_chan_op *tmp = rops[ridx];
-//                rops[ridx] = rops[i];
-//                rops[i] = tmp;
-//            }
-//            ops = rops;
-//        }
-//    // TEMP END
+    const size_t k_attempt_multiplier = (eb_sys_ncores == 1 ? 1 : 500);
+    eb_nsec start_time = 0;
+    size_t idx_start = 0;
+    int8_t idx_delta = 0;
+    if (nops > 1) {
+        /* Assign idx_start/idx_delta, which control the op pseudo-randomization */
+        start_time = eb_time_now();
+        idx_start = (start_time/1000)%nops;
+        idx_delta = (!((start_time/10000)%2) ? 1 : -1);
+    }
     
-    const size_t k_attempt_multiplier = (eb_sys_ncores == 1 ? 0 : 500);
     bool co[nops];
     memset(co, 0, sizeof(co));
     
@@ -1225,10 +1218,10 @@ eb_chan_op *eb_chan_select_list(eb_nsec timeout, eb_chan_op *const ops[], size_t
     
     if (timeout == eb_nsec_zero) {
         /* ## timeout == 0: try every op exactly once; if none of them can proceed, return NULL. */
-        for (size_t i = 0; i < nops; i++) {
-            eb_chan_op *op = ops[i];
+        for (size_t i = 0, idx = idx_start; i < nops; i++, idx = next_idx(nops, idx_delta, idx)) {
+            eb_chan_op *op = ops[idx];
             op_result r;
-            while ((r = try_op(&state, op, i)) == op_result_retry) {
+            while ((r = try_op(&state, op, idx)) == op_result_retry) {
                 if (eb_sys_ncores == 1) {
                     /* On uniprocessor machines, yield to the scheduler because we can't continue until another
                        thread updates the channel's state. */
@@ -1244,12 +1237,14 @@ eb_chan_op *eb_chan_select_list(eb_nsec timeout, eb_chan_op *const ops[], size_t
         }
     } else {
         /* ## timeout != 0 */
-        eb_nsec start_time = (timeout != eb_nsec_forever ? eb_time_now() : 0);
+        if (timeout != eb_nsec_forever && !start_time) {
+            start_time = eb_time_now();
+        }
+        
         for (;;) {
             /* ## Fast path: loop over our operations to see if one of them was able to send/receive. (If not,
                we'll enter the slow path where we put our thread to sleep until we're signaled.) */
-            for (size_t i = 0; i < k_attempt_multiplier * nops; i++) {
-                size_t idx = (i % nops);
+            for (size_t i = 0, idx = idx_start; i < k_attempt_multiplier*nops; i++, idx = next_idx(nops, idx_delta, idx)) {
                 eb_chan_op *op = ops[idx];
                 op_result r = try_op(&state, op, idx);
                 /* If the op completed, we need to exit! */
@@ -1281,10 +1276,10 @@ eb_chan_op *eb_chan_select_list(eb_nsec timeout, eb_chan_op *const ops[], size_t
             /* Before we go to sleep, call try_op() for every op until we get a non-busy return value. This way we'll ensure
                that no op is actually able to be performed, and we'll also ensure that 'port' is registered as the 'unbuf_port'
                for the necessary channels. */
-            for (size_t i = 0; i < nops; i++) {
-                eb_chan_op *op = ops[i];
+            for (size_t i = 0, idx = idx_start; i < nops; i++, idx = next_idx(nops, idx_delta, idx)) {
+                eb_chan_op *op = ops[idx];
                 op_result r;
-                while ((r = try_op(&state, op, i)) == op_result_retry) {
+                while ((r = try_op(&state, op, idx)) == op_result_retry) {
                     if (eb_sys_ncores == 1) {
                         /* On uniprocessor machines, yield to the scheduler because we can't continue until another
                            thread updates the channel's state. */
