@@ -776,17 +776,7 @@ eb_chan_ret eb_chan_try_recv(eb_chan c, const void **val) {
 }
 
 #pragma mark - Multiplexing -
-//static inline size_t next_idx(size_t nops, int8_t delta, size_t idx) {
-//    if (delta == 1 && idx == nops-1) {
-//        return 0;
-//    } else if (delta == -1 && idx == 0) {
-//        return nops-1;
-//    }
-//    return idx+delta;
-//}
-
 #define next_idx(nops, delta, idx) (delta == 1 && idx == nops-1 ? 0 : ((delta == -1 && idx == 0) ? nops-1 : idx+delta))
-
 eb_chan_op *eb_chan_select_list(eb_nsec timeout, eb_chan_op *const ops[], size_t nops) {
         assert(!nops || ops);
     
