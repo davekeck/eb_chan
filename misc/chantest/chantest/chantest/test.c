@@ -10,7 +10,7 @@ int main() {
     // start the receivier
     go(
         for (;;) {
-            assert(eb_chan_recv(c, NULL) == eb_chan_ret_ok);
+            assert(eb_chan_recv(c, NULL) == eb_chan_res_ok);
         }
     );
     
@@ -19,7 +19,7 @@ int main() {
         for (;;) {
             eb_nsec startTime = eb_time_now();
             for (size_t i = 0; i < NTRIALS; i++) {
-                assert(eb_chan_send(c, (void*)(intptr_t)i) == eb_chan_ret_ok);
+                assert(eb_chan_send(c, (void*)(intptr_t)i) == eb_chan_res_ok);
             }
             printf("%ju iterations: %f seconds\n", (uintmax_t)NTRIALS, (eb_time_now()-startTime)/(double)eb_nsec_per_sec);
         }
@@ -63,7 +63,7 @@ int main() {
 //    size_t count = 0;
 //    eb_nsec startTime = eb_time_now();
 //    for (;;) {
-//        if (eb_chan_try_recv(gChan, NULL) == eb_chan_ret_ok) {
+//        if (eb_chan_try_recv(gChan, NULL) == eb_chan_res_ok) {
 ////            printf("recv\n");
 //            count++;
 //            if (count == NTRIALS) {
@@ -81,7 +81,7 @@ int main() {
 //void threadDoRecv()
 //{
 //    for (size_t i = 0; i < NTRIALS; i++) {
-//        assert(eb_chan_recv(gChan, NULL) == eb_chan_ret_ok);
+//        assert(eb_chan_recv(gChan, NULL) == eb_chan_res_ok);
 //    }
 //}
 //
@@ -111,10 +111,10 @@ int main() {
 //
 //void threadRecv()
 //{
-////    assert(eb_chan_recv(gChan, NULL, eb_nsec_forever) == eb_chan_ret_ok);
+////    assert(eb_chan_recv(gChan, NULL, eb_nsec_forever) == eb_chan_res_ok);
 ////    eb_nsec startTime = eb_time_now();
 ////    for (size_t i = 1; i < NTRIALS; i++) {
-////        assert(eb_chan_recv(gChan, NULL, eb_nsec_forever) == eb_chan_ret_ok);
+////        assert(eb_chan_recv(gChan, NULL, eb_nsec_forever) == eb_chan_res_ok);
 ////    }
 ////    printf("elapsed: %f (%ju iterations)", ((double)(eb_time_now() - startTime) / eb_nsec_per_sec), (uintmax_t)NTRIALS);
 ////    exit(0);

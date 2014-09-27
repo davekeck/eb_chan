@@ -111,13 +111,15 @@ size_t ncores() {
         host_basic_info_data_t info;
         mach_msg_type_number_t count = HOST_BASIC_INFO_COUNT;
         kern_return_t r = host_info(mach_host_self(), HOST_BASIC_INFO, (host_info_t)&info, &count);
-            eb_assert_or_recover(r == KERN_SUCCESS, return 0);
-            eb_assert_or_recover(count == HOST_BASIC_INFO_COUNT, return 0);
-            eb_assert_or_recover(info.logical_cpu > 0 && info.logical_cpu <= SIZE_MAX, return 0);
+        eb_assert_or_recover(r == KERN_SUCCESS, return 0);
+        eb_assert_or_recover(count == HOST_BASIC_INFO_COUNT, return 0);
+        eb_assert_or_recover(info.logical_cpu > 0 && info.logical_cpu <= SIZE_MAX, return 0);
+        
         return (size_t)info.logical_cpu;
     #elif EB_SYS_LINUX
         long ncores = sysconf(_SC_NPROCESSORS_ONLN);
-            eb_assert_or_recover(ncores > 0 && ncores <= SIZE_MAX, return 0);
+        eb_assert_or_recover(ncores > 0 && ncores <= SIZE_MAX, return 0);
+        
         return (size_t)ncores;
     #endif
 }
@@ -193,7 +195,7 @@ eb_nsec eb_time_now() {
     if (!k_timebase_info) {
         mach_timebase_info_t timebase_info = malloc(sizeof(*timebase_info));
         kern_return_t r = mach_timebase_info(timebase_info);
-            eb_assert_or_recover(r == KERN_SUCCESS, return 0);
+        eb_assert_or_recover(r == KERN_SUCCESS, return 0);
         
         /* Make sure the writes to 'timebase_info' are complete before we assign k_timebase_info */
         eb_atomic_barrier();
@@ -208,7 +210,8 @@ eb_nsec eb_time_now() {
 #elif EB_SYS_LINUX
     struct timespec ts;
     int r = clock_gettime(CLOCK_MONOTONIC, &ts);
-        eb_assert_or_recover(!r, return 0);
+    eb_assert_or_recover(!r, return 0);
+    
     return ((uint64_t)ts.tv_sec * eb_nsec_per_sec) + ts.tv_nsec;
 #endif
 }
@@ -260,10 +263,10 @@ static void eb_port_free(eb_port p) {
         if (!added_to_pool) {
             #if EB_SYS_DARWIN
                 kern_return_t r = semaphore_destroy(mach_task_self(), p->sem);
-                    eb_assert_or_recover(r == KERN_SUCCESS, eb_no_op);
+                eb_assert_or_recover(r == KERN_SUCCESS, eb_no_op);
             #elif EB_SYS_LINUX
                 int r = sem_destroy(&p->sem);
-                    eb_assert_or_recover(!r, eb_no_op);
+                eb_assert_or_recover(!r, eb_no_op);
             #endif
             
             p->sem_valid = false;
@@ -294,15 +297,15 @@ eb_port eb_port_create() {
         /* We couldn't get a port out of the pool */
         /* Using calloc so that bytes are zeroed */
         p = calloc(1, sizeof(*p));
-            eb_assert_or_recover(p, goto failed);
+        eb_assert_or_recover(p, goto failed);
         
         /* Create the semaphore */
         #if EB_SYS_DARWIN
             kern_return_t r = semaphore_create(mach_task_self(), &p->sem, SYNC_POLICY_FIFO, 0);
-                eb_assert_or_recover(r == KERN_SUCCESS, goto failed);
+            eb_assert_or_recover(r == KERN_SUCCESS, goto failed);
         #elif EB_SYS_LINUX
             int r = sem_init(&p->sem, 0, 0);
-                eb_assert_or_recover(!r,  goto failed);
+            eb_assert_or_recover(!r,  goto failed);
         #endif
     }
     
@@ -334,10 +337,10 @@ void eb_port_signal(eb_port p) {
     if (eb_atomic_compare_and_swap(&p->signaled, false, true)) {
         #if EB_SYS_DARWIN
             kern_return_t r = semaphore_signal(p->sem);
-                eb_assert_or_recover(r == KERN_SUCCESS, eb_no_op);
+            eb_assert_or_recover(r == KERN_SUCCESS, eb_no_op);
         #elif EB_SYS_LINUX
             int r = sem_post(&p->sem);
-                eb_assert_or_recover(!r, eb_no_op);
+            eb_assert_or_recover(!r, eb_no_op);
         #endif
     }
 }
@@ -350,12 +353,14 @@ bool eb_port_wait(eb_port p, eb_nsec timeout) {
         /* ## Non-blocking */
         #if EB_SYS_DARWIN
             kern_return_t r = semaphore_timedwait(p->sem, (mach_timespec_t){0, 0});
-                eb_assert_or_recover(r == KERN_SUCCESS || r == KERN_OPERATION_TIMED_OUT, eb_no_op);
+            eb_assert_or_recover(r == KERN_SUCCESS || r == KERN_OPERATION_TIMED_OUT, eb_no_op);
+            
             result = (r == KERN_SUCCESS);
         #elif EB_SYS_LINUX
             int r = 0;
             while ((r = sem_trywait(&p->sem)) == -1 && errno == EINTR);
-                eb_assert_or_recover(!r || (r == -1 && errno == EAGAIN), eb_no_op);
+            eb_assert_or_recover(!r || (r == -1 && errno == EAGAIN), eb_no_op);
+            
             result = !r;
         #endif
     } else if (timeout == eb_nsec_forever) {
@@ -363,12 +368,14 @@ bool eb_port_wait(eb_port p, eb_nsec timeout) {
         #if EB_SYS_DARWIN
             kern_return_t r;
             while ((r = semaphore_wait(p->sem)) == KERN_ABORTED);
-                eb_assert_or_recover(r == KERN_SUCCESS, eb_no_op);
+            eb_assert_or_recover(r == KERN_SUCCESS, eb_no_op);
+            
             result = (r == KERN_SUCCESS);
         #elif EB_SYS_LINUX
             int r;
             while ((r = sem_wait(&p->sem)) == -1 && errno == EINTR);
-                eb_assert_or_recover(!r, eb_no_op);
+            eb_assert_or_recover(!r, eb_no_op);
+            
             result = !r;
         #endif
     } else {
@@ -380,7 +387,7 @@ bool eb_port_wait(eb_port p, eb_nsec timeout) {
                 /* This needs to be in a loop because semaphore_timedwait() can return KERN_ABORTED, e.g. if the process receives a signal. */
                 mach_timespec_t ts = {.tv_sec = (unsigned int)(remaining_timeout / eb_nsec_per_sec), .tv_nsec = (clock_res_t)(remaining_timeout % eb_nsec_per_sec)};
                 kern_return_t r = semaphore_timedwait(p->sem, ts);
-                    eb_assert_or_recover(r == KERN_SUCCESS || r == KERN_OPERATION_TIMED_OUT || r == KERN_ABORTED, eb_no_op);
+                eb_assert_or_recover(r == KERN_SUCCESS || r == KERN_OPERATION_TIMED_OUT || r == KERN_ABORTED, eb_no_op);
                 
                 if (r == KERN_SUCCESS) {
                     result = true;
@@ -393,12 +400,13 @@ bool eb_port_wait(eb_port p, eb_nsec timeout) {
                    restart sem_timedwait() if we determine independently that we haven't timed-out. */
                 struct timespec ts;
                 int r = clock_gettime(CLOCK_REALTIME, &ts);
-                    eb_assert_or_recover(!r, break);
+                eb_assert_or_recover(!r, break);
+                
                 ts.tv_sec += (remaining_timeout / eb_nsec_per_sec);
                 ts.tv_nsec += (remaining_timeout % eb_nsec_per_sec);
                 r = sem_timedwait(&p->sem, &ts);
-                    /* The allowed return cases are: success (r==0), timed-out (r==-1, errno==ETIMEDOUT), (r==-1, errno==EINTR) */
-                    eb_assert_or_recover(!r || (r == -1 && (errno == ETIMEDOUT || errno == EINTR)), break);
+                /* The allowed return cases are: success (r==0), timed-out (r==-1, errno==ETIMEDOUT), (r==-1, errno==EINTR) */
+                eb_assert_or_recover(!r || (r == -1 && (errno == ETIMEDOUT || errno == EINTR)), break);
                 
                 /* If we acquired the semaphore, set our flag and break! */
                 if (!r) {
@@ -424,9 +432,6 @@ bool eb_port_wait(eb_port p, eb_nsec timeout) {
     return result;
 }
 
-// TODO: update comments
-// TODO: standardize assertion indentation
-
 #pragma mark - Types -
 typedef struct {
     eb_spinlock lock;
@@ -442,13 +447,13 @@ static inline port_list port_list_alloc(size_t cap) {
     assert(cap > 0);
     
     port_list result = malloc(sizeof(*result));
-        eb_assert_or_recover(result, goto failed);
+    eb_assert_or_recover(result, goto failed);
     
     result->lock = EB_SPINLOCK_INIT;
     result->cap = cap;
     result->len = 0;
     result->ports = malloc(cap * sizeof(*(result->ports)));
-        eb_assert_or_recover(result->ports, goto failed);
+    eb_assert_or_recover(result->ports, goto failed);
     
     return result;
     failed: {
@@ -495,8 +500,7 @@ static inline void port_list_add(port_list l, eb_port p) {
             // having our ports stored in a statically-sized array would arbitrarily limit us
             // to a certain number of ports, and that would suck...
             l->ports = realloc(l->ports, l->cap * sizeof(*(l->ports)));
-            // TODO: handle allocation failures better
-            eb_assert_or_recover(l->ports, return);
+            eb_assert_or_bail(l->ports, "Allocation failed");
         }
         
         l->ports[l->len] = p;
@@ -628,16 +632,16 @@ eb_chan eb_chan_create(size_t buf_cap) {
     
     /* Using calloc so that the bytes are zeroed. */
     eb_chan c = calloc(1, sizeof(*c));
-        eb_assert_or_recover(c, goto failed);
+    eb_assert_or_recover(c, goto failed);
     
     c->retain_count = 1;
     c->lock = EB_SPINLOCK_INIT;
     c->state = chanstate_open;
     
     c->sends = port_list_alloc(k_init_buf_cap);
-        eb_assert_or_recover(c->sends, goto failed);
+    eb_assert_or_recover(c->sends, goto failed);
     c->recvs = port_list_alloc(k_init_buf_cap);
-        eb_assert_or_recover(c->recvs, goto failed);
+    eb_assert_or_recover(c->recvs, goto failed);
     
     if (buf_cap) {
         /* ## Buffered */
@@ -645,7 +649,7 @@ eb_chan eb_chan_create(size_t buf_cap) {
         c->buf_len = 0;
         c->buf_idx = 0;
         c->buf = malloc(c->buf_cap * sizeof(*(c->buf)));
-            eb_assert_or_recover(c->buf, goto failed);
+        eb_assert_or_recover(c->buf, goto failed);
     } else {
         /* ## Unbuffered */
         c->unbuf_state = NULL;
@@ -745,7 +749,7 @@ enum {
 }; typedef unsigned int op_result;
 
 static inline void cleanup_ops(const do_state *state) {
-        assert(state);
+    assert(state);
     
     for (size_t i = 0; i < state->nops; i++) {
         if (state->cleanup_ops[i]) {
@@ -784,9 +788,9 @@ static inline void cleanup_ops(const do_state *state) {
 }
 
 static inline op_result send_buf(const do_state *state, eb_chan_op *op, size_t op_idx) {
-        assert(state);
-        assert(op);
-        assert(op->chan);
+    assert(state);
+    assert(op);
+    assert(op->chan);
     
     eb_chan c = op->chan;
     op_result result = op_result_next;
@@ -830,9 +834,9 @@ static inline op_result send_buf(const do_state *state, eb_chan_op *op, size_t o
 }
 
 static inline op_result recv_buf(const do_state *state, eb_chan_op *op, size_t op_idx) {
-        assert(state);
-        assert(op);
-        assert(op->chan);
+    assert(state);
+    assert(op);
+    assert(op->chan);
     
     eb_chan c = op->chan;
     op_result result = op_result_next;
@@ -876,9 +880,9 @@ static inline op_result recv_buf(const do_state *state, eb_chan_op *op, size_t o
 }
 
 static inline op_result send_unbuf(const do_state *state, eb_chan_op *op, size_t op_idx) {
-        assert(state);
-        assert(op);
-        assert(op->chan);
+    assert(state);
+    assert(op);
+    assert(op->chan);
     
     eb_chan c = op->chan;
     op_result result = op_result_next;
@@ -1005,9 +1009,9 @@ static inline op_result send_unbuf(const do_state *state, eb_chan_op *op, size_t
 }
 
 static inline op_result recv_unbuf(const do_state *state, eb_chan_op *op, size_t op_idx) {
-        assert(state);
-        assert(op);
-        assert(op->chan);
+    assert(state);
+    assert(op);
+    assert(op->chan);
     
     eb_chan c = op->chan;
     op_result result = op_result_next;
@@ -1135,8 +1139,8 @@ static inline op_result recv_unbuf(const do_state *state, eb_chan_op *op, size_t
 }
 
 static inline op_result try_op(const do_state *state, eb_chan_op *op, size_t op_idx) {
-        assert(state);
-        assert(op);
+    assert(state);
+    assert(op);
     
     eb_chan c = op->chan;
     if (c) {
@@ -1192,7 +1196,7 @@ eb_chan_res eb_chan_try_recv(eb_chan c, const void **val) {
 #pragma mark - Multiplexing -
 #define next_idx(nops, delta, idx) (delta == 1 && idx == nops-1 ? 0 : ((delta == -1 && idx == 0) ? nops-1 : idx+delta))
 eb_chan_op *eb_chan_select_list(eb_nsec timeout, eb_chan_op *const ops[], size_t nops) {
-        assert(!nops || ops);
+    assert(!nops || ops);
     
     const size_t k_attempt_multiplier = (eb_sys_ncores == 1 ? 1 : 500);
     eb_nsec start_time = 0;
@@ -1259,7 +1263,7 @@ eb_chan_op *eb_chan_select_list(eb_nsec timeout, eb_chan_op *const ops[], size_t
             if (!state.port) {
                 /* Create our port that we'll attach to channels so that we can be notified when events occur. */
                 state.port = eb_port_create();
-                    eb_assert_or_recover(state.port, goto cleanup);
+                eb_assert_or_recover(state.port, goto cleanup);
                 
                 /* Register our port for the appropriate notifications on every channel. */
                 /* This adds 'port' to the channel's sends/recvs (depending on the op), which we clean up at the

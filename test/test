@@ -1,8 +1,6 @@
 #!/bin/bash
 
-cd ..
-go run merge_src.go src/eb_chan.h src/eb_chan.c dist
-cd test
+go run ../misc/merge_src.go ../src/eb_chan.h ../src/eb_chan.c ../dist
 
 platform_flags=""
 if [ "$(uname)" == "Darwin" ]; then

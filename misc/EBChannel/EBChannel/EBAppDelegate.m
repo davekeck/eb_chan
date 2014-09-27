@@ -37,12 +37,12 @@ void threadTryRecv()
         id obj = nil;
         EBChannelResult r = [gChan tryRecv: &obj];
         if (r == EBChannelResultOK) {
-            NSLog(@"TRYRECV: RECV (%@)", obj);
+//            NSLog(@"TRYRECV: RECV (%@)", obj);
             count++;
         } else if (r == EBChannelResultStalled) {
 //            NSLog(@"TRYRECV: STALLED");
         } else if (r == EBChannelResultClosed) {
-            NSLog(@"TRYRECV: CLOSED");
+//            NSLog(@"TRYRECV: CLOSED");
             return;
         }
         
@@ -226,20 +226,20 @@ void deadlock(EBChannel *a, EBChannel *b) {
 {
     gChan = [[EBChannel alloc] initWithBufferCapacity: 0];
     
-//    go( threadDoSend() );
-//    go( threadTryRecv() );
+    go( threadDoSend() );
+    go( threadTryRecv() );
 //    
 //    go( threadTrySend() );
 //    go( threadDoRecv() );
     
-    go_pool( threadSend() );
-    go_pool( threadSend() );
-    go_pool( threadSend() );
-    
-    
-    go_pool( threadRecv() );
-    go_pool( threadRecv() );
-    go_pool( threadRecv() );
+//    go_pool( threadSend() );
+//    go_pool( threadSend() );
+//    go_pool( threadSend() );
+//    
+//    
+//    go_pool( threadRecv() );
+//    go_pool( threadRecv() );
+//    go_pool( threadRecv() );
     
     
     
