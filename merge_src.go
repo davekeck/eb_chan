@@ -7,6 +7,7 @@ import (
     "path"
     "path/filepath"
     "strings"
+    "sort"
 )
 
 const kCmdName = "merge_src"
@@ -205,10 +206,17 @@ func mergeSrc(headerPath string, implPath string) (header string, impl string, e
         impl += s
     }
     
+    /* Get a sorted list of file names to list in the header */
+    fileNames := []string{}
+    for filePath, _ := range history {
+        fileNames = append(fileNames, filepath.Base(filePath))
+    }
+    sort.Strings(fileNames)
+    
     /* Prepend our prefix to the header */
     prefix := kSeparator+kCommentPrefix+kHeaderMsg
-    for filePath, _ := range history {
-        prefix += kCommentPrefix+"  "+filepath.Base(filePath)+"\n"
+    for _, fileName := range fileNames {
+        prefix += kCommentPrefix+"  "+fileName+"\n"
     }
     prefix += kSeparator+"\n"
     header = prefix+header
