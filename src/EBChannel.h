@@ -34,3 +34,14 @@ typedef enum {
 - (EBChannelOp *)recvOp;
 
 @end
+
+/* ## Blocks support */
+typedef void(^EBChannelHandler)(BOOL open, id obj);
+@interface EBChannel (Blocks)
+
+/* ## Methods */
+/* Executes the default block upon timeout */
++ (void)select: (NSTimeInterval)timeout opsAndHandlers: (NSArray *)opsAndHandlers;
++ (EBChannelOp *)defaultOp;
+
+@end

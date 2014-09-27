@@ -1,9 +1,8 @@
 #if __has_feature(objc_arc)
-  #error For performance, EBChannel must be compiled with ARC disabled. (To do so, use the -fno-objc-arc compiler flag for this file.)
+  #error EBChannel must be compiled with ARC disabled. (Use the -fno-objc-arc compiler flag for this file.)
 #endif
 
 #import "EBChannel.h"
-#import <EBFoundation/EBFoundation.h>
 #import "eb_chan.h"
 #import "eb_assert.h"
 
@@ -181,6 +180,48 @@
 
 - (EBChannelOp *)recvOp {
     return [[[EBChannelOp alloc] initWithChannel: self send: NO obj: nil] autorelease];
+}
+
+@end
+
+#pragma mark - Blocks Category -
+@implementation EBChannel (Blocks)
+
++ (EBChannelOp *)defaultOp {
+    static EBChannelOp *op = nil;
+    static dispatch_once_t token;
+    dispatch_once(&token, ^{
+        op = [EBChannelOp new];
+    });
+    
+    return op;
+}
+
++ (void)select: (NSTimeInterval)timeout opsAndHandlers: (NSArray *)opsAndHandlers {
+        NSParameterAssert(opsAndHandlers);
+        NSParameterAssert(!([opsAndHandlers count]%2)); /* Every op must have a handler, so we must have an even number of objects. */
+    
+    EBChannelOp *defaultOp = [self defaultOp];
+    NSMutableArray *ops = [[[NSMutableArray alloc] init] autorelease];
+    for (NSUInteger i = 0; i < [opsAndHandlers count]; i += 2) {
+        EBChannelOp *op = opsAndHandlers[i];
+        if (op != defaultOp) {
+            [ops addObject: op];
+        }
+    }
+    
+    EBChannelOp *r = [EBChannel select: timeout ops: ops];
+    EBChannelHandler handler = nil;
+    for (NSUInteger i = 0; i < [opsAndHandlers count]; i += 2) {
+        EBChannelOp *op = opsAndHandlers[i];
+        if ((r && r == op) || (!r && op == defaultOp)) {
+            handler = opsAndHandlers[i+1];
+            break;
+        }
+    }
+    
+    eb_assert_or_bail(handler, "Couldn't find handler");
+    handler([r open], [r obj]);
 }
 
 @end
