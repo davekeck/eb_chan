@@ -10,9 +10,6 @@
 #include "eb_spinlock.h"
 #include "eb_time.h"
 
-// TODO: update comments
-// TODO: standardize assertion indentation
-
 #pragma mark - Types -
 typedef struct {
     eb_spinlock lock;
