@@ -81,7 +81,6 @@ static inline void port_list_add(port_list l, eb_port p) {
             // having our ports stored in a statically-sized array would arbitrarily limit us
             // to a certain number of ports, and that would suck...
             l->ports = realloc(l->ports, l->cap * sizeof(*(l->ports)));
-            // TODO: handle allocation failures better
             eb_assert_or_bail(l->ports, "Allocation failed");
         }
         
