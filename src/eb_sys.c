@@ -19,7 +19,7 @@ size_t ncores() {
         return (size_t)info.logical_cpu;
     #elif EB_SYS_LINUX
         long ncores = sysconf(_SC_NPROCESSORS_ONLN);
-            eb_assert_or_recover(logical_cpu > 0 && logical_cpu <= SIZE_MAX, return 0);
+            eb_assert_or_recover(ncores > 0 && ncores <= SIZE_MAX, return 0);
         return (size_t)ncores;
     #endif
 }
