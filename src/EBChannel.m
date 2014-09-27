@@ -75,9 +75,9 @@
 }
 
 - (EBChannelResult)close {
-    eb_chan_ret r = eb_chan_close(_chan);
-    eb_assert_or_bail(r == eb_chan_ret_ok || r == eb_chan_ret_closed, "Unknown return value");
-    if (r == eb_chan_ret_ok) {
+    eb_chan_res r = eb_chan_close(_chan);
+    eb_assert_or_bail(r == eb_chan_res_ok || r == eb_chan_res_closed, "Unknown return value");
+    if (r == eb_chan_res_ok) {
         return EBChannelResultOK;
     }
     return EBChannelResultClosed;

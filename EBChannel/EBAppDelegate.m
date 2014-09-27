@@ -1,7 +1,6 @@
 #import "EBAppDelegate.h"
 #import "testglue.h"
 #import "EBChannel.h"
-#import "EBChannel+Blocks.h"
 
 #define NTRIALS 1000000
 
