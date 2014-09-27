@@ -42,8 +42,8 @@ int main() {
     assert(Send(a, b) == 2);
     
     const void *av, *bv;
-    assert(eb_chan_recv(a, &av) == eb_chan_ret_ok);
-    assert(eb_chan_recv(b, &bv) == eb_chan_ret_ok);
+    assert(eb_chan_recv(a, &av) == eb_chan_res_ok);
+    assert(eb_chan_recv(b, &bv) == eb_chan_res_ok);
     assert(((uintptr_t)av | (uintptr_t)bv) == 3);
     
     assert(Send(a, NULL) == 1);

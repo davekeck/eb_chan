@@ -18,7 +18,7 @@ void Generate(eb_chan ch) {
 // Copy the values from channel 'in' to channel 'out',
 // removing those divisible by 'prime'.
 void Filter(eb_chan in, eb_chan out, int prime) {
-	for (const void *i; eb_chan_recv(in, &i) == eb_chan_ret_ok;) { // Loop over values received from 'in'.
+	for (const void *i; eb_chan_recv(in, &i) == eb_chan_res_ok;) { // Loop over values received from 'in'.
 		if (((intptr_t)i)%prime != 0) {
             eb_chan_send(out, (void*)i); // Send 'i' to channel 'out'.
 		}
@@ -32,7 +32,7 @@ void Sieve(eb_chan primes) {
 	for (;;) {
 		// Note that ch is different on each iteration.
         const void *prime;
-        assert(eb_chan_recv(ch, &prime) == eb_chan_ret_ok);
+        assert(eb_chan_recv(ch, &prime) == eb_chan_res_ok);
         eb_chan_send(primes, prime);
         
         eb_chan ch1 = eb_chan_create(0);
@@ -47,7 +47,7 @@ int main() {
 	int a[] = {2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 73, 79, 83, 89, 97};
 	for (int i = 0; i < (sizeof(a) / sizeof(*a)); i++) {
         const void *x;
-        assert(eb_chan_recv(primes, &x) == eb_chan_ret_ok);
+        assert(eb_chan_recv(primes, &x) == eb_chan_res_ok);
         assert((int)(intptr_t)x == a[i]);
 //        printf("%ju good (%p)\n", (uintmax_t)i, x);
 	}

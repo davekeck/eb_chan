@@ -135,12 +135,12 @@ eb_chan Sieve() {
 		int min = 15;
 		for (;;) {
             const void *val;
-            assert(eb_chan_recv(primes, &val) == eb_chan_ret_ok);
+            assert(eb_chan_recv(primes, &val) == eb_chan_res_ok);
             
             eb_chan m = multiples((int)(intptr_t)val);
             
             const void *head;
-            assert(eb_chan_recv(m, &head) == eb_chan_ret_ok);
+            assert(eb_chan_recv(m, &head) == eb_chan_res_ok);
             
 			while (min < (intptr_t)head) {
                 eb_chan_send(composites, (void*)(intptr_t)min);
@@ -148,7 +148,7 @@ eb_chan Sieve() {
 				min = minchan->head;
                 
                 const void *v;
-                assert(eb_chan_recv(minchan->ch, &v) == eb_chan_ret_ok);
+                assert(eb_chan_recv(minchan->ch, &v) == eb_chan_res_ok);
                 minchan->head = (int)(intptr_t)v;
 				Push(&h, minchan);
 			}
@@ -158,7 +158,7 @@ eb_chan Sieve() {
 				min = minchan->head;
                 
                 const void *v;
-                assert(eb_chan_recv(minchan->ch, &v) == eb_chan_ret_ok);
+                assert(eb_chan_recv(minchan->ch, &v) == eb_chan_res_ok);
                 minchan->head = (int)(intptr_t)v;
 				Push(&h, minchan);
 			}
@@ -166,7 +166,7 @@ eb_chan Sieve() {
             eb_chan_send(composites, head);
             
             const void *v;
-            assert(eb_chan_recv(m, &v) == eb_chan_ret_ok);
+            assert(eb_chan_recv(m, &v) == eb_chan_res_ok);
             
             PeekCh *p = malloc(sizeof(*p));
             p->head = (int)(intptr_t)v;
@@ -188,19 +188,19 @@ eb_chan Sieve() {
 		eb_chan candidates = odds();
         
         const void *p;
-        assert(eb_chan_recv(candidates, &p) == eb_chan_ret_ok);
+        assert(eb_chan_recv(candidates, &p) == eb_chan_res_ok);
 
 		for (;;) {
             const void *c;
-            assert(eb_chan_recv(composites, &c) == eb_chan_ret_ok);
+            assert(eb_chan_recv(composites, &c) == eb_chan_res_ok);
             
 			while ((intptr_t)p < (intptr_t)c) {
                 eb_chan_send(primesproxy, p);
                 eb_chan_send(out, p);
-                assert(eb_chan_recv(candidates, &p) == eb_chan_ret_ok);
+                assert(eb_chan_recv(candidates, &p) == eb_chan_res_ok);
 			}
 			if (p == c) {
-                assert(eb_chan_recv(candidates, &p) == eb_chan_ret_ok);
+                assert(eb_chan_recv(candidates, &p) == eb_chan_res_ok);
 			}
 		}
 	);
@@ -213,7 +213,7 @@ int main() {
 	int a[] = {2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 73, 79, 83, 89, 97};
 	for (int i = 0; i < (sizeof(a)/sizeof(*a)); i++) {
         const void *x;
-        assert(eb_chan_recv(primes, &x) == eb_chan_ret_ok);
+        assert(eb_chan_recv(primes, &x) == eb_chan_res_ok);
         assert((int)(intptr_t)x == a[i]);
 	}
     

@@ -62,16 +62,16 @@ int main() {
     
     // warm up
     receiver(c, dummy, COUNT);
-    sleep(1);
+//    sleep(1);
     
     for (size_t i = 0; i < ITER; i++) {
         mem[i] = get_memory_usage();
         receiver(c, dummy, COUNT);
     }
     
-    // starting at index 1 so that i-1 is always valid
+    // starting at index 2 because 0->1 was our warmup, and we want i-1 to always be valid
     size_t i = 0;
-    for (i = 1; i < ITER; i++) {
+    for (i = 2; i < ITER; i++) {
         if (mem[i] > mem[i-1] && mem[i]-mem[i-1] >= COUNT) {
             printf("BUG: too much memory used between iteration %ju and %ju for selects: %ju\n", (uintmax_t)i-1, (uintmax_t)i, (uintmax_t)(mem[i]-mem[i-1]));
         }

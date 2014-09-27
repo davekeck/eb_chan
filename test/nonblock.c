@@ -7,7 +7,7 @@
 
 void i32receiver(eb_chan c, eb_chan strobe) {
     const void *v;
-    assert(eb_chan_recv(c, &v) == eb_chan_ret_ok);
+    assert(eb_chan_recv(c, &v) == eb_chan_res_ok);
     assert(v == (void*)123);
     
     eb_chan_send(strobe, (void*)true);
@@ -20,7 +20,7 @@ void i32sender(eb_chan c, eb_chan strobe) {
 
 void i64receiver(eb_chan c, eb_chan strobe) {
     const void *v;
-    assert(eb_chan_recv(c, &v) == eb_chan_ret_ok);
+    assert(eb_chan_recv(c, &v) == eb_chan_res_ok);
     assert(v == (void*)123456);
     
     eb_chan_send(strobe, (void*)true);
@@ -33,7 +33,7 @@ void i64sender(eb_chan c, eb_chan strobe) {
 
 void breceiver(eb_chan c, eb_chan strobe) {
     const void *v;
-    assert(eb_chan_recv(c, &v) == eb_chan_ret_ok);
+    assert(eb_chan_recv(c, &v) == eb_chan_res_ok);
     assert(v == (void*)true);
     
     eb_chan_send(strobe, (void*)true);
@@ -46,7 +46,7 @@ void bsender(eb_chan c, eb_chan strobe) {
 
 void sreceiver(eb_chan c, eb_chan strobe) {
     const void *v;
-    assert(eb_chan_recv(c, &v) == eb_chan_ret_ok);
+    assert(eb_chan_recv(c, &v) == eb_chan_res_ok);
     assert(!strcmp(v, "hello"));
     
     eb_chan_send(strobe, (void*)true);

@@ -5,7 +5,7 @@
 #include "testglue.h"
 
 void recv1(eb_chan c) {
-    assert(eb_chan_recv(c, NULL) == eb_chan_ret_ok);
+    assert(eb_chan_recv(c, NULL) == eb_chan_res_ok);
 }
 
 void recv2(eb_chan c) {

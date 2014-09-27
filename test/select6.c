@@ -28,11 +28,11 @@ int main() {
             abort();
         }
         
-        assert(eb_chan_recv(c1, NULL) == eb_chan_ret_ok);
+        assert(eb_chan_recv(c1, NULL) == eb_chan_res_ok);
     );
     
     go( eb_chan_send(c2, (void*)true) );
-    assert(eb_chan_recv(c3, NULL) == eb_chan_ret_ok);
+    assert(eb_chan_recv(c3, NULL) == eb_chan_res_ok);
     
     eb_chan_send(c1, (void*)true);
     eb_chan_send(c1, (void*)true);

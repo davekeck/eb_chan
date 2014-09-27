@@ -38,7 +38,7 @@ void testBlock(const char *signal, VoidBlock f) {
 	);
     
     const void *v;
-    assert(eb_chan_recv(c, &v) == eb_chan_ret_ok);
+    assert(eb_chan_recv(c, &v) == eb_chan_res_ok);
     
     if (v != signal) {
         char msg[256];
@@ -93,11 +93,11 @@ int main() {
 	testBlock(never, ^{
 		for (int i = 0; i < 10; i++) {
             
-            if (eb_chan_recv(closedch, NULL) == eb_chan_ret_ok) {
+            if (eb_chan_recv(closedch, NULL) == eb_chan_res_ok) {
 				abort();
 			}
             
-			if (eb_chan_recv(closedch, NULL) == eb_chan_ret_ok) {
+			if (eb_chan_recv(closedch, NULL) == eb_chan_res_ok) {
 				abort();
 			}
 		}

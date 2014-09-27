@@ -37,10 +37,10 @@ typedef struct {
 } eb_chan_op;
 
 typedef enum {
-    eb_chan_ret_ok,         /* Success */
-    eb_chan_ret_closed,     /* Failed because the channel is closed */
-    eb_chan_ret_stalled,    /* Failed because the send/recv couldn't proceed without blocking (applies to _try_send()/_try_recv()) */
-} eb_chan_ret;
+    eb_chan_res_ok,         /* Success */
+    eb_chan_res_closed,     /* Failed because the channel is closed */
+    eb_chan_res_stalled,    /* Failed because the send/recv couldn't proceed without blocking (applies to _try_send()/_try_recv()) */
+} eb_chan_res;
 
 /* ## Channel creation/lifecycle */
 eb_chan eb_chan_create(size_t buf_cap);
@@ -49,7 +49,7 @@ void eb_chan_release(eb_chan c);
 
 /* ## Channel closing */
 /* Returns _ok on success, or _closed if the channel was already closed. */
-eb_chan_ret eb_chan_close(eb_chan c);
+eb_chan_res eb_chan_close(eb_chan c);
 
 /* ## Getters */
 size_t eb_chan_buf_cap(eb_chan c);
@@ -57,15 +57,15 @@ size_t eb_chan_buf_len(eb_chan c);
 
 /* ## Sending/receiving */
 /* Send/receive a value on a channel (where _send()/_recv() are blocking and _try_send()/_try_recv() are non-blocking) */
-eb_chan_ret eb_chan_send(eb_chan c, const void *val);
-eb_chan_ret eb_chan_try_send(eb_chan c, const void *val);
-eb_chan_ret eb_chan_recv(eb_chan c, const void **val);
-eb_chan_ret eb_chan_try_recv(eb_chan c, const void **val);
+eb_chan_res eb_chan_send(eb_chan c, const void *val);
+eb_chan_res eb_chan_try_send(eb_chan c, const void *val);
+eb_chan_res eb_chan_recv(eb_chan c, const void **val);
+eb_chan_res eb_chan_try_recv(eb_chan c, const void **val);
 
 /* ## Multiplexing */
 eb_chan_op *eb_chan_select_list(eb_nsec timeout, eb_chan_op *const ops[], size_t nops);
 
-/* _select() is a convenience macro that wraps _select_list() to avoid having to create an array on the stack.
+/* _select() is a convenience macro that wraps _select_list() to avoid having to manually create an array of ops on the stack.
    For example:
         eb_chan_op op1 = eb_chan_op_send(c1, NULL);
         eb_chan_op op2 = eb_chan_op_recv(c2);
@@ -766,24 +766,24 @@ void eb_chan_release(eb_chan c) {
 }
 
 #pragma mark - Channel closing -
-eb_chan_ret eb_chan_close(eb_chan c) {
+eb_chan_res eb_chan_close(eb_chan c) {
     assert(c);
     
-    eb_chan_ret result = eb_chan_ret_stalled;
-    while (result == eb_chan_ret_stalled) {
+    eb_chan_res result = eb_chan_res_stalled;
+    while (result == eb_chan_res_stalled) {
         eb_port signal_port = NULL;
         eb_spinlock_lock(&c->lock);
             if (c->state == chanstate_open) {
                 c->state = chanstate_closed;
-                result = eb_chan_ret_ok;
+                result = eb_chan_res_ok;
             } else if (c->state == chanstate_closed) {
-                result = eb_chan_ret_closed;
+                result = eb_chan_res_closed;
             } else if (c->state == chanstate_send || c->state == chanstate_recv) {
                 if (c->unbuf_port) {
                     signal_port = eb_port_retain(c->unbuf_port);
                 }
                 c->state = chanstate_closed;
-                result = eb_chan_ret_ok;
+                result = eb_chan_res_ok;
             }
         eb_spinlock_unlock(&c->lock);
         
@@ -795,7 +795,7 @@ eb_chan_ret eb_chan_close(eb_chan c) {
         }
     }
     
-    if (result == eb_chan_ret_ok) {
+    if (result == eb_chan_res_ok) {
         /* Wake up the sends/recvs so that they see the channel's now closed */
         port_list_signal_first(c->sends, NULL);
         port_list_signal_first(c->recvs, NULL);
@@ -1239,32 +1239,32 @@ static inline op_result try_op(const do_state *state, eb_chan_op *op, size_t op_
     return op_result_next;
 }
 
-eb_chan_ret eb_chan_send(eb_chan c, const void *val) {
+eb_chan_res eb_chan_send(eb_chan c, const void *val) {
     eb_chan_op op = eb_chan_op_send(c, val);
     eb_assert_or_bail(eb_chan_select(eb_nsec_forever, &op) == &op, "Invalid select() return value");
-    return (op.open ? eb_chan_ret_ok : eb_chan_ret_closed);
+    return (op.open ? eb_chan_res_ok : eb_chan_res_closed);
 }
 
-eb_chan_ret eb_chan_try_send(eb_chan c, const void *val) {
+eb_chan_res eb_chan_try_send(eb_chan c, const void *val) {
     eb_chan_op op = eb_chan_op_send(c, val);
     eb_chan_op *r = eb_chan_select(eb_nsec_zero, &op);
     eb_assert_or_bail(r == NULL || r == &op, "Invalid select() return value");
     if (r) {
-        return (op.open ? eb_chan_ret_ok : eb_chan_ret_closed);
+        return (op.open ? eb_chan_res_ok : eb_chan_res_closed);
     }
-    return eb_chan_ret_stalled;
+    return eb_chan_res_stalled;
 }
 
-eb_chan_ret eb_chan_recv(eb_chan c, const void **val) {
+eb_chan_res eb_chan_recv(eb_chan c, const void **val) {
     eb_chan_op op = eb_chan_op_recv(c);
     eb_assert_or_bail(eb_chan_select(eb_nsec_forever, &op) == &op, "Invalid select() return value");
     if (op.open && val) {
         *val = op.val;
     }
-    return (op.open ? eb_chan_ret_ok : eb_chan_ret_closed);
+    return (op.open ? eb_chan_res_ok : eb_chan_res_closed);
 }
 
-eb_chan_ret eb_chan_try_recv(eb_chan c, const void **val) {
+eb_chan_res eb_chan_try_recv(eb_chan c, const void **val) {
     eb_chan_op op = eb_chan_op_recv(c);
     eb_chan_op *r = eb_chan_select(eb_nsec_zero, &op);
     eb_assert_or_bail(r == NULL || r == &op, "Invalid select() return value");
@@ -1272,9 +1272,9 @@ eb_chan_ret eb_chan_try_recv(eb_chan c, const void **val) {
         if (op.open && val) {
             *val = op.val;
         }
-        return (op.open ? eb_chan_ret_ok : eb_chan_ret_closed);
+        return (op.open ? eb_chan_res_ok : eb_chan_res_closed);
     }
-    return eb_chan_ret_stalled;
+    return eb_chan_res_stalled;
 }
 
 #pragma mark - Multiplexing -
@@ -1493,9 +1493,9 @@ eb_chan_op *eb_chan_select_list(eb_nsec timeout, eb_chan_op *const ops[], size_t
 }
 
 - (EBChannelResult)close {
-    eb_chan_ret r = eb_chan_close(_chan);
-    eb_assert_or_bail(r == eb_chan_ret_ok || r == eb_chan_ret_closed, "Unknown return value");
-    if (r == eb_chan_ret_ok) {
+    eb_chan_res r = eb_chan_close(_chan);
+    eb_assert_or_bail(r == eb_chan_res_ok || r == eb_chan_res_closed, "Unknown return value");
+    if (r == eb_chan_res_ok) {
         return EBChannelResultOK;
     }
     return EBChannelResultClosed;

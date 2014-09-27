@@ -134,10 +134,10 @@ int main() {
     dummy = eb_chan_create(0);
     
     closedch0 = eb_chan_create(0);
-    assert(eb_chan_close(closedch0) == eb_chan_ret_ok);
+    assert(eb_chan_close(closedch0) == eb_chan_res_ok);
     
     closedch1 = eb_chan_create(1);
-    assert(eb_chan_close(closedch1) == eb_chan_ret_ok);
+    assert(eb_chan_close(closedch1) == eb_chan_res_ok);
 `
 
 const footer = `
@@ -156,10 +156,10 @@ func parse(name, s string) *template.Template {
 var recv = parse("recv", `
 	{
 		{{/*  Send n, receive it one way or another into x, check that they match. */}}
-	    assert(eb_chan_send(c, (void*)(intptr_t)n) == eb_chan_ret_ok);
+	    assert(eb_chan_send(c, (void*)(intptr_t)n) == eb_chan_res_ok);
 	    
 		{{if .Maybe}}
-	        assert(eb_chan_recv(c, &tmp) == eb_chan_ret_ok);
+	        assert(eb_chan_recv(c, &tmp) == eb_chan_res_ok);
 	        x = (int)(intptr_t)tmp;
 		{{else}}
 	        {{if .MaybeDefault}}
@@ -253,7 +253,7 @@ var send = parse("send", `
 	{
 		{{/*  Send n one way or another, receive it into x, check that they match. */}}
 		{{if .Maybe}}
-	        assert(eb_chan_send(c, (void*)(intptr_t)n) == eb_chan_ret_ok);
+	        assert(eb_chan_send(c, (void*)(intptr_t)n) == eb_chan_res_ok);
 		{{else}}
 	        {{if .MaybeDefault}}
 	            timeout_dur = eb_nsec_zero;
@@ -303,7 +303,7 @@ var send = parse("send", `
 		    }
 		{{end}}
 	    
-	    assert(eb_chan_recv(c, &tmp) == eb_chan_ret_ok);
+	    assert(eb_chan_recv(c, &tmp) == eb_chan_res_ok);
 	    x = (int)(intptr_t)(tmp);
 		
 	    assert(x == n);
@@ -318,7 +318,7 @@ var recvOrder = parse("recvOrder", `
 		{{/*  Check order of operations along the way by calling functions that check */}}
 		{{/*  that the argument sequence is strictly increasing. */}}
 		order = 0;
-	    assert(eb_chan_send(c, (void*)(intptr_t)n) == eb_chan_ret_ok);
+	    assert(eb_chan_send(c, (void*)(intptr_t)n) == eb_chan_res_ok);
 	    
 		{{if .Maybe}}
 	    	{{/*  Outside of select, left-to-right rule applies. */}}
@@ -326,14 +326,14 @@ var recvOrder = parse("recvOrder", `
 	    	{{/*  so right hand side happens before anything on left hand side. */}}
 	        {
 	            int *fpr = fp(&x, 1);
-	            assert(eb_chan_recv(fc(c, 2), &tmp) == eb_chan_ret_ok);
+	            assert(eb_chan_recv(fc(c, 2), &tmp) == eb_chan_res_ok);
 	        	*fpr = (int)(intptr_t)tmp;
 	        }
 		{{else}}
 	        {{if .Maybe}}
 	            {
 	                int *fpr = &m[fn(13, 1)];
-	                assert(eb_chan_recv(fc(c, 2), &tmp) == eb_chan_ret_ok);
+	                assert(eb_chan_recv(fc(c, 2), &tmp) == eb_chan_res_ok);
 	            	*fpr = (int)(intptr_t)tmp;
 	            	x = m[13];
 	            }
@@ -428,7 +428,7 @@ var sendOrder = parse("sendOrder", `
 		{{/*  that the argument sequence is strictly increasing. */}}
 		order = 0;
 		{{if .Maybe}}
-	        assert(eb_chan_send(fc(c, 1), (void*)(intptr_t)fn(n, 2)) == eb_chan_ret_ok);
+	        assert(eb_chan_send(fc(c, 1), (void*)(intptr_t)fn(n, 2)) == eb_chan_res_ok);
 		{{else}}
 	    	{
 	            {{if .MaybeDefault}}
@@ -482,7 +482,7 @@ var sendOrder = parse("sendOrder", `
 	    	}
 		{{end}}
 	    
-	    assert(eb_chan_recv(c, &tmp) == eb_chan_ret_ok);
+	    assert(eb_chan_recv(c, &tmp) == eb_chan_res_ok);
 	    x = (int)(intptr_t)(tmp);
 	    
 	    assert(x == n);

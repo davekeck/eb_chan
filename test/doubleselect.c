@@ -29,7 +29,7 @@ void sender(eb_chan c1, eb_chan c2, eb_chan c3, eb_chan c4) {
 // It would be simpler to just have sender's four cases all be the same
 // channel, but this doesn't actually trigger the bug.
 void mux(eb_chan out, eb_chan in, eb_chan done) {
-    for (const void *v; eb_chan_recv(in, &v) == eb_chan_ret_ok;) {
+    for (const void *v; eb_chan_recv(in, &v) == eb_chan_res_ok;) {
         eb_chan_send(out, v);
     }
     
@@ -40,7 +40,7 @@ void mux(eb_chan out, eb_chan in, eb_chan done) {
 void recver(eb_chan in) {
     bool *seen = calloc(iterations, sizeof(*seen));
     
-    for (const void *v; eb_chan_recv(in, &v) == eb_chan_ret_ok;) {
+    for (const void *v; eb_chan_recv(in, &v) == eb_chan_res_ok;) {
         assert(!seen[(uintptr_t)v]);
         seen[(uintptr_t)v] = true;
     }

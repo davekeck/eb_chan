@@ -45,10 +45,10 @@ typedef struct {
 } eb_chan_op;
 
 typedef enum {
-    eb_chan_ret_ok,         /* Success */
-    eb_chan_ret_closed,     /* Failed because the channel is closed */
-    eb_chan_ret_stalled,    /* Failed because the send/recv couldn't proceed without blocking (applies to _try_send()/_try_recv()) */
-} eb_chan_ret;
+    eb_chan_res_ok,         /* Success */
+    eb_chan_res_closed,     /* Failed because the channel is closed */
+    eb_chan_res_stalled,    /* Failed because the send/recv couldn't proceed without blocking (applies to _try_send()/_try_recv()) */
+} eb_chan_res;
 
 /* ## Channel creation/lifecycle */
 eb_chan eb_chan_create(size_t buf_cap);
@@ -57,7 +57,7 @@ void eb_chan_release(eb_chan c);
 
 /* ## Channel closing */
 /* Returns _ok on success, or _closed if the channel was already closed. */
-eb_chan_ret eb_chan_close(eb_chan c);
+eb_chan_res eb_chan_close(eb_chan c);
 
 /* ## Getters */
 size_t eb_chan_buf_cap(eb_chan c);
@@ -65,15 +65,15 @@ size_t eb_chan_buf_len(eb_chan c);
 
 /* ## Sending/receiving */
 /* Send/receive a value on a channel (where _send()/_recv() are blocking and _try_send()/_try_recv() are non-blocking) */
-eb_chan_ret eb_chan_send(eb_chan c, const void *val);
-eb_chan_ret eb_chan_try_send(eb_chan c, const void *val);
-eb_chan_ret eb_chan_recv(eb_chan c, const void **val);
-eb_chan_ret eb_chan_try_recv(eb_chan c, const void **val);
+eb_chan_res eb_chan_send(eb_chan c, const void *val);
+eb_chan_res eb_chan_try_send(eb_chan c, const void *val);
+eb_chan_res eb_chan_recv(eb_chan c, const void **val);
+eb_chan_res eb_chan_try_recv(eb_chan c, const void **val);
 
 /* ## Multiplexing */
 eb_chan_op *eb_chan_select_list(eb_nsec timeout, eb_chan_op *const ops[], size_t nops);
 
-/* _select() is a convenience macro that wraps _select_list() to avoid having to create an array on the stack.
+/* _select() is a convenience macro that wraps _select_list() to avoid having to manually create an array of ops on the stack.
    For example:
         eb_chan_op op1 = eb_chan_op_send(c1, NULL);
         eb_chan_op op2 = eb_chan_op_recv(c2);
