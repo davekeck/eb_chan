@@ -788,25 +788,7 @@ eb_chan_ret eb_chan_try_recv(eb_chan c, const void **val) {
 #define next_idx(nops, delta, idx) (delta == 1 && idx == nops-1 ? 0 : ((delta == -1 && idx == 0) ? nops-1 : idx+delta))
 
 eb_chan_op *eb_chan_select_list(eb_nsec timeout, eb_chan_op *const ops[], size_t nops) {
-    // TODO: randomize iteration by shuffling input array once (upon entry)
         assert(!nops || ops);
-    
-//    // TODO: figure out a (much) faster way to randomize the ops!
-//    // TEMP START
-//        /* ## Shuffle our input array */
-//        eb_chan_op *rops[nops];
-//        /* No need to shuffle arrays that have 0 or 1 elements */
-//        if (nops > 1) {
-//            memcpy(rops, ops, nops*sizeof(*rops));
-//            for (size_t i = 0; i < nops; i++) {
-//                size_t ridx = random() % nops;
-//                eb_chan_op *tmp = rops[ridx];
-//                rops[ridx] = rops[i];
-//                rops[i] = tmp;
-//            }
-//            ops = rops;
-//        }
-//    // TEMP END
     
     const eb_nsec start_time = eb_time_now();
     const size_t idx_start = (nops ? (start_time/1000)%nops : 0);
