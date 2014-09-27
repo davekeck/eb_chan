@@ -90,6 +90,24 @@ func replaceIncludes(filePath string, root bool, impl bool, history map[string]b
         history[filePath] = true
     }
     
+    /* Change to the directory where the file is located */
+    oldWd, err := os.Getwd()
+    if err != nil {
+        return "", []string{}, fmt.Errorf("os.Getwd() failed: %v", err)
+    }
+    
+    err = os.Chdir(path.Dir(filePath))
+    if err != nil {
+        return "", []string{}, fmt.Errorf("os.Chdir() failed: %v", err)
+    }
+    defer func() {
+        /* Revert back to our old working directory upon return */
+        err2 := os.Chdir(oldWd)
+        if err == nil && err2 != nil {
+            err = err2
+        }
+    }()
+    
     /* Read the entire file */
     b, err := ioutil.ReadFile(filePath)
     if err != nil {
@@ -149,24 +167,6 @@ func mergeSrc(headerPath string, implPath string) (header string, impl string, e
     if err != nil {
         return "", "", fmt.Errorf("normalizedPath() failed: %v", err)
     }
-    
-    /* Change to the directory where the file is */
-    oldWd, err := os.Getwd()
-    if err != nil {
-        return "", "", err
-    }
-    
-    err = os.Chdir(path.Dir(headerPath))
-    if err != nil {
-        return "", "", err
-    }
-    defer func() {
-        /* Revert back to our old working directory upon return */
-        err2 := os.Chdir(oldWd)
-        if err == nil && err2 != nil {
-            err = err2
-        }
-    }()
 
     history := map[string]bool{}
     
@@ -263,7 +263,7 @@ Usage:
     /* Verify that we're not going to overwrite our input implementation file */
     outImplPath := filepath.Join(outputDir, filepath.Base(implPath))
     if sameFile(implPath, outImplPath) {
-        fmt.Printf("Refusing to overwrite input file: %v\n", headerPath)
+        fmt.Printf("Refusing to overwrite input file: %v\n", implPath)
         os.Exit(1)
     }
     
