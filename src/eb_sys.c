@@ -13,13 +13,15 @@ size_t ncores() {
         host_basic_info_data_t info;
         mach_msg_type_number_t count = HOST_BASIC_INFO_COUNT;
         kern_return_t r = host_info(mach_host_self(), HOST_BASIC_INFO, (host_info_t)&info, &count);
-            eb_assert_or_recover(r == KERN_SUCCESS, return 0);
-            eb_assert_or_recover(count == HOST_BASIC_INFO_COUNT, return 0);
-            eb_assert_or_recover(info.logical_cpu > 0 && info.logical_cpu <= SIZE_MAX, return 0);
+        eb_assert_or_recover(r == KERN_SUCCESS, return 0);
+        eb_assert_or_recover(count == HOST_BASIC_INFO_COUNT, return 0);
+        eb_assert_or_recover(info.logical_cpu > 0 && info.logical_cpu <= SIZE_MAX, return 0);
+        
         return (size_t)info.logical_cpu;
     #elif EB_SYS_LINUX
         long ncores = sysconf(_SC_NPROCESSORS_ONLN);
-            eb_assert_or_recover(ncores > 0 && ncores <= SIZE_MAX, return 0);
+        eb_assert_or_recover(ncores > 0 && ncores <= SIZE_MAX, return 0);
+        
         return (size_t)ncores;
     #endif
 }

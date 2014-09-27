@@ -28,13 +28,13 @@ static inline port_list port_list_alloc(size_t cap) {
     assert(cap > 0);
     
     port_list result = malloc(sizeof(*result));
-        eb_assert_or_recover(result, goto failed);
+    eb_assert_or_recover(result, goto failed);
     
     result->lock = EB_SPINLOCK_INIT;
     result->cap = cap;
     result->len = 0;
     result->ports = malloc(cap * sizeof(*(result->ports)));
-        eb_assert_or_recover(result->ports, goto failed);
+    eb_assert_or_recover(result->ports, goto failed);
     
     return result;
     failed: {
@@ -213,16 +213,16 @@ eb_chan eb_chan_create(size_t buf_cap) {
     
     /* Using calloc so that the bytes are zeroed. */
     eb_chan c = calloc(1, sizeof(*c));
-        eb_assert_or_recover(c, goto failed);
+    eb_assert_or_recover(c, goto failed);
     
     c->retain_count = 1;
     c->lock = EB_SPINLOCK_INIT;
     c->state = chanstate_open;
     
     c->sends = port_list_alloc(k_init_buf_cap);
-        eb_assert_or_recover(c->sends, goto failed);
+    eb_assert_or_recover(c->sends, goto failed);
     c->recvs = port_list_alloc(k_init_buf_cap);
-        eb_assert_or_recover(c->recvs, goto failed);
+    eb_assert_or_recover(c->recvs, goto failed);
     
     if (buf_cap) {
         /* ## Buffered */
@@ -230,7 +230,7 @@ eb_chan eb_chan_create(size_t buf_cap) {
         c->buf_len = 0;
         c->buf_idx = 0;
         c->buf = malloc(c->buf_cap * sizeof(*(c->buf)));
-            eb_assert_or_recover(c->buf, goto failed);
+        eb_assert_or_recover(c->buf, goto failed);
     } else {
         /* ## Unbuffered */
         c->unbuf_state = NULL;
@@ -330,7 +330,7 @@ enum {
 }; typedef unsigned int op_result;
 
 static inline void cleanup_ops(const do_state *state) {
-        assert(state);
+    assert(state);
     
     for (size_t i = 0; i < state->nops; i++) {
         if (state->cleanup_ops[i]) {
@@ -369,9 +369,9 @@ static inline void cleanup_ops(const do_state *state) {
 }
 
 static inline op_result send_buf(const do_state *state, eb_chan_op *op, size_t op_idx) {
-        assert(state);
-        assert(op);
-        assert(op->chan);
+    assert(state);
+    assert(op);
+    assert(op->chan);
     
     eb_chan c = op->chan;
     op_result result = op_result_next;
@@ -415,9 +415,9 @@ static inline op_result send_buf(const do_state *state, eb_chan_op *op, size_t o
 }
 
 static inline op_result recv_buf(const do_state *state, eb_chan_op *op, size_t op_idx) {
-        assert(state);
-        assert(op);
-        assert(op->chan);
+    assert(state);
+    assert(op);
+    assert(op->chan);
     
     eb_chan c = op->chan;
     op_result result = op_result_next;
@@ -461,9 +461,9 @@ static inline op_result recv_buf(const do_state *state, eb_chan_op *op, size_t o
 }
 
 static inline op_result send_unbuf(const do_state *state, eb_chan_op *op, size_t op_idx) {
-        assert(state);
-        assert(op);
-        assert(op->chan);
+    assert(state);
+    assert(op);
+    assert(op->chan);
     
     eb_chan c = op->chan;
     op_result result = op_result_next;
@@ -590,9 +590,9 @@ static inline op_result send_unbuf(const do_state *state, eb_chan_op *op, size_t
 }
 
 static inline op_result recv_unbuf(const do_state *state, eb_chan_op *op, size_t op_idx) {
-        assert(state);
-        assert(op);
-        assert(op->chan);
+    assert(state);
+    assert(op);
+    assert(op->chan);
     
     eb_chan c = op->chan;
     op_result result = op_result_next;
@@ -720,8 +720,8 @@ static inline op_result recv_unbuf(const do_state *state, eb_chan_op *op, size_t
 }
 
 static inline op_result try_op(const do_state *state, eb_chan_op *op, size_t op_idx) {
-        assert(state);
-        assert(op);
+    assert(state);
+    assert(op);
     
     eb_chan c = op->chan;
     if (c) {
@@ -777,7 +777,7 @@ eb_chan_res eb_chan_try_recv(eb_chan c, const void **val) {
 #pragma mark - Multiplexing -
 #define next_idx(nops, delta, idx) (delta == 1 && idx == nops-1 ? 0 : ((delta == -1 && idx == 0) ? nops-1 : idx+delta))
 eb_chan_op *eb_chan_select_list(eb_nsec timeout, eb_chan_op *const ops[], size_t nops) {
-        assert(!nops || ops);
+    assert(!nops || ops);
     
     const size_t k_attempt_multiplier = (eb_sys_ncores == 1 ? 1 : 500);
     eb_nsec start_time = 0;
@@ -844,7 +844,7 @@ eb_chan_op *eb_chan_select_list(eb_nsec timeout, eb_chan_op *const ops[], size_t
             if (!state.port) {
                 /* Create our port that we'll attach to channels so that we can be notified when events occur. */
                 state.port = eb_port_create();
-                    eb_assert_or_recover(state.port, goto cleanup);
+                eb_assert_or_recover(state.port, goto cleanup);
                 
                 /* Register our port for the appropriate notifications on every channel. */
                 /* This adds 'port' to the channel's sends/recvs (depending on the op), which we clean up at the

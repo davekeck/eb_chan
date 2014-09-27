@@ -19,7 +19,7 @@
 }
 
 - (instancetype)initWithChannel: (EBChannel *)chan send: (BOOL)send obj: (id)obj {
-        NSParameterAssert(chan);
+    NSParameterAssert(chan);
     
     if (!(self = [super init])) {
         return nil;
@@ -60,7 +60,7 @@
     }
     
     _chan = eb_chan_create((size_t)bufferCapacity);
-        eb_assert_or_recover(_chan, return nil);
+    eb_assert_or_recover(_chan, return nil);
     
     return self;
 }
@@ -130,7 +130,7 @@
 
 #pragma mark - Multiplexing -
 + (EBChannelOp *)select: (NSTimeInterval)timeout ops: (NSArray *)opsArray {
-        NSParameterAssert(opsArray);
+    NSParameterAssert(opsArray);
     
     size_t nops = [opsArray count];
     eb_chan_op *ops[nops];
@@ -157,8 +157,8 @@
     
     eb_nsec nsecTimeout = (timeout < 0 ? eb_nsec_forever : (eb_nsec)(timeout * eb_nsec_per_sec));
     eb_chan_op *r = eb_chan_select_list(nsecTimeout, ops, nops);
-        /* Either we're non-blocking and it doesn't matter whether an op completed, or we're blocking and an op did complete */
-        eb_assert_or_recover(nsecTimeout != eb_nsec_forever || r, return nil);
+    /* Either we're non-blocking and it doesn't matter whether an op completed, or we're blocking and an op did complete */
+    eb_assert_or_recover(nsecTimeout != eb_nsec_forever || r, return nil);
     
     EBChannelOp *result = nil;
     for (EBChannelOp *opObj in opsArray) {
@@ -198,8 +198,8 @@
 }
 
 + (void)select: (NSTimeInterval)timeout opsAndHandlers: (NSArray *)opsAndHandlers {
-        NSParameterAssert(opsAndHandlers);
-        NSParameterAssert(!([opsAndHandlers count]%2)); /* Every op must have a handler, so we must have an even number of objects. */
+    NSParameterAssert(opsAndHandlers);
+    NSParameterAssert(!([opsAndHandlers count]%2)); /* Every op must have a handler, so we must have an even number of objects. */
     
     EBChannelOp *defaultOp = [self defaultOp];
     NSMutableArray *ops = [[[NSMutableArray alloc] init] autorelease];
