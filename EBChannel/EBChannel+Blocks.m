@@ -14,24 +14,20 @@
     return op;
 }
 
-+ (void)select: (NSArray *)opsAndHandlers {
++ (void)select: (NSTimeInterval)timeout opsAndHandlers: (NSArray *)opsAndHandlers {
         NSParameterAssert(opsAndHandlers);
         NSParameterAssert(!([opsAndHandlers count]%2)); /* Every op must have a handler, so we must have an even number of objects. */
     
     EBChannelOp *defaultOp = [self default];
-    NSTimeInterval timeout = -1;
     NSMutableArray *ops = [NSMutableArray new];
     for (NSUInteger i = 0; i < [opsAndHandlers count]; i += 2) {
         EBChannelOp *op = opsAndHandlers[i];
-        if (op == defaultOp) {
-            /* The op set has a default op, so change the timeout to 0 */
-            timeout = 0;
-        } else {
+        if (op != defaultOp) {
             [ops addObject: op];
         }
     }
     
-    EBChannelOp *r = [EBChannel select: ops timeout: timeout];
+    EBChannelOp *r = [EBChannel select: timeout ops: ops];
     EBChannelHandler handler = nil;
     for (NSUInteger i = 0; i < [opsAndHandlers count]; i += 2) {
         EBChannelOp *op = opsAndHandlers[i];

@@ -181,7 +181,7 @@ void threadRecv() {
 void thread() {
     eb_nsec startTime = eb_time_now();
     for (size_t i = 0; i < NTRIALS; i++) @autoreleasepool {
-        [EBChannel select: @[
+        [EBChannel select: -1 opsAndHandlers: @[
             [gChan sendOp: @(i)],
             ^(BOOL open, id obj){
                 NSLog(@"SEND: %d / %@", open, obj);
@@ -200,14 +200,14 @@ void thread() {
 
 void timeoutTest() {
     eb_nsec startTime = eb_time_now();
-    EBChannelOp *r = [EBChannel select: @[[gChan recvOp]] timeout: 2.5];
+    EBChannelOp *r = [EBChannel select: 2.5 ops: @[[gChan recvOp]]];
     NSLog(@"(%@) elapsed: %f (%ju iterations)", r, ((double)(eb_time_now() - startTime) / eb_nsec_per_sec), (uintmax_t)NTRIALS);
     exit(0);
 }
 
 void deadlock(EBChannel *a, EBChannel *b) {
     for (;;) @autoreleasepool {
-        [EBChannel select: @[
+        [EBChannel select: -1 ops: @[
             [a sendOp: @"xxx"],
             ^(BOOL open, id obj){
 //                NSLog(@"A SEND: %d / %@", open, obj);

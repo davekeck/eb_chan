@@ -5,8 +5,8 @@ typedef void(^EBChannelHandler)(BOOL open, id obj);
 
 @interface EBChannel (Blocks)
 
-/* Methods */
-+ (void)select: (NSArray *)opsAndHandlers;
+/* ## Methods */
++ (void)select: (NSTimeInterval)timeout opsAndHandlers: (NSArray *)opsAndHandlers;
 + (EBChannelOp *)default;
 
 @end

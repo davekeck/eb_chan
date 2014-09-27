@@ -1,6 +1,8 @@
 #!/bin/bash
 
-go run ../merge_src.go ../src/eb_chan.h
+cd ..
+go run merge_src.go src/eb_chan.h
+cd test
 
 platform_flags=""
 if [ "$(uname)" == "Darwin" ]; then
@@ -16,7 +18,7 @@ for i in $*; do
         continue
     fi
     
-    clang -D _POSIX_C_SOURCE=200809L -D _BSD_SOURCE "$platform_flags" -fblocks -lpthread -Imerge_src -std=c99 merge_src/eb_chan.c testglue.c "$i" -o a.out
+    clang -D _POSIX_C_SOURCE=200809L -D _BSD_SOURCE "$platform_flags" -fblocks -lpthread -I../merge_src -std=c99 ../merge_src/eb_chan.c testglue.c "$i" -o a.out
     
     r=$?
     if [ "$r" -eq 0 ]; then

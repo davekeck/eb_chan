@@ -61,7 +61,7 @@
     }
     
     _chan = eb_chan_create((size_t)bufferCapacity);
-        EBAssertOrRecover(_chan, return nil);
+        eb_assert_or_recover(_chan, return nil);
     
     return self;
 }
@@ -95,13 +95,13 @@
 
 #pragma mark - Sending/receiving -
 - (EBChannelResult)send: (id)obj {
-    EBChannelOp *r = [EBChannel select: @[[self sendOp: obj]] timeout: -1];
+    EBChannelOp *r = [EBChannel select: -1 ops: @[[self sendOp: obj]]];
     eb_assert_or_bail(r, "Invalid select return value");
     return (r->_op.open ? EBChannelResultOK : EBChannelResultClosed);
 }
 
 - (EBChannelResult)trySend: (id)obj {
-    EBChannelOp *r = [EBChannel select: @[[self sendOp: obj]] timeout: 0];
+    EBChannelOp *r = [EBChannel select: 0 ops: @[[self sendOp: obj]]];
     if (r) {
         return (r->_op.open ? EBChannelResultOK : EBChannelResultClosed);
     }
@@ -109,7 +109,7 @@
 }
 
 - (EBChannelResult)recv: (id *)obj {
-    EBChannelOp *r = [EBChannel select: @[[self recvOp]] timeout: -1];
+    EBChannelOp *r = [EBChannel select: -1 ops: @[[self recvOp]]];
     eb_assert_or_bail(r, "Invalid select return value");
     if (r->_op.open && obj) {
         *obj = r->_op.val;
@@ -119,7 +119,7 @@
 }
 
 - (EBChannelResult)tryRecv: (id *)obj {
-    EBChannelOp *r = [EBChannel select: @[[self recvOp]] timeout: 0];
+    EBChannelOp *r = [EBChannel select: 0 ops: @[[self recvOp]]];
     if (r) {
         if (r->_op.open && obj) {
             *obj = r->_op.val;
@@ -130,7 +130,7 @@
 }
 
 #pragma mark - Multiplexing -
-+ (EBChannelOp *)select: (NSArray *)opsArray timeout: (NSTimeInterval)timeout {
++ (EBChannelOp *)select: (NSTimeInterval)timeout ops: (NSArray *)opsArray {
         NSParameterAssert(opsArray);
     
     size_t nops = [opsArray count];
@@ -159,7 +159,7 @@
     eb_nsec nsecTimeout = (timeout < 0 ? eb_nsec_forever : (eb_nsec)(timeout * eb_nsec_per_sec));
     eb_chan_op *r = eb_chan_select_list(nsecTimeout, ops, nops);
         /* Either we're non-blocking and it doesn't matter whether an op completed, or we're blocking and an op did complete */
-        EBAssertOrRecover(nsecTimeout != eb_nsec_forever || r, return nil);
+        eb_assert_or_recover(nsecTimeout != eb_nsec_forever || r, return nil);
     
     EBChannelOp *result = nil;
     for (EBChannelOp *opObj in opsArray) {
