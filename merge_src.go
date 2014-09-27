@@ -65,17 +65,17 @@ func stripExt(filePath string) string {
     return filePath[0:len(filePath)-len(filepath.Ext(filePath))]
 }
 
-func findImplPath(filePath string) string {
+func findImplPath(filePath string) (string, error) {
     /* The list of file extensions that we look for */
     var kImplExts = [...]string{".c", ".m"}
     filePathNoExt := stripExt(filePath)
     for _, ext := range kImplExts {
         implPath, err := normalizedPath(filePathNoExt+ext)
         if err == nil && !sameFile(filePath, implPath) {
-            return implPath
+            return implPath, nil
         }
     }
-    return ""
+    return "", fmt.Errorf("failed to find implementation for %v\n", filePath)
 }
 
 func replaceIncludes(filePath string, root bool, impl bool, history map[string]bool) (result string, paths []string, err error) {
@@ -119,8 +119,8 @@ func replaceIncludes(filePath string, root bool, impl bool, history map[string]b
             
             /* Insert the content of related implementation files, if allowed */
             if impl {
-                implPath := findImplPath(incPath)
-                if implPath != "" {
+                implPath, err := findImplPath(incPath)
+                if err == nil {
                     /* Insert the content of the included file */
                     s, tmpPaths, err := replaceIncludes(implPath, false, impl, history)
                     if err != nil {
@@ -139,26 +139,26 @@ func replaceIncludes(filePath string, root bool, impl bool, history map[string]b
     return result, paths, nil
 }
 
-func mergeSrc(headerPath string) (header, headerName, impl, implName string, err error) {
+func mergeSrc(headerPath string, implPath string) (header string, impl string, err error) {
     headerPath, err = normalizedPath(headerPath)
     if err != nil {
-        return "", "", "", "", err
+        return "", "", fmt.Errorf("normalizedPath() failed: %v", err)
     }
     
-    implPath := findImplPath(headerPath)
-    if implPath == "" {
-        return "", "", "", "", fmt.Errorf("failed to find implementation for %v\n", filepath.Base(headerPath))
+    implPath, err = normalizedPath(implPath)
+    if err != nil {
+        return "", "", fmt.Errorf("normalizedPath() failed: %v", err)
     }
     
     /* Change to the directory where the file is */
     oldWd, err := os.Getwd()
     if err != nil {
-        return "", "", "", "", err
+        return "", "", err
     }
     
     err = os.Chdir(path.Dir(headerPath))
     if err != nil {
-        return "", "", "", "", err
+        return "", "", err
     }
     defer func() {
         /* Revert back to our old working directory upon return */
@@ -188,8 +188,8 @@ func mergeSrc(headerPath string) (header, headerName, impl, implName string, err
     
     /* Finally, append any remaining implementations for every header that we visited from the root header. */
     for _, headerPath := range headerPaths {
-        implPath := findImplPath(headerPath)
-        if implPath == "" {
+        implPath, err := findImplPath(headerPath)
+        if err != nil {
             continue
         }
         
@@ -208,46 +208,66 @@ func mergeSrc(headerPath string) (header, headerName, impl, implName string, err
     }
     prefix += kSeparator+"\n"
     header = prefix+header
-    return header, filepath.Base(headerPath), impl, filepath.Base(implPath), nil
+    
+    return header, impl, nil
 }
 
 func main() {
 	usage := fmt.Sprintf(`%v %v
 
 Usage:
-  %v src.h output_dir
+  %v src.h src.c output_dir
 `, kCmdFullName, kCmdVersion, kCmdName)
     
-    if len(os.Args) != 3 {
+    if len(os.Args) != 4 {
 		fmt.Printf("%v", usage)
 		os.Exit(1)
     }
     
-    // TODO: refuse to make output files overwrite input files
-    
+    /* Get our input args */
     headerPath := os.Args[1]
-    outputDir := os.Args[2]
+    implPath := os.Args[2]
+    outputDir := os.Args[3]
+    
+    /* Find the header file */
+    headerPath, err := normalizedPath(headerPath)
+    if err != nil {
+        fmt.Printf("%v\n", err)
+        os.Exit(1)
+    }
+    
+    /* Find the implementation file */
+    implPath, err = normalizedPath(implPath)
+    if err != nil {
+        fmt.Printf("%v\n", err)
+        os.Exit(1)
+    }
     
     /* Merge our sources! */
-    header, headerName, impl, implName, err := mergeSrc(headerPath)
+    header, impl, err := mergeSrc(headerPath, implPath)
     if err != nil {
         fmt.Printf("%v\n", err)
         os.Exit(1)
     }
     
     /* Create our output directory */
-    os.Mkdir(outputDir, 0777)
+    os.MkdirAll(outputDir, 0777)
     
-    /* Write our two files! */
-    outHeaderPath := filepath.Join(outputDir, headerName)
     /* Verify that we're not going to overwrite our input header file */
+    outHeaderPath := filepath.Join(outputDir, filepath.Base(headerPath))
     if sameFile(headerPath, outHeaderPath) {
         fmt.Printf("Refusing to overwrite input file: %v\n", headerPath)
         os.Exit(1)
     }
     
-    outImplPath := filepath.Join(outputDir, implName)
+    /* Verify that we're not going to overwrite our input implementation file */
+    outImplPath := filepath.Join(outputDir, filepath.Base(implPath))
+    if sameFile(implPath, outImplPath) {
+        fmt.Printf("Refusing to overwrite input file: %v\n", headerPath)
+        os.Exit(1)
+    }
     
+    /* Write the output header file */
     const kPerm = 0644
     err = ioutil.WriteFile(outHeaderPath, []byte(header), kPerm)
     if err != nil {
@@ -255,6 +275,7 @@ Usage:
         os.Exit(1)
     }
     
+    /* Write the output implementation file */
     err = ioutil.WriteFile(outImplPath, []byte(impl), kPerm)
     if err != nil {
         fmt.Printf("ioutil.WriteFile() failed: %v\n", err)
