@@ -51,7 +51,7 @@ typedef enum {
 - (EBChannelResult)tryRecv: (id *)obj;
 
 /* ## Multiplexing */
-/* Returns the op that completed, or nil on timeout. Use a negative timeout to signify 'forver'. */
+/* Returns the op that completed, or nil on timeout. Use a negative timeout to signify 'forever'. */
 + (EBChannelOp *)select: (NSTimeInterval)timeout ops: (NSArray *)ops;
 - (EBChannelOp *)sendOp: (id)obj;
 - (EBChannelOp *)recvOp;
