@@ -74,9 +74,7 @@ static inline void port_list_add(port_list l, eb_port p) {
         /* Expand the list's buffer if it's full */
         if (l->len == l->cap) {
             l->cap *= 2;
-            // TODO: bad idea to call realloc() inside of a spinlock, but how should we fix it?
-            // having our ports stored in a statically-sized array would arbitrarily limit us
-            // to a certain number of ports, and that would suck...
+            // TODO: reimplement as a linked list, where the port nodes are just on the stacks of the _select_list() calls. that way the number of ports is unbounded, and we don't have to allocate anything on the heap!
             l->ports = realloc(l->ports, l->cap * sizeof(*(l->ports)));
             eb_assert_or_bail(l->ports, "Allocation failed");
         }
