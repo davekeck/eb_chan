@@ -1,5 +1,3 @@
-- verify: ... could be allocated on the order of 10^5 without hitting resource constraints.
-- switch back to mach ports and compare performance on OS X/iOS
 - add Swift wrapper
 ? speed up on uniprocessor architectures
 ? support sending in-line data of constant length
