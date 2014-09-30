@@ -15,7 +15,7 @@ This project also includes an Objective-C class, `EBChannel`, that wraps the C l
 A primary goal of this project is throughput performance and low resource consumption. These two goals have several implementation implications worth mentioning:
 
 1. To maximize throughput, the implementation avoids system calls as much as possible. The implementation therefore includes a fast-path which involves merely acquiring a spinlock and modifying a structure. If an operation couldn't be performed on the channel after a certain number of attempts, the thread is put to sleep (if the caller allows blocking), until another thread signals the sleeping thread to try again.
-2. To minimize resource consumption, the implementation avoids using scarce resources such as file descriptors (particularly via UNIX pipes). For thread sleeping/waking, the implementation uses Mach semaphores (`semaphore_t`) on Darwin, and POSIX semaphores (`sem_t`) on Linux.  
+2. To minimize resource consumption, the implementation avoids using scarce resources such as file descriptors (particularly via UNIX pipes). For thread sleeping/waking, the implementation uses Mach semaphores (`semaphore_t`) on Darwin, and POSIX semaphores (`sem_t`) on Linux -- both of which, in the author's testing, could be allocated on the order of 10^5 without hitting resource constraints.
 
 # Integration
 
@@ -99,13 +99,11 @@ A primary goal of this project is throughput performance and low resource consum
     <td><b>
         C
     </b></td>
-    <td>
-<code>
-void *x;
-
-eb_chan_recv(c, &x);
-</code>
-    </td>
+    <td><code>
+        void *x;
+        <br>
+        eb_chan_recv(c, &x);
+    </code></td>
   </tr>
   <tr>
     <td><b>
