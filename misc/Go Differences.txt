@@ -1,4 +1,0 @@
-- semantic differences
-
-- returns an error when sending on a closed channel, instead of panicking/crashing
-- returns an error when closing an already-closed channel instead of panicking/crashing

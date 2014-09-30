@@ -1,3 +1,4 @@
+- when freeing a port, we don't have to reset the port if the atomic flag is false right? avoid a system call?
 - add Swift wrapper
 ? speed up on uniprocessor architectures
 ? support sending in-line data of constant length
