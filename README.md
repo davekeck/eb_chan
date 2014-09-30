@@ -20,122 +20,222 @@ This project also includes an Objective-C class, `EBChannel`, that wraps the C l
 ## Code Examples
 
 #### Create Channel
+> 
+##### Go
+```
+c := make(chan string, 0)
+```
+##### C
+```
+eb_chan c = eb_chan_create(0);
+```
+##### Obj-C
+```
+EBChannel *c = [[EBChannel alloc] initWithBufferCapacity: 0];
+```
 
-<table>
-  <tr>
-    <td><b>
-        Go
-    </b></td>
-    <td><code>
-        c := make(chan T, 0)
-    </code></td>
-  </tr>
-  <tr>
-    <td><b>
-        C
-    </b></td>
-    <td><code>
-        eb_chan c = eb_chan_create(0);
-    </code></td>
-  </tr>
-  <tr>
-    <td><b>
-        Objective-C
-    </b></td>
-    <td><code>
-        EBChannel *c = [[EBChannel alloc] initWithBufferCapacity: 0];
-    </code></td>
-  </tr>
-</table>
+
+
+
 
 #### Send
+> 
+##### Go
+```
+// Blocking
+c <- "hello"
+>
+// Non-blocking
+select {
+case c <- "hello":
+  fmt.Println("Sent")
+default:
+  fmt.Println("Not sent")
+}
+```
+>
+##### C
+```
+// Blocking
+eb_chan_send(c, "hello");
+>
+// Non-blocking
+eb_chan_res r = eb_chan_try_send(c, "hello");
+if (r == eb_chan_res_ok) {
+  printf("Sent\n");
+} else {
+  printf("Not sent\n");
+}
+```
+>
+##### Obj-C
+```
+// Blocking
+[c send: @"hello"];
+>
+// Non-blocking
+EBChannelResult r = [c trySend: @"hello"];
+if (r == EBChannelResultOK) {
+  NSLog(@"Sent\n");
+} else {
+  NSLog(@"Not sent\n");
+}
+```
 
-<table>
-  <tr>
-    <td><b>
-        Go
-    </b></td>
-    <td><code>
-        c &lt;- x
-    </code></td>
-  </tr>
-  <tr>
-    <td><b>
-        C
-    </b></td>
-    <td><code>
-        eb_chan_send(c, x);
-    </code></td>
-  </tr>
-  <tr>
-    <td><b>
-        Objective-C
-    </b></td>
-    <td><code>
-        [c send: x];
-    </code></td>
-  </tr>
-</table>
+
+
+
+
+
 
 #### Receive
+> 
+##### Go
+```
+// Blocking
+var x string
+x = <-c
+>
+// Non-blocking
+var x string
+select {
+case x = <-c:
+  fmt.Println("Received")
+default:
+  fmt.Println("Not received")
+}
+```
+##### C
+```
+// Blocking
+char *x;
+eb_chan_recv(c, &x);
+>
+// Non-blocking
+char *x;
+eb_chan_res r = eb_chan_try_recv(c, &x);
+if (r == eb_chan_res_ok) {
+  printf("Received\n");
+} else {
+  printf("Not received\n");
+}
+```
+##### Obj-C
+```
+// Blocking
+[c recv: @"hello"];
+>
+// Non-blocking
+id x;
+EBChannelResult r = [c tryRecv: &x];
+if (r == EBChannelResultOK) {
+  NSLog(@"Received\n");
+} else {
+  NSLog(@"Not received\n");
+}
+```
 
-<table>
-  <tr>
-    <td><b>
-        Go
-    </b></td>
-    <td><code>
-        x := &lt;-c
-    </code></td>
-  </tr>
-  <tr>
-    <td><b>
-        C
-    </b></td>
-    <td><code>
-        void *x;
-        <br>
-        eb_chan_recv(c, &x);
-    </code></td>
-  </tr>
-  <tr>
-    <td><b>
-        Objective-C
-    </b></td>
-    <td><code>
-        // receive
-    </code></td>
-  </tr>
-</table>
+
+
+
+
+
+
+
+
+
+
+
+#### Multiplexing
+> 
+##### Go
+```
+// Blocking
+select {
+case a <- "hello":
+  fmt.Println("Sent on channel a")
+case x := <-b:
+  fmt.Println("Received on channel b", x)
+}
+>
+// Non-blocking
+select {
+case a <- "hello":
+  fmt.Println("Sent on channel a")
+case x := <-b:
+  fmt.Println("Received on channel b:", x)
+default:
+  fmt.Println("Nothing")
+}
+```
+##### C
+```
+// Blocking
+eb_chan_op senda = eb_chan_op_send(a, "hello");
+eb_chan_op recvb = eb_chan_op_recv(b);
+eb_chan_op *r = eb_chan_select(eb_nsec_forever, &senda, &recvb);
+if (r == &senda) {
+  printf("Sent on channel a\n");
+} else if (r == &recvb) {
+  printf("Received on channel b: %s\n", recvb.val);
+}
+>
+// Non-blocking
+eb_chan_op senda = eb_chan_op_send(a, "hello");
+eb_chan_op recvb = eb_chan_op_recv(b);
+eb_chan_op *r = eb_chan_select(eb_nsec_forever, &senda, &recvb);
+if (r == &senda) {
+  printf("Sent on channel a\n");
+} else if (r == &recvb) {
+  printf("Received on channel b: %s\n", recvb.val);
+} else if (r == NULL) {
+  printf("Nothing\n");
+}
+```
+##### Obj-C
+```
+// Blocking
+[c recv: @"hello"];
+>
+// Non-blocking
+id x;
+EBChannelResult r = [c tryRecv: &x];
+if (r == EBChannelResultOK) {
+  NSLog(@"Received\n");
+} else {
+  NSLog(@"Not received\n");
+}
+```
+
+
+
+
+
+
+
+
+
+
+
+
 
 #### Close Channel
+> 
+##### Go
+```
+close(c)
+```
+##### C
+```
+eb_chan_close(c);
+```
+##### Obj-C
+```
+[c close];
+```
 
-<table>
-  <tr>
-    <td><b>
-        Go
-    </b></td>
-    <td><code>
-        close(c)
-    </code></td>
-  </tr>
-  <tr>
-    <td><b>
-        C
-    </b></td>
-    <td><code>
-        eb_chan_close(c);
-    </code></td>
-  </tr>
-  <tr>
-    <td><b>
-        Objective-C
-    </b></td>
-    <td><code>
-        [c close];
-    </code></td>
-  </tr>
-</table>
+
+
 
 ## Implementation Details
 
