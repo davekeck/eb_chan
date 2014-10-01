@@ -183,12 +183,16 @@ void thread() {
         [EBChannel select: -1 opsAndHandlers: @[
             [gChan sendOp: @(i)],
             ^(BOOL open, id obj){
-                NSLog(@"SEND: %d / %@", open, obj);
+                if (!(i % 10000)) {
+                    NSLog(@"SEND: %d / %@", open, obj);
+                }
             },
             
             [gChan recvOp],
             ^(BOOL open, id obj){
-                NSLog(@"RECV: %d / %@", open, obj);
+                if (!(i % 10000)) {
+                    NSLog(@"RECV: %d / %@", open, obj);
+                }
             }
         ]];
     }
@@ -206,15 +210,15 @@ void timeoutTest() {
 
 void deadlock(EBChannel *a, EBChannel *b) {
     for (;;) @autoreleasepool {
-        [EBChannel select: -1 ops: @[
+        [EBChannel select: -1 opsAndHandlers: @[
             [a sendOp: @"xxx"],
             ^(BOOL open, id obj){
-//                NSLog(@"A SEND: %d / %@", open, obj);
+                NSLog(@"A SEND: %d / %@", open, obj);
             },
             
             [b recvOp],
             ^(BOOL open, id obj){
-//                NSLog(@"B RECV: %d / %@", open, obj);
+                NSLog(@"B RECV: %d / %@", open, obj);
             }
         ]];
     }
@@ -232,14 +236,14 @@ void deadlock(EBChannel *a, EBChannel *b) {
 //    go( threadTrySend() );
 //    go( threadDoRecv() );
     
-    go_pool( threadSend() );
+//    go_pool( threadSend() );
 //    go_pool( threadSend() );
 //    go_pool( threadSend() );
 //    
 //    
 //    go_pool( threadRecv() );
 //    go_pool( threadRecv() );
-    go_pool( threadRecv() );
+//    go_pool( threadRecv() );
     
     
     
@@ -256,11 +260,15 @@ void deadlock(EBChannel *a, EBChannel *b) {
 //    go( thread() );
 //    go( thread() );
     
-//    // at one time this caused a deadlock
+    // at one time this caused a deadlock
 //    EBChannel *a = [[EBChannel alloc] initWithBufferCapacity: 0];
 //    EBChannel *b = [[EBChannel alloc] initWithBufferCapacity: 0];
 //    go( deadlock(a,b) );
 //    go( deadlock(b,a) );
+//    usleep(5000000);
+//    assert([a close] == EBChannelResOK);
+//    assert([b close] == EBChannelResOK);
+
     
 //    go_pool( timeoutTest() );
 //    
