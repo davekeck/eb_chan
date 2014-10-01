@@ -181,7 +181,7 @@ int main() {
 	testBlock(never, ^{
         eb_chan_op recvop = eb_chan_op_recv(closedch);
         assert(eb_chan_select(eb_nsec_forever, &recvop) == &recvop);
-        assert(!recvop.open);
+        assert(recvop.res == eb_chan_res_closed);
 	});
 
 	// select should not get confused if it sees itself

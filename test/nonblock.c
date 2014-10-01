@@ -139,7 +139,7 @@ int main() {
             eb_chan_op *r = eb_chan_select(eb_nsec_zero, &recv);
             
             if (r == &recv) {
-                assert(recv.open);
+                assert(recv.res == eb_chan_res_ok);
                 i32 = (int32_t)(intptr_t)recv.val;
                 break;
             } else {
@@ -184,7 +184,7 @@ int main() {
             eb_chan_op *r = eb_chan_select(eb_nsec_zero, &recv);
             
             if (r == &recv) {
-                assert(recv.open);
+                assert(recv.res == eb_chan_res_ok);
                 i64 = (int64_t)(intptr_t)recv.val;
                 break;
             } else {
@@ -227,7 +227,7 @@ int main() {
             eb_chan_op *r = eb_chan_select(eb_nsec_zero, &recv);
             
             if (r == &recv) {
-                assert(recv.open);
+                assert(recv.res == eb_chan_res_ok);
                 b = (bool)(intptr_t)recv.val;
                 break;
             } else {
@@ -269,7 +269,7 @@ int main() {
             eb_chan_op *r = eb_chan_select(eb_nsec_zero, &recv);
             
             if (r == &recv) {
-                assert(recv.open);
+                assert(recv.res == eb_chan_res_ok);
                 s = (const char *)recv.val;
                 break;
             } else {

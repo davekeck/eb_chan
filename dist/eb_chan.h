@@ -36,19 +36,19 @@ typedef uint64_t eb_nsec; /* Units of nanoseconds */
 #define eb_nsec_per_sec UINT64_C(1000000000)
 
 /* ## Types */
-typedef struct eb_chan *eb_chan;
-typedef struct {
-    eb_chan chan;       /* The applicable channel, where NULL channels block forever */
-    bool send;          /* True if sending, false if receiving */
-    bool open;          /* True if the op completed due to a successful send/recv operation, false if the op completed because the channel is closed. */
-    const void *val;    /* The value to be sent or the value that was received */
-} eb_chan_op;
-
 typedef enum {
     eb_chan_res_ok,         /* Success */
     eb_chan_res_closed,     /* Failed because the channel is closed */
     eb_chan_res_stalled,    /* Failed because the send/recv couldn't proceed without blocking (applies to _try_send()/_try_recv()) */
 } eb_chan_res;
+
+typedef struct eb_chan *eb_chan;
+typedef struct {
+    eb_chan chan;       /* The applicable channel, where NULL channels block forever */
+    bool send;          /* True if sending, false if receiving */
+    eb_chan_res res;    /* _ok if the op completed due to a successful send/recv operation, _closed if the op completed because the channel is closed. */
+    const void *val;    /* The value to be sent/the value that was received */
+} eb_chan_op;
 
 /* ## Channel creation/lifecycle */
 eb_chan eb_chan_create(size_t buf_cap);
@@ -71,6 +71,8 @@ eb_chan_res eb_chan_recv(eb_chan c, const void **val);
 eb_chan_res eb_chan_try_recv(eb_chan c, const void **val);
 
 /* ## Multiplexing */
+/* _select_list() performs at most one of the operations in the supplied list, and returns the one that was performed.
+   It returns NULL if no operation was performed before the timeout. */
 eb_chan_op *eb_chan_select_list(eb_nsec timeout, eb_chan_op *const ops[], size_t nops);
 
 /* _select() is a convenience macro that wraps _select_list() to avoid having to manually create an array of ops on the stack.
@@ -87,11 +89,11 @@ eb_chan_op *eb_chan_select_list(eb_nsec timeout, eb_chan_op *const ops[], size_t
 
 /* Return initialized send/recv ops for use with _select() */
 static inline eb_chan_op eb_chan_op_send(eb_chan c, const void *val) {
-    return (eb_chan_op){.chan = c, .send = true, .open = false, .val = val};
+    return (eb_chan_op){.chan = c, .send = true, .res = eb_chan_res_closed, .val = val};
 }
 
 static inline eb_chan_op eb_chan_op_recv(eb_chan c) {
-    return (eb_chan_op){.chan = c, .send = false, .open = false, .val = NULL};
+    return (eb_chan_op){.chan = c, .send = false, .res = eb_chan_res_closed, .val = NULL};
 }
 
 #endif /* EB_CHAN_H */

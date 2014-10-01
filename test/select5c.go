@@ -583,15 +583,15 @@ var nonblock = parse("nonblock", `
 	        } else if (r == &op8) {
 	        	abort();
 	        } else if (r == &op_ch0A) {
-	            assert(!r->open);
+	            assert(r->res == eb_chan_res_closed);
 	            assert(r->val == (void*)2);
 	        } else if (r == &op_ch0B) {
-	            assert(!r->open);
+	            assert(r->res == eb_chan_res_closed);
 	        } else if (r == &op_ch1A) {
-	            assert(!r->open);
+	            assert(r->res == eb_chan_res_closed);
 	            assert(r->val == (void*)3);
 	        } else if (r == &op_ch1B) {
-	            assert(!r->open);
+	            assert(r->res == eb_chan_res_closed);
 	        } else {
 	            assert(timeout_dur == eb_nsec_zero);
 	        }

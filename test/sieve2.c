@@ -96,7 +96,7 @@ eb_chan sendproxy(eb_chan out) {
             eb_chan_op c_send = eb_chan_op_send(c, (void*)(intptr_t)e);
             eb_chan_op *r = eb_chan_select(eb_nsec_forever, &proxy_recv, &c_send);
             if (r == &proxy_recv) {
-                assert(proxy_recv.open); // make sure that the channel's open
+                assert(proxy_recv.res == eb_chan_res_ok); // make sure that the channel's open
                 assert(buf_len+buf_idx < BUF_SIZE); // make sure we're not going to overflow our buffer
                 buf[buf_idx+buf_len] = (int)(intptr_t)proxy_recv.val;
                 buf_len++;
