@@ -1,4 +1,0 @@
-A similar project was posted a little while ago so I debated whether to post this too. But this project has some technical advantages over the other one so figured it's worth posting:
-
-  - Obj C wrapper that uses blocks
-  - 
