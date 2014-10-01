@@ -16,7 +16,7 @@ void threadDoSend()
         if (r == EBChannelResOK) {
 //            NSLog(@"SEND: SEND");
         } else {
-            NSLog(@"SEND: CLOSED");
+//            NSLog(@"SEND: CLOSED");
             return;
         }
         
@@ -74,9 +74,9 @@ void threadDoRecv() {
         EBChannelRes r = [gChan recv: &obj];
         assert(r == EBChannelResOK || r == EBChannelResClosed);
         if (r == EBChannelResOK) {
-            NSLog(@"RECV: RECV (%@)", obj);
+//            NSLog(@"RECV: RECV (%@)", obj);
         } else {
-            NSLog(@"RECV: CLOSED");
+//            NSLog(@"RECV: CLOSED");
             return;
         }
         
@@ -226,20 +226,20 @@ void deadlock(EBChannel *a, EBChannel *b) {
 {
     gChan = [[EBChannel alloc] initWithBufferCapacity: 0];
     
-    go( threadDoSend() );
-    go( threadTryRecv() );
-//    
+//    go( threadDoSend() );
+//    go( threadTryRecv() );
+    
 //    go( threadTrySend() );
 //    go( threadDoRecv() );
     
-//    go_pool( threadSend() );
+    go_pool( threadSend() );
 //    go_pool( threadSend() );
 //    go_pool( threadSend() );
 //    
 //    
 //    go_pool( threadRecv() );
 //    go_pool( threadRecv() );
-//    go_pool( threadRecv() );
+    go_pool( threadRecv() );
     
     
     

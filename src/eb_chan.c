@@ -381,7 +381,7 @@ static inline op_result send_buf(const do_state *state, eb_chan_op *op, size_t o
             if (c->state == chanstate_closed) {
                 /* ## Sending, buffered, channel closed */
                 /* Set our op's state and our return value */
-                op->open = false;
+                op->res = eb_chan_res_closed;
                 result = op_result_complete;
             } else if (c->buf_len < c->buf_cap) {
                 /* ## Sending, buffered, channel open, buffer has space */
@@ -392,7 +392,7 @@ static inline op_result send_buf(const do_state *state, eb_chan_op *op, size_t o
                 c->buf[idx] = op->val;
                 c->buf_len++;
                 /* Set our op's state and our return value */
-                op->open = true;
+                op->res = eb_chan_res_ok;
                 result = op_result_complete;
             }
             
@@ -428,7 +428,7 @@ static inline op_result recv_buf(const do_state *state, eb_chan_op *op, size_t o
                 /* Notify the channel's sends if our buffer is going from full to not-full */
                 signal_send = (c->buf_len == c->buf_cap);
                 /* Set our op's state and our return value */
-                op->open = true;
+                op->res = eb_chan_res_ok;
                 op->val = c->buf[c->buf_idx];
                 result = op_result_complete;
                 /* Update chan's buffer. (Updating buf_idx needs to come after we use it!) */
@@ -437,7 +437,7 @@ static inline op_result recv_buf(const do_state *state, eb_chan_op *op, size_t o
             } else if (c->state == chanstate_closed) {
                 /* ## Receiving, buffered, buffer empty, channel closed */
                 /* Set our op's state and our return value */
-                op->open = false;
+                op->res = eb_chan_res_closed;
                 op->val = NULL;
                 result = op_result_complete;
             }
@@ -486,7 +486,7 @@ static inline op_result send_unbuf(const do_state *state, eb_chan_op *op, size_t
                 signal_recv = true;
             } else if (c->state == chanstate_closed) {
                 /* Set our op's state and our return value */
-                op->open = false;
+                op->res = eb_chan_res_closed;
                 result = op_result_complete;
             } else if (c->state == chanstate_send && c->unbuf_op == op) {
                 /* We own the send op that's in progress, so assign chan's unbuf_port */
@@ -533,7 +533,7 @@ static inline op_result send_unbuf(const do_state *state, eb_chan_op *op, size_t
                                 /* We reset our state to _open, so signal a send since it can proceed now. */
                                 signal_recv = true;
                                 /* Set our op's state and our return value */
-                                op->open = true;
+                                op->res = eb_chan_res_ok;
                                 result = op_result_complete;
                                 /* Breaking here so that we skip the _unlock() call, because we unlock the spinlock outside
                                    of our large if-statement. */
@@ -567,7 +567,7 @@ static inline op_result send_unbuf(const do_state *state, eb_chan_op *op, size_t
                 /* A recv is polling for chan's state to change, so update it to signal that we're done sending! */
                 c->state = chanstate_done;
                 /* Set our op's state and our return value */
-                op->open = true;
+                op->res = eb_chan_res_ok;
                 result = op_result_complete;
             }
             
@@ -615,7 +615,7 @@ static inline op_result recv_unbuf(const do_state *state, eb_chan_op *op, size_t
                 signal_send = true;
             } else if (c->state == chanstate_closed) {
                 /* Set our op's state and our return value */
-                op->open = false;
+                op->res = eb_chan_res_closed;
                 op->val = NULL;
                 result = op_result_complete;
             } else if (c->state == chanstate_send && c->unbuf_state != state) {
@@ -654,7 +654,7 @@ static inline op_result recv_unbuf(const do_state *state, eb_chan_op *op, size_t
                                 /* We reset our state to _open, so signal a recv since it can proceed now. */
                                 signal_send = true;
                                 /* Set our op's state and our return value */
-                                op->open = true;
+                                op->res = eb_chan_res_ok;
                                 result = op_result_complete;
                                 /* Breaking here so that we skip the _unlock() call, because we unlock the spinlock outside
                                    of our large if-statement. */
@@ -697,7 +697,7 @@ static inline op_result recv_unbuf(const do_state *state, eb_chan_op *op, size_t
                 /* A send is polling for chan's state to change, so update it to signal that we're done sending! */
                 c->state = chanstate_done;
                 /* Set our op's state and our return value */
-                op->open = true;
+                op->res = eb_chan_res_ok;
                 result = op_result_complete;
             }
             
@@ -734,39 +734,33 @@ static inline op_result try_op(const do_state *state, eb_chan_op *op, size_t op_
 eb_chan_res eb_chan_send(eb_chan c, const void *val) {
     eb_chan_op op = eb_chan_op_send(c, val);
     eb_assert_or_bail(eb_chan_select(eb_nsec_forever, &op) == &op, "Invalid select() return value");
-    return (op.open ? eb_chan_res_ok : eb_chan_res_closed);
+    return op.res;
 }
 
 eb_chan_res eb_chan_try_send(eb_chan c, const void *val) {
     eb_chan_op op = eb_chan_op_send(c, val);
     eb_chan_op *r = eb_chan_select(eb_nsec_zero, &op);
     eb_assert_or_bail(r == NULL || r == &op, "Invalid select() return value");
-    if (r) {
-        return (op.open ? eb_chan_res_ok : eb_chan_res_closed);
-    }
-    return eb_chan_res_stalled;
+    return (r ? op.res : eb_chan_res_stalled);
 }
 
 eb_chan_res eb_chan_recv(eb_chan c, const void **val) {
     eb_chan_op op = eb_chan_op_recv(c);
     eb_assert_or_bail(eb_chan_select(eb_nsec_forever, &op) == &op, "Invalid select() return value");
-    if (op.open && val) {
+    if (op.res == eb_chan_res_ok && val) {
         *val = op.val;
     }
-    return (op.open ? eb_chan_res_ok : eb_chan_res_closed);
+    return op.res;
 }
 
 eb_chan_res eb_chan_try_recv(eb_chan c, const void **val) {
     eb_chan_op op = eb_chan_op_recv(c);
     eb_chan_op *r = eb_chan_select(eb_nsec_zero, &op);
     eb_assert_or_bail(r == NULL || r == &op, "Invalid select() return value");
-    if (r) {
-        if (op.open && val) {
-            *val = op.val;
-        }
-        return (op.open ? eb_chan_res_ok : eb_chan_res_closed);
+    if (r && op.res == eb_chan_res_ok && val) {
+        *val = op.val;
     }
-    return eb_chan_res_stalled;
+    return (r ? op.res : eb_chan_res_stalled);
 }
 
 #pragma mark - Multiplexing -

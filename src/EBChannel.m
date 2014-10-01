@@ -26,7 +26,7 @@
     }
     
     _chan = [chan retain];
-    _op = (eb_chan_op){.chan = _chan->_chan, .send = send, .val = [obj retain]};
+    _op = (eb_chan_op){.chan = _chan->_chan, .send = send, .res = eb_chan_res_closed, .val = [obj retain]};
     
     return self;
 }
@@ -35,14 +35,20 @@
     [(id)_op.val release];
     [_chan release];
     
-    _op = (eb_chan_op){.chan = NULL, .send = NO, .val = nil};
+    memset(&_op, 0, sizeof(_op));
     _chan = nil;
     
     [super dealloc];
 }
 
-- (BOOL)open {
-    return _op.open;
+- (EBChannelRes)result {
+    eb_assert_or_bail(_op.res == eb_chan_res_ok || _op.res == eb_chan_res_closed, "Invalid _op.res");
+    
+    if (_op.res == eb_chan_res_ok) {
+        return EBChannelResOK;
+    } else {
+        return EBChannelResClosed;
+    }
 }
 
 - (id)obj {
@@ -96,36 +102,29 @@
 - (EBChannelRes)send: (id)obj {
     EBChannelOp *r = [EBChannel select: -1 ops: @[[self sendOp: obj]]];
     eb_assert_or_bail(r, "Invalid select return value");
-    return (r->_op.open ? EBChannelResOK : EBChannelResClosed);
+    return [r result];
 }
 
 - (EBChannelRes)trySend: (id)obj {
     EBChannelOp *r = [EBChannel select: 0 ops: @[[self sendOp: obj]]];
-    if (r) {
-        return (r->_op.open ? EBChannelResOK : EBChannelResClosed);
-    }
-    return EBChannelResStalled;
+    return (r ? [r result] : EBChannelResStalled);
 }
 
 - (EBChannelRes)recv: (id *)obj {
     EBChannelOp *r = [EBChannel select: -1 ops: @[[self recvOp]]];
     eb_assert_or_bail(r, "Invalid select return value");
-    if (r->_op.open && obj) {
-        *obj = r->_op.val;
+    if ([r result] == EBChannelResOK && obj) {
+        *obj = [r obj];
     }
-    
-    return (r->_op.open ? EBChannelResOK : EBChannelResClosed);
+    return [r result];
 }
 
 - (EBChannelRes)tryRecv: (id *)obj {
     EBChannelOp *r = [EBChannel select: 0 ops: @[[self recvOp]]];
-    if (r) {
-        if (r->_op.open && obj) {
-            *obj = r->_op.val;
-        }
-        return (r->_op.open ? EBChannelResOK : EBChannelResClosed);
+    if (r && [r result] == EBChannelResOK && obj) {
+        *obj = [r obj];
     }
-    return EBChannelResStalled;
+    return (r ? [r result] : EBChannelResStalled);
 }
 
 #pragma mark - Multiplexing -
@@ -221,7 +220,7 @@
     }
     
     eb_assert_or_bail(handler, "Couldn't find handler");
-    handler([r open], [r obj]);
+    handler([r result], [r obj]);
 }
 
 @end

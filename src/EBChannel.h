@@ -1,15 +1,15 @@
 #import <Foundation/Foundation.h>
 
-@interface EBChannelOp : NSObject
-- (BOOL)open; /* YES if the op completed due to a successful send/recv operation, NO if the op completed because the channel is closed. */
-- (id)obj; /* The object to be sent or the object that was received */
-@end
-
 typedef enum {
     EBChannelResOK,      /* Success */
     EBChannelResClosed,  /* Failed because the channel is closed */
     EBChannelResStalled, /* Failed because the send/recv couldn't proceed without blocking (applies to -trySend:/-tryRecv:) */
 } EBChannelRes;
+
+@interface EBChannelOp : NSObject
+- (EBChannelRes)result; /* OK if the op completed due to a successful send/recv operation, Closed if the op completed because the channel is closed. */
+- (id)obj;              /* The object to be sent/the object that was received */
+@end
 
 @interface EBChannel : NSObject
 
@@ -36,7 +36,7 @@ typedef enum {
 @end
 
 /* ## Blocks support */
-typedef void(^EBChannelHandler)(BOOL open, id obj);
+typedef void(^EBChannelHandler)(EBChannelRes result, id obj);
 @interface EBChannel (Blocks)
 
 /* ## Methods */
