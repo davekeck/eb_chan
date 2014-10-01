@@ -11,9 +11,9 @@ EBChannel *gChan = nil;
 void threadDoSend()
 {
     for (size_t i = 0; i < NTRIALS; i++) @autoreleasepool {
-        EBChannelResult r = [gChan send: @(i)];
-        assert(r == EBChannelResultOK || r == EBChannelResultClosed);
-        if (r == EBChannelResultOK) {
+        EBChannelRes r = [gChan send: @(i)];
+        assert(r == EBChannelResOK || r == EBChannelResClosed);
+        if (r == EBChannelResOK) {
 //            NSLog(@"SEND: SEND");
         } else {
             NSLog(@"SEND: CLOSED");
@@ -35,13 +35,13 @@ void threadTryRecv()
     eb_nsec startTime = eb_time_now();
     while (count < NTRIALS) @autoreleasepool {
         id obj = nil;
-        EBChannelResult r = [gChan tryRecv: &obj];
-        if (r == EBChannelResultOK) {
+        EBChannelRes r = [gChan tryRecv: &obj];
+        if (r == EBChannelResOK) {
 //            NSLog(@"TRYRECV: RECV (%@)", obj);
             count++;
-        } else if (r == EBChannelResultStalled) {
+        } else if (r == EBChannelResStalled) {
 //            NSLog(@"TRYRECV: STALLED");
-        } else if (r == EBChannelResultClosed) {
+        } else if (r == EBChannelResClosed) {
 //            NSLog(@"TRYRECV: CLOSED");
             return;
         }
@@ -71,9 +71,9 @@ void threadTryRecv()
 void threadDoRecv() {
     for (size_t i = 0; i < NTRIALS; i++) @autoreleasepool {
         id obj = nil;
-        EBChannelResult r = [gChan recv: &obj];
-        assert(r == EBChannelResultOK || r == EBChannelResultClosed);
-        if (r == EBChannelResultOK) {
+        EBChannelRes r = [gChan recv: &obj];
+        assert(r == EBChannelResOK || r == EBChannelResClosed);
+        if (r == EBChannelResOK) {
             NSLog(@"RECV: RECV (%@)", obj);
         } else {
             NSLog(@"RECV: CLOSED");
@@ -93,13 +93,13 @@ void threadTrySend() {
     __block size_t count = 0;
     eb_nsec startTime = eb_time_now();
     while (count < NTRIALS) @autoreleasepool {
-        EBChannelResult r = [gChan trySend: @"hallo"];
-        if (r == EBChannelResultOK) {
+        EBChannelRes r = [gChan trySend: @"hallo"];
+        if (r == EBChannelResOK) {
 //            NSLog(@"TRYSEND: SEND");
             count++;
-        } else if (r == EBChannelResultStalled) {
+        } else if (r == EBChannelResStalled) {
 //                NSLog(@"TRYSEND: STALLED");
-        } else if (r == EBChannelResultClosed) {
+        } else if (r == EBChannelResClosed) {
             NSLog(@"TRYSEND: CLOSED");
             return;
         }
@@ -128,10 +128,10 @@ void threadTrySend() {
 
 void threadSend() {
     for (size_t i = 0; i < NTRIALS; i++) @autoreleasepool {
-//        assert([gChan send: ([[NSString alloc] initWithFormat: @"%ju", (uintmax_t)i])] == EBChannelResultOK);
+//        assert([gChan send: ([[NSString alloc] initWithFormat: @"%ju", (uintmax_t)i])] == EBChannelResOK);
         
-        EBChannelResult r = [gChan send: ([[NSString alloc] initWithFormat: @"%ju", (uintmax_t)i])];
-        if (r != EBChannelResultOK) {
+        EBChannelRes r = [gChan send: ([[NSString alloc] initWithFormat: @"%ju", (uintmax_t)i])];
+        if (r != EBChannelResOK) {
             NSLog(@"SEND RET: %d", r);
             break;
         }
@@ -157,8 +157,8 @@ void threadSend() {
 void threadRecv() {
     eb_nsec startTime = eb_time_now();
     for (size_t i = 0; i < NTRIALS; i++) @autoreleasepool {
-        EBChannelResult r = [gChan recv: nil];
-        if (r != EBChannelResultOK) {
+        EBChannelRes r = [gChan recv: nil];
+        if (r != EBChannelResOK) {
             NSLog(@"RECV RET: %d", r);
             break;
         }
@@ -244,7 +244,7 @@ void deadlock(EBChannel *a, EBChannel *b) {
     
     
 //    sleep(5);
-//    assert([gChan close] == EBChannelResultOK);
+//    assert([gChan close] == EBChannelResOK);
     
     
 //    go( thread() );
@@ -265,8 +265,8 @@ void deadlock(EBChannel *a, EBChannel *b) {
 //    go_pool( timeoutTest() );
 //    
 //    usleep(500000);
-//    assert([gChan close] == EBChannelResultOK);
-//    assert([gChan close] == EBChannelResultOK);
+//    assert([gChan close] == EBChannelResOK);
+//    assert([gChan close] == EBChannelResOK);
 }
 
 @end

@@ -6,26 +6,26 @@
 @end
 
 typedef enum {
-    EBChannelResultOK,      /* Success */
-    EBChannelResultClosed,  /* Failed because the channel is closed */
-    EBChannelResultStalled, /* Failed because the send/recv couldn't proceed without blocking (applies to -trySend:/-tryRecv:) */
-} EBChannelResult;
+    EBChannelResOK,      /* Success */
+    EBChannelResClosed,  /* Failed because the channel is closed */
+    EBChannelResStalled, /* Failed because the send/recv couldn't proceed without blocking (applies to -trySend:/-tryRecv:) */
+} EBChannelRes;
 
 @interface EBChannel : NSObject
 
 /* ## Creation/lifecycle */
 - (instancetype)initWithBufferCapacity: (NSUInteger)bufferCapacity;
-- (EBChannelResult)close;
+- (EBChannelRes)close;
 
 /* ## Getters */
 - (NSUInteger)bufferCapacity;
 - (NSUInteger)bufferLength;
 
 /* ## Sending/receiving */
-- (EBChannelResult)send: (id)obj;
-- (EBChannelResult)trySend: (id)obj;
-- (EBChannelResult)recv: (id *)obj;
-- (EBChannelResult)tryRecv: (id *)obj;
+- (EBChannelRes)send: (id)obj;
+- (EBChannelRes)trySend: (id)obj;
+- (EBChannelRes)recv: (id *)obj;
+- (EBChannelRes)tryRecv: (id *)obj;
 
 /* ## Multiplexing */
 /* Returns the op that completed, or nil on timeout. Use a negative timeout to signify 'forever'. */

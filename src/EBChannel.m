@@ -74,13 +74,13 @@
     [super dealloc];
 }
 
-- (EBChannelResult)close {
+- (EBChannelRes)close {
     eb_chan_res r = eb_chan_close(_chan);
     eb_assert_or_bail(r == eb_chan_res_ok || r == eb_chan_res_closed, "Unknown return value");
     if (r == eb_chan_res_ok) {
-        return EBChannelResultOK;
+        return EBChannelResOK;
     }
-    return EBChannelResultClosed;
+    return EBChannelResClosed;
 }
 
 #pragma mark - Getters -
@@ -93,39 +93,39 @@
 }
 
 #pragma mark - Sending/receiving -
-- (EBChannelResult)send: (id)obj {
+- (EBChannelRes)send: (id)obj {
     EBChannelOp *r = [EBChannel select: -1 ops: @[[self sendOp: obj]]];
     eb_assert_or_bail(r, "Invalid select return value");
-    return (r->_op.open ? EBChannelResultOK : EBChannelResultClosed);
+    return (r->_op.open ? EBChannelResOK : EBChannelResClosed);
 }
 
-- (EBChannelResult)trySend: (id)obj {
+- (EBChannelRes)trySend: (id)obj {
     EBChannelOp *r = [EBChannel select: 0 ops: @[[self sendOp: obj]]];
     if (r) {
-        return (r->_op.open ? EBChannelResultOK : EBChannelResultClosed);
+        return (r->_op.open ? EBChannelResOK : EBChannelResClosed);
     }
-    return EBChannelResultStalled;
+    return EBChannelResStalled;
 }
 
-- (EBChannelResult)recv: (id *)obj {
+- (EBChannelRes)recv: (id *)obj {
     EBChannelOp *r = [EBChannel select: -1 ops: @[[self recvOp]]];
     eb_assert_or_bail(r, "Invalid select return value");
     if (r->_op.open && obj) {
         *obj = r->_op.val;
     }
     
-    return (r->_op.open ? EBChannelResultOK : EBChannelResultClosed);
+    return (r->_op.open ? EBChannelResOK : EBChannelResClosed);
 }
 
-- (EBChannelResult)tryRecv: (id *)obj {
+- (EBChannelRes)tryRecv: (id *)obj {
     EBChannelOp *r = [EBChannel select: 0 ops: @[[self recvOp]]];
     if (r) {
         if (r->_op.open && obj) {
             *obj = r->_op.val;
         }
-        return (r->_op.open ? EBChannelResultOK : EBChannelResultClosed);
+        return (r->_op.open ? EBChannelResOK : EBChannelResClosed);
     }
-    return EBChannelResultStalled;
+    return EBChannelResStalled;
 }
 
 #pragma mark - Multiplexing -
