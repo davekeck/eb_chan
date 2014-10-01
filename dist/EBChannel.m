@@ -28,19 +28,19 @@ typedef uint64_t eb_nsec; /* Units of nanoseconds */
 #define eb_nsec_per_sec UINT64_C(1000000000)
 
 /* ## Types */
-typedef struct eb_chan *eb_chan;
-typedef struct {
-    eb_chan chan;       /* The applicable channel, where NULL channels block forever */
-    bool send;          /* True if sending, false if receiving */
-    bool open;          /* True if the op completed due to a successful send/recv operation, false if the op completed because the channel is closed. */
-    const void *val;    /* The value to be sent or the value that was received */
-} eb_chan_op;
-
 typedef enum {
     eb_chan_res_ok,         /* Success */
     eb_chan_res_closed,     /* Failed because the channel is closed */
     eb_chan_res_stalled,    /* Failed because the send/recv couldn't proceed without blocking (applies to _try_send()/_try_recv()) */
 } eb_chan_res;
+
+typedef struct eb_chan *eb_chan;
+typedef struct {
+    eb_chan chan;       /* The applicable channel, where NULL channels block forever */
+    bool send;          /* True if sending, false if receiving */
+    eb_chan_res res;    /* _ok if the op completed due to a successful send/recv operation, _closed if the op completed because the channel is closed. */
+    const void *val;    /* The value to be sent/the value that was received */
+} eb_chan_op;
 
 /* ## Channel creation/lifecycle */
 eb_chan eb_chan_create(size_t buf_cap);
@@ -63,6 +63,8 @@ eb_chan_res eb_chan_recv(eb_chan c, const void **val);
 eb_chan_res eb_chan_try_recv(eb_chan c, const void **val);
 
 /* ## Multiplexing */
+/* _select_list() performs at most one of the operations in the supplied list, and returns the one that was performed.
+   It returns NULL if no operation was performed before the timeout. */
 eb_chan_op *eb_chan_select_list(eb_nsec timeout, eb_chan_op *const ops[], size_t nops);
 
 /* _select() is a convenience macro that wraps _select_list() to avoid having to manually create an array of ops on the stack.
@@ -79,11 +81,11 @@ eb_chan_op *eb_chan_select_list(eb_nsec timeout, eb_chan_op *const ops[], size_t
 
 /* Return initialized send/recv ops for use with _select() */
 static inline eb_chan_op eb_chan_op_send(eb_chan c, const void *val) {
-    return (eb_chan_op){.chan = c, .send = true, .open = false, .val = val};
+    return (eb_chan_op){.chan = c, .send = true, .res = eb_chan_res_closed, .val = val};
 }
 
 static inline eb_chan_op eb_chan_op_recv(eb_chan c) {
-    return (eb_chan_op){.chan = c, .send = false, .open = false, .val = NULL};
+    return (eb_chan_op){.chan = c, .send = false, .res = eb_chan_res_closed, .val = NULL};
 }
 
 #endif /* EB_CHAN_H */
@@ -891,7 +893,7 @@ static inline op_result send_buf(const do_state *state, eb_chan_op *op, size_t o
             if (c->state == chanstate_closed) {
                 /* ## Sending, buffered, channel closed */
                 /* Set our op's state and our return value */
-                op->open = false;
+                op->res = eb_chan_res_closed;
                 result = op_result_complete;
             } else if (c->buf_len < c->buf_cap) {
                 /* ## Sending, buffered, channel open, buffer has space */
@@ -902,7 +904,7 @@ static inline op_result send_buf(const do_state *state, eb_chan_op *op, size_t o
                 c->buf[idx] = op->val;
                 c->buf_len++;
                 /* Set our op's state and our return value */
-                op->open = true;
+                op->res = eb_chan_res_ok;
                 result = op_result_complete;
             }
             
@@ -938,7 +940,7 @@ static inline op_result recv_buf(const do_state *state, eb_chan_op *op, size_t o
                 /* Notify the channel's sends if our buffer is going from full to not-full */
                 signal_send = (c->buf_len == c->buf_cap);
                 /* Set our op's state and our return value */
-                op->open = true;
+                op->res = eb_chan_res_ok;
                 op->val = c->buf[c->buf_idx];
                 result = op_result_complete;
                 /* Update chan's buffer. (Updating buf_idx needs to come after we use it!) */
@@ -947,7 +949,7 @@ static inline op_result recv_buf(const do_state *state, eb_chan_op *op, size_t o
             } else if (c->state == chanstate_closed) {
                 /* ## Receiving, buffered, buffer empty, channel closed */
                 /* Set our op's state and our return value */
-                op->open = false;
+                op->res = eb_chan_res_closed;
                 op->val = NULL;
                 result = op_result_complete;
             }
@@ -996,7 +998,7 @@ static inline op_result send_unbuf(const do_state *state, eb_chan_op *op, size_t
                 signal_recv = true;
             } else if (c->state == chanstate_closed) {
                 /* Set our op's state and our return value */
-                op->open = false;
+                op->res = eb_chan_res_closed;
                 result = op_result_complete;
             } else if (c->state == chanstate_send && c->unbuf_op == op) {
                 /* We own the send op that's in progress, so assign chan's unbuf_port */
@@ -1043,7 +1045,7 @@ static inline op_result send_unbuf(const do_state *state, eb_chan_op *op, size_t
                                 /* We reset our state to _open, so signal a send since it can proceed now. */
                                 signal_recv = true;
                                 /* Set our op's state and our return value */
-                                op->open = true;
+                                op->res = eb_chan_res_ok;
                                 result = op_result_complete;
                                 /* Breaking here so that we skip the _unlock() call, because we unlock the spinlock outside
                                    of our large if-statement. */
@@ -1077,7 +1079,7 @@ static inline op_result send_unbuf(const do_state *state, eb_chan_op *op, size_t
                 /* A recv is polling for chan's state to change, so update it to signal that we're done sending! */
                 c->state = chanstate_done;
                 /* Set our op's state and our return value */
-                op->open = true;
+                op->res = eb_chan_res_ok;
                 result = op_result_complete;
             }
             
@@ -1125,7 +1127,7 @@ static inline op_result recv_unbuf(const do_state *state, eb_chan_op *op, size_t
                 signal_send = true;
             } else if (c->state == chanstate_closed) {
                 /* Set our op's state and our return value */
-                op->open = false;
+                op->res = eb_chan_res_closed;
                 op->val = NULL;
                 result = op_result_complete;
             } else if (c->state == chanstate_send && c->unbuf_state != state) {
@@ -1164,7 +1166,7 @@ static inline op_result recv_unbuf(const do_state *state, eb_chan_op *op, size_t
                                 /* We reset our state to _open, so signal a recv since it can proceed now. */
                                 signal_send = true;
                                 /* Set our op's state and our return value */
-                                op->open = true;
+                                op->res = eb_chan_res_ok;
                                 result = op_result_complete;
                                 /* Breaking here so that we skip the _unlock() call, because we unlock the spinlock outside
                                    of our large if-statement. */
@@ -1207,7 +1209,7 @@ static inline op_result recv_unbuf(const do_state *state, eb_chan_op *op, size_t
                 /* A send is polling for chan's state to change, so update it to signal that we're done sending! */
                 c->state = chanstate_done;
                 /* Set our op's state and our return value */
-                op->open = true;
+                op->res = eb_chan_res_ok;
                 result = op_result_complete;
             }
             
@@ -1244,39 +1246,33 @@ static inline op_result try_op(const do_state *state, eb_chan_op *op, size_t op_
 eb_chan_res eb_chan_send(eb_chan c, const void *val) {
     eb_chan_op op = eb_chan_op_send(c, val);
     eb_assert_or_bail(eb_chan_select(eb_nsec_forever, &op) == &op, "Invalid select() return value");
-    return (op.open ? eb_chan_res_ok : eb_chan_res_closed);
+    return op.res;
 }
 
 eb_chan_res eb_chan_try_send(eb_chan c, const void *val) {
     eb_chan_op op = eb_chan_op_send(c, val);
     eb_chan_op *r = eb_chan_select(eb_nsec_zero, &op);
     eb_assert_or_bail(r == NULL || r == &op, "Invalid select() return value");
-    if (r) {
-        return (op.open ? eb_chan_res_ok : eb_chan_res_closed);
-    }
-    return eb_chan_res_stalled;
+    return (r ? op.res : eb_chan_res_stalled);
 }
 
 eb_chan_res eb_chan_recv(eb_chan c, const void **val) {
     eb_chan_op op = eb_chan_op_recv(c);
     eb_assert_or_bail(eb_chan_select(eb_nsec_forever, &op) == &op, "Invalid select() return value");
-    if (op.open && val) {
+    if (op.res == eb_chan_res_ok && val) {
         *val = op.val;
     }
-    return (op.open ? eb_chan_res_ok : eb_chan_res_closed);
+    return op.res;
 }
 
 eb_chan_res eb_chan_try_recv(eb_chan c, const void **val) {
     eb_chan_op op = eb_chan_op_recv(c);
     eb_chan_op *r = eb_chan_select(eb_nsec_zero, &op);
     eb_assert_or_bail(r == NULL || r == &op, "Invalid select() return value");
-    if (r) {
-        if (op.open && val) {
-            *val = op.val;
-        }
-        return (op.open ? eb_chan_res_ok : eb_chan_res_closed);
+    if (r && op.res == eb_chan_res_ok && val) {
+        *val = op.val;
     }
-    return eb_chan_res_stalled;
+    return (r ? op.res : eb_chan_res_stalled);
 }
 
 #pragma mark - Multiplexing -
@@ -1446,7 +1442,7 @@ eb_chan_op *eb_chan_select_list(eb_nsec timeout, eb_chan_op *const ops[], size_t
     }
     
     _chan = [chan retain];
-    _op = (eb_chan_op){.chan = _chan->_chan, .send = send, .val = [obj retain]};
+    _op = (eb_chan_op){.chan = _chan->_chan, .send = send, .res = eb_chan_res_closed, .val = [obj retain]};
     
     return self;
 }
@@ -1455,14 +1451,20 @@ eb_chan_op *eb_chan_select_list(eb_nsec timeout, eb_chan_op *const ops[], size_t
     [(id)_op.val release];
     [_chan release];
     
-    _op = (eb_chan_op){.chan = NULL, .send = NO, .val = nil};
+    memset(&_op, 0, sizeof(_op));
     _chan = nil;
     
     [super dealloc];
 }
 
-- (BOOL)open {
-    return _op.open;
+- (EBChannelRes)result {
+    eb_assert_or_bail(_op.res == eb_chan_res_ok || _op.res == eb_chan_res_closed, "Invalid _op.res");
+    
+    if (_op.res == eb_chan_res_ok) {
+        return EBChannelResOK;
+    } else {
+        return EBChannelResClosed;
+    }
 }
 
 - (id)obj {
@@ -1494,13 +1496,13 @@ eb_chan_op *eb_chan_select_list(eb_nsec timeout, eb_chan_op *const ops[], size_t
     [super dealloc];
 }
 
-- (EBChannelResult)close {
+- (EBChannelRes)close {
     eb_chan_res r = eb_chan_close(_chan);
     eb_assert_or_bail(r == eb_chan_res_ok || r == eb_chan_res_closed, "Unknown return value");
     if (r == eb_chan_res_ok) {
-        return EBChannelResultOK;
+        return EBChannelResOK;
     }
-    return EBChannelResultClosed;
+    return EBChannelResClosed;
 }
 
 #pragma mark - Getters -
@@ -1513,39 +1515,32 @@ eb_chan_op *eb_chan_select_list(eb_nsec timeout, eb_chan_op *const ops[], size_t
 }
 
 #pragma mark - Sending/receiving -
-- (EBChannelResult)send: (id)obj {
+- (EBChannelRes)send: (id)obj {
     EBChannelOp *r = [EBChannel select: -1 ops: @[[self sendOp: obj]]];
     eb_assert_or_bail(r, "Invalid select return value");
-    return (r->_op.open ? EBChannelResultOK : EBChannelResultClosed);
+    return [r result];
 }
 
-- (EBChannelResult)trySend: (id)obj {
+- (EBChannelRes)trySend: (id)obj {
     EBChannelOp *r = [EBChannel select: 0 ops: @[[self sendOp: obj]]];
-    if (r) {
-        return (r->_op.open ? EBChannelResultOK : EBChannelResultClosed);
-    }
-    return EBChannelResultStalled;
+    return (r ? [r result] : EBChannelResStalled);
 }
 
-- (EBChannelResult)recv: (id *)obj {
+- (EBChannelRes)recv: (id *)obj {
     EBChannelOp *r = [EBChannel select: -1 ops: @[[self recvOp]]];
     eb_assert_or_bail(r, "Invalid select return value");
-    if (r->_op.open && obj) {
-        *obj = r->_op.val;
+    if ([r result] == EBChannelResOK && obj) {
+        *obj = [r obj];
     }
-    
-    return (r->_op.open ? EBChannelResultOK : EBChannelResultClosed);
+    return [r result];
 }
 
-- (EBChannelResult)tryRecv: (id *)obj {
+- (EBChannelRes)tryRecv: (id *)obj {
     EBChannelOp *r = [EBChannel select: 0 ops: @[[self recvOp]]];
-    if (r) {
-        if (r->_op.open && obj) {
-            *obj = r->_op.val;
-        }
-        return (r->_op.open ? EBChannelResultOK : EBChannelResultClosed);
+    if (r && [r result] == EBChannelResOK && obj) {
+        *obj = [r obj];
     }
-    return EBChannelResultStalled;
+    return (r ? [r result] : EBChannelResStalled);
 }
 
 #pragma mark - Multiplexing -
@@ -1641,7 +1636,7 @@ eb_chan_op *eb_chan_select_list(eb_nsec timeout, eb_chan_op *const ops[], size_t
     }
     
     eb_assert_or_bail(handler, "Couldn't find handler");
-    handler([r open], [r obj]);
+    handler([r result], [r obj]);
 }
 
 @end
