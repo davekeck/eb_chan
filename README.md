@@ -22,15 +22,15 @@ This project also includes an Objective-C class, `EBChannel`, that wraps the C l
 #### Create Channel
 > 
 ##### Go
-```
+```go
 c := make(chan string, 0)
 ```
 ##### C
-```
+```c
 eb_chan c = eb_chan_create(0);
 ```
 ##### Obj-C
-```
+```objc
 EBChannel *c = [[EBChannel alloc] initWithBufferCapacity: 0];
 ```
 
@@ -41,7 +41,7 @@ EBChannel *c = [[EBChannel alloc] initWithBufferCapacity: 0];
 #### Send
 > 
 ##### Go
-```
+```go
 // Blocking
 c <- "hello"
 >
@@ -55,7 +55,7 @@ default:
 ```
 >
 ##### C
-```
+```c
 // Blocking
 eb_chan_send(c, "hello");
 >
@@ -69,7 +69,7 @@ if (r == eb_chan_res_ok) {
 ```
 >
 ##### Obj-C
-```
+```objc
 // Blocking
 [c send: @"hello"];
 >
@@ -91,7 +91,7 @@ if (r == EBChannelResultOK) {
 #### Receive
 > 
 ##### Go
-```
+```go
 // Blocking
 var x string
 x = <-c
@@ -100,13 +100,13 @@ x = <-c
 var x string
 select {
 case x = <-c:
-  fmt.Println("Received")
+  fmt.Println("Received:", x)
 default:
   fmt.Println("Not received")
 }
 ```
 ##### C
-```
+```c
 // Blocking
 char *x;
 eb_chan_recv(c, &x);
@@ -115,13 +115,13 @@ eb_chan_recv(c, &x);
 char *x;
 eb_chan_res r = eb_chan_try_recv(c, &x);
 if (r == eb_chan_res_ok) {
-  printf("Received\n");
+  printf("Received: %s\n", x);
 } else {
   printf("Not received\n");
 }
 ```
 ##### Obj-C
-```
+```objc
 // Blocking
 [c recv: @"hello"];
 >
@@ -129,7 +129,7 @@ if (r == eb_chan_res_ok) {
 id x;
 EBChannelResult r = [c tryRecv: &x];
 if (r == EBChannelResultOK) {
-  NSLog(@"Received\n");
+  NSLog(@"Received: %@\n", x);
 } else {
   NSLog(@"Not received\n");
 }
@@ -149,13 +149,13 @@ if (r == EBChannelResultOK) {
 #### Multiplexing
 > 
 ##### Go
-```
+```go
 // Blocking
 select {
 case a <- "hello":
   fmt.Println("Sent on channel a")
 case x := <-b:
-  fmt.Println("Received on channel b", x)
+  fmt.Println("Received on channel b:", x)
 }
 >
 // Non-blocking
@@ -169,7 +169,7 @@ default:
 }
 ```
 ##### C
-```
+```c
 // Blocking
 eb_chan_op senda = eb_chan_op_send(a, "hello");
 eb_chan_op recvb = eb_chan_op_recv(b);
@@ -193,25 +193,33 @@ if (r == &senda) {
 }
 ```
 ##### Obj-C
-```
+```objc
 // Blocking
-[c recv: @"hello"];
+EBChannelOp *r = [EBChannel select: -1 ops: @[
+  [a send: @"hello"], ^{
+    NSLog(@"Sent on channel a");
+  },
+> 
+  [b recv], ^(EBChannelRes result, id obj){
+    NSLog(@"Received on channel b: %@", obj);
+  },
+]];
 >
 // Non-blocking
-id x;
-EBChannelResult r = [c tryRecv: &x];
-if (r == EBChannelResultOK) {
-  NSLog(@"Received\n");
-} else {
-  NSLog(@"Not received\n");
-}
+EBChannelOp *r = [EBChannel select: 0 ops: @[
+  [a send: @"hello"], ^{
+    NSLog(@"Sent on channel a");
+  },
+> 
+  [b recv], ^(EBChannelRes result, id obj){
+    NSLog(@"Received on channel b: %@", obj);
+  },
+> 
+  [EBChannel defaultOp], ^{
+    NSLog(@"Nothing");
+  },
+]];
 ```
-
-
-
-
-
-
 
 
 
@@ -222,15 +230,15 @@ if (r == EBChannelResultOK) {
 #### Close Channel
 > 
 ##### Go
-```
+```go
 close(c)
 ```
 ##### C
-```
+```c
 eb_chan_close(c);
 ```
 ##### Obj-C
-```
+```objc
 [c close];
 ```
 
