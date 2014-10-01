@@ -4,7 +4,7 @@
 
 `eb_chan` is modeled closely after the channel implementation in the [Go](http://golang.org) programming language. `eb_chan` provides the full range of functionality of Go channels, along with some semantic improvements. (See the [*Semantic Differences with Go Channels*](#semantic-differences-with-go-channels) section for more information.)
 
-This project also includes an Objective-C class, `EBChannel`, that wraps the C library and allows for a more convenient `select`-statement syntax via Objective-C blocks. (See the [*Multiplexing*](#Multiplexing) examples below.)
+This project also includes an Objective-C class, `EBChannel`, that wraps the C library and allows for a more convenient `select`-statement syntax via Objective-C blocks. (See the [*Multiplexing*](#multiplexing) examples below.)
 
 ## Supported Platforms
 
@@ -17,21 +17,28 @@ This project also includes an Objective-C class, `EBChannel`, that wraps the C l
 - To integrate the **C library**, add `dist/eb_chan.h` and `dist/eb_chan.c` to your project.
 - To integrate the **Objective-C library**, add `dist/EBChannel.h` and `dist/EBChannel.m` to your project.
 
+##### Compiling on Linux
+`eb_chan` can be compiled on Linux using either Clang or GCC:
+- Clang: `clang -D _POSIX_C_SOURCE=200809L -D _BSD_SOURCE -std=c99 eb_chan.c main.c -lpthread`
+- GCC: `gcc -D _POSIX_C_SOURCE=200809L -D _BSD_SOURCE -std=c99 eb_chan.c main.c -lpthread`
+
+Note that `main.c` is the user-supplied source file.
+
 ## Code Examples
 
 #### Create Channel
 > 
 ##### Go
 ```go
-c := make(chan string, 0)
+ch := make(chan string, 0)
 ```
 ##### C
 ```c
-eb_chan c = eb_chan_create(0);
+eb_chan ch = eb_chan_create(0);
 ```
 ##### Obj-C
 ```objc
-EBChannel *c = [[EBChannel alloc] initWithBufferCapacity: 0];
+EBChannel *ch = [[EBChannel alloc] initWithBufferCapacity: 0];
 ```
 
 
@@ -43,11 +50,11 @@ EBChannel *c = [[EBChannel alloc] initWithBufferCapacity: 0];
 ##### Go
 ```go
 // Blocking
-c <- "hello"
+ch <- "hello"
 >
 // Non-blocking
 select {
-case c <- "hello":
+case ch <- "hello":
   fmt.Println("Sent")
 default:
   fmt.Println("Not sent")
@@ -57,10 +64,10 @@ default:
 ##### C
 ```c
 // Blocking
-eb_chan_send(c, "hello");
+eb_chan_send(ch, "hello");
 >
 // Non-blocking
-eb_chan_res r = eb_chan_try_send(c, "hello");
+eb_chan_res r = eb_chan_try_send(ch, "hello");
 if (r == eb_chan_res_ok) {
   printf("Sent\n");
 } else {
@@ -71,11 +78,11 @@ if (r == eb_chan_res_ok) {
 ##### Obj-C
 ```objc
 // Blocking
-[c send: @"hello"];
+[ch send: @"hello"];
 >
 // Non-blocking
-EBChannelResult r = [c trySend: @"hello"];
-if (r == EBChannelResultOK) {
+EBChannelRes r = [ch trySend: @"hello"];
+if (r == EBChannelResOK) {
   NSLog(@"Sent\n");
 } else {
   NSLog(@"Not sent\n");
@@ -94,12 +101,12 @@ if (r == EBChannelResultOK) {
 ```go
 // Blocking
 var x string
-x = <-c
+x = <-ch
 >
 // Non-blocking
 var x string
 select {
-case x = <-c:
+case x = <-ch:
   fmt.Println("Received:", x)
 default:
   fmt.Println("Not received")
@@ -108,12 +115,12 @@ default:
 ##### C
 ```c
 // Blocking
-char *x;
-eb_chan_recv(c, &x);
+const void *x;
+eb_chan_recv(ch, &x);
 >
 // Non-blocking
-char *x;
-eb_chan_res r = eb_chan_try_recv(c, &x);
+const void *x;
+eb_chan_res r = eb_chan_try_recv(ch, &x);
 if (r == eb_chan_res_ok) {
   printf("Received: %s\n", x);
 } else {
@@ -123,12 +130,13 @@ if (r == eb_chan_res_ok) {
 ##### Obj-C
 ```objc
 // Blocking
-[c recv: @"hello"];
+id x;
+[ch recv: &x];
 >
 // Non-blocking
 id x;
-EBChannelResult r = [c tryRecv: &x];
-if (r == EBChannelResultOK) {
+EBChannelRes r = [ch tryRecv: &x];
+if (r == EBChannelResOK) {
   NSLog(@"Received: %@\n", x);
 } else {
   NSLog(@"Not received\n");
@@ -152,18 +160,18 @@ if (r == EBChannelResultOK) {
 ```go
 // Blocking
 select {
-case a <- "hello":
-  fmt.Println("Sent on channel a")
-case x := <-b:
-  fmt.Println("Received on channel b:", x)
+case ch1 <- "hello":
+  fmt.Println("Sent on channel ch1")
+case x := <-ch2:
+  fmt.Println("Received on channel ch2:", x)
 }
 >
 // Non-blocking
 select {
-case a <- "hello":
-  fmt.Println("Sent on channel a")
-case x := <-b:
-  fmt.Println("Received on channel b:", x)
+case ch1 <- "hello":
+  fmt.Println("Sent on channel ch1")
+case x := <-ch2:
+  fmt.Println("Received on channel ch2:", x)
 default:
   fmt.Println("Nothing")
 }
@@ -171,23 +179,23 @@ default:
 ##### C
 ```c
 // Blocking
-eb_chan_op senda = eb_chan_op_send(a, "hello");
-eb_chan_op recvb = eb_chan_op_recv(b);
-eb_chan_op *r = eb_chan_select(eb_nsec_forever, &senda, &recvb);
-if (r == &senda) {
-  printf("Sent on channel a\n");
-} else if (r == &recvb) {
-  printf("Received on channel b: %s\n", recvb.val);
+eb_chan_op send1 = eb_chan_op_send(ch1, "hello");
+eb_chan_op recv2 = eb_chan_op_recv(ch2);
+eb_chan_op *r = eb_chan_select(eb_nsec_forever, &send1, &recv2);
+if (r == &send1) {
+  printf("Sent on ch1\n");
+} else if (r == &recv2) {
+  printf("Received on ch2: %s\n", recv2.val);
 }
 >
 // Non-blocking
-eb_chan_op senda = eb_chan_op_send(a, "hello");
-eb_chan_op recvb = eb_chan_op_recv(b);
-eb_chan_op *r = eb_chan_select(eb_nsec_forever, &senda, &recvb);
-if (r == &senda) {
-  printf("Sent on channel a\n");
-} else if (r == &recvb) {
-  printf("Received on channel b: %s\n", recvb.val);
+eb_chan_op send1 = eb_chan_op_send(ch1, "hello");
+eb_chan_op recv2 = eb_chan_op_recv(ch2);
+eb_chan_op *r = eb_chan_select(eb_nsec_zero, &send1, &recv2);
+if (r == &send1) {
+  printf("Sent on ch1\n");
+} else if (r == &recv2) {
+  printf("Received on ch2: %s\n", recv2.val);
 } else if (r == NULL) {
   printf("Nothing\n");
 }
@@ -195,24 +203,24 @@ if (r == &senda) {
 ##### Obj-C
 ```objc
 // Blocking
-EBChannelOp *r = [EBChannel select: -1 ops: @[
-  [a send: @"hello"], ^{
-    NSLog(@"Sent on channel a");
+[EBChannel select: -1 opsAndHandlers: @[
+  [ch1 sendOp: @"hello"], ^{
+    NSLog(@"Sent on ch1");
   },
 > 
-  [b recv], ^(EBChannelRes result, id obj){
-    NSLog(@"Received on channel b: %@", obj);
+  [ch2 recvOp], ^(EBChannelRes result, id obj){
+    NSLog(@"Received on ch2: %@", obj);
   },
 ]];
 >
 // Non-blocking
-EBChannelOp *r = [EBChannel select: 0 ops: @[
-  [a send: @"hello"], ^{
-    NSLog(@"Sent on channel a");
+[EBChannel select: 0 opsAndHandlers: @[
+  [ch1 sendOp: @"hello"], ^{
+    NSLog(@"Sent on ch1");
   },
 > 
-  [b recv], ^(EBChannelRes result, id obj){
-    NSLog(@"Received on channel b: %@", obj);
+  [ch2 recvOp], ^(EBChannelRes result, id obj){
+    NSLog(@"Received on ch2: %@", obj);
   },
 > 
   [EBChannel defaultOp], ^{
@@ -231,15 +239,15 @@ EBChannelOp *r = [EBChannel select: 0 ops: @[
 > 
 ##### Go
 ```go
-close(c)
+close(ch)
 ```
 ##### C
 ```c
-eb_chan_close(c);
+eb_chan_close(ch);
 ```
 ##### Obj-C
 ```objc
-[c close];
+[ch close];
 ```
 
 
@@ -281,3 +289,7 @@ chan1.c: success
 chancap.c: success
 ...
 ```
+
+## License
+
+This software is hereby released into the public domain.
