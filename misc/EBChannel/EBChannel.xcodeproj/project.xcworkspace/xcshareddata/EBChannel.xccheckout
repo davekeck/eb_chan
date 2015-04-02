@@ -10,43 +10,31 @@
 	<string>EBChannel</string>
 	<key>IDESourceControlProjectOriginsDictionary</key>
 	<dict>
-		<key>2590EF82-D5DE-4A9A-A9A5-007AD08A96ED</key>
-		<string>ssh://github.com/davekeck/EBFoundation.git</string>
-		<key>8114B0C1-DA35-46E9-840E-2D332A9CE4A2</key>
-		<string>ssh://echobravo.co:1988/~/ebchan.git</string>
+		<key>3096368DBA81B3BCBF2B529D17587F6875792785</key>
+		<string>https://github.com/deem0n/eb_chan.git</string>
 	</dict>
 	<key>IDESourceControlProjectPath</key>
-	<string>EBChannel.xcodeproj/project.xcworkspace</string>
+	<string>misc/EBChannel/EBChannel.xcodeproj</string>
 	<key>IDESourceControlProjectRelativeInstallPathDictionary</key>
 	<dict>
-		<key>2590EF82-D5DE-4A9A-A9A5-007AD08A96ED</key>
-		<string>../../../Open-source Stuff/EBFoundation</string>
-		<key>8114B0C1-DA35-46E9-840E-2D332A9CE4A2</key>
-		<string>../..</string>
+		<key>3096368DBA81B3BCBF2B529D17587F6875792785</key>
+		<string>../../../..</string>
 	</dict>
 	<key>IDESourceControlProjectURL</key>
-	<string>ssh://echobravo.co:1988/~/ebchan.git</string>
+	<string>https://github.com/deem0n/eb_chan.git</string>
 	<key>IDESourceControlProjectVersion</key>
-	<integer>110</integer>
+	<integer>111</integer>
 	<key>IDESourceControlProjectWCCIdentifier</key>
-	<string>8114B0C1-DA35-46E9-840E-2D332A9CE4A2</string>
+	<string>3096368DBA81B3BCBF2B529D17587F6875792785</string>
 	<key>IDESourceControlProjectWCConfigurations</key>
 	<array>
 		<dict>
 			<key>IDESourceControlRepositoryExtensionIdentifierKey</key>
 			<string>public.vcs.git</string>
 			<key>IDESourceControlWCCIdentifierKey</key>
-			<string>8114B0C1-DA35-46E9-840E-2D332A9CE4A2</string>
+			<string>3096368DBA81B3BCBF2B529D17587F6875792785</string>
 			<key>IDESourceControlWCCName</key>
-			<string>ebchan</string>
-		</dict>
-		<dict>
-			<key>IDESourceControlRepositoryExtensionIdentifierKey</key>
-			<string>public.vcs.git</string>
-			<key>IDESourceControlWCCIdentifierKey</key>
-			<string>2590EF82-D5DE-4A9A-A9A5-007AD08A96ED</string>
-			<key>IDESourceControlWCCName</key>
-			<string>EBFoundation</string>
+			<string>eb_chan</string>
 		</dict>
 	</array>
 </dict>
