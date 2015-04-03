@@ -7,9 +7,13 @@
 //
 
 #import <UIKit/UIKit.h>
+@class EBChannel;
 
 @interface ViewController : UIViewController
 
+@property (nonatomic, strong, readonly) EBChannel *gChan;
+
+@property (nonatomic, weak) IBOutlet UILabel * resultsLabel;
 
 @end
 

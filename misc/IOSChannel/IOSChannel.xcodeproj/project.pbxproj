@@ -16,18 +16,21 @@
 		2EA050371ACDE04500522E7B /* IOSChannelTests.m in Sources */ = {isa = PBXBuildFile; fileRef = 2EA050361ACDE04500522E7B /* IOSChannelTests.m */; };
 		2EA050501ACDE0B000522E7B /* EBChannel.m in Sources */ = {isa = PBXBuildFile; fileRef = 2EA050411ACDE0AF00522E7B /* EBChannel.m */; settings = {COMPILER_FLAGS = "-fno-objc-arc"; }; };
 		2EA050511ACDE0B000522E7B /* EBChannel.m in Sources */ = {isa = PBXBuildFile; fileRef = 2EA050411ACDE0AF00522E7B /* EBChannel.m */; settings = {COMPILER_FLAGS = "-fno-objc-arc"; }; };
-		2EA050521ACDE0B000522E7B /* eb_assert.c in Sources */ = {isa = PBXBuildFile; fileRef = 2EA050421ACDE0B000522E7B /* eb_assert.c */; };
 		2EA050531ACDE0B000522E7B /* eb_assert.c in Sources */ = {isa = PBXBuildFile; fileRef = 2EA050421ACDE0B000522E7B /* eb_assert.c */; };
-		2EA050541ACDE0B000522E7B /* eb_chan.c in Sources */ = {isa = PBXBuildFile; fileRef = 2EA050451ACDE0B000522E7B /* eb_chan.c */; };
 		2EA050551ACDE0B000522E7B /* eb_chan.c in Sources */ = {isa = PBXBuildFile; fileRef = 2EA050451ACDE0B000522E7B /* eb_chan.c */; };
-		2EA050561ACDE0B000522E7B /* eb_port.c in Sources */ = {isa = PBXBuildFile; fileRef = 2EA050481ACDE0B000522E7B /* eb_port.c */; };
 		2EA050571ACDE0B000522E7B /* eb_port.c in Sources */ = {isa = PBXBuildFile; fileRef = 2EA050481ACDE0B000522E7B /* eb_port.c */; };
-		2EA050581ACDE0B000522E7B /* eb_sys.c in Sources */ = {isa = PBXBuildFile; fileRef = 2EA0504B1ACDE0B000522E7B /* eb_sys.c */; };
 		2EA050591ACDE0B000522E7B /* eb_sys.c in Sources */ = {isa = PBXBuildFile; fileRef = 2EA0504B1ACDE0B000522E7B /* eb_sys.c */; };
-		2EA0505A1ACDE0B000522E7B /* eb_time.c in Sources */ = {isa = PBXBuildFile; fileRef = 2EA0504D1ACDE0B000522E7B /* eb_time.c */; };
 		2EA0505B1ACDE0B000522E7B /* eb_time.c in Sources */ = {isa = PBXBuildFile; fileRef = 2EA0504D1ACDE0B000522E7B /* eb_time.c */; };
-		2EA0505E1ACDE10B00522E7B /* testglue.c in Sources */ = {isa = PBXBuildFile; fileRef = 2EA0505C1ACDE10A00522E7B /* testglue.c */; };
 		2EA0505F1ACDE10B00522E7B /* testglue.c in Sources */ = {isa = PBXBuildFile; fileRef = 2EA0505C1ACDE10A00522E7B /* testglue.c */; };
+		2EA050841ACF27B000522E7B /* EBChannelLib.h in CopyFiles */ = {isa = PBXBuildFile; fileRef = 2EA050831ACF27B000522E7B /* EBChannelLib.h */; };
+		2EA050861ACF27B000522E7B /* EBChannelLib.c in Sources */ = {isa = PBXBuildFile; fileRef = 2EA050851ACF27B000522E7B /* EBChannelLib.c */; };
+		2EA0508C1ACF27B000522E7B /* libEBChannelLib.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 2EA050811ACF27B000522E7B /* libEBChannelLib.a */; };
+		2EA0509A1ACF28AF00522E7B /* eb_assert.c in Sources */ = {isa = PBXBuildFile; fileRef = 2EA050421ACDE0B000522E7B /* eb_assert.c */; };
+		2EA0509D1ACF28AF00522E7B /* eb_chan.c in Sources */ = {isa = PBXBuildFile; fileRef = 2EA050451ACDE0B000522E7B /* eb_chan.c */; };
+		2EA050A01ACF28AF00522E7B /* eb_port.c in Sources */ = {isa = PBXBuildFile; fileRef = 2EA050481ACDE0B000522E7B /* eb_port.c */; };
+		2EA050A31ACF28AF00522E7B /* eb_sys.c in Sources */ = {isa = PBXBuildFile; fileRef = 2EA0504B1ACDE0B000522E7B /* eb_sys.c */; };
+		2EA050A51ACF28AF00522E7B /* eb_time.c in Sources */ = {isa = PBXBuildFile; fileRef = 2EA0504D1ACDE0B000522E7B /* eb_time.c */; };
+		2EA050A71ACF290A00522E7B /* libEBChannelLib.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 2EA050811ACF27B000522E7B /* libEBChannelLib.a */; settings = {ATTRIBUTES = (Required, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -38,7 +41,27 @@
 			remoteGlobalIDString = 2EA050161ACDE04500522E7B;
 			remoteInfo = IOSChannel;
 		};
+		2EA0508D1ACF27B000522E7B /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 2EA0500F1ACDE04500522E7B /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 2EA050801ACF27B000522E7B;
+			remoteInfo = EBChannelLib;
+		};
 /* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		2EA0507F1ACF27B000522E7B /* CopyFiles */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "include/$(PRODUCT_NAME)";
+			dstSubfolderSpec = 16;
+			files = (
+				2EA050841ACF27B000522E7B /* EBChannelLib.h in CopyFiles */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		2EA050171ACDE04500522E7B /* IOSChannel.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = IOSChannel.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -71,6 +94,11 @@
 		2EA0504F1ACDE0B000522E7B /* EBChannel.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = EBChannel.h; path = ../../../src/EBChannel.h; sourceTree = "<group>"; };
 		2EA0505C1ACDE10A00522E7B /* testglue.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = testglue.c; path = ../../../test/testglue.c; sourceTree = "<group>"; };
 		2EA0505D1ACDE10B00522E7B /* testglue.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = testglue.h; path = ../../../test/testglue.h; sourceTree = "<group>"; };
+		2EA050811ACF27B000522E7B /* libEBChannelLib.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libEBChannelLib.a; sourceTree = BUILT_PRODUCTS_DIR; };
+		2EA050831ACF27B000522E7B /* EBChannelLib.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = EBChannelLib.h; sourceTree = "<group>"; };
+		2EA050851ACF27B000522E7B /* EBChannelLib.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = EBChannelLib.c; sourceTree = "<group>"; };
+		2EA0508B1ACF27B000522E7B /* EBChannelLibTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = EBChannelLibTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		2EA050911ACF27B000522E7B /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -78,6 +106,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				2EA050A71ACF290A00522E7B /* libEBChannelLib.a in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -85,6 +114,21 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		2EA0507E1ACF27B000522E7B /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		2EA050881ACF27B000522E7B /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				2EA0508C1ACF27B000522E7B /* libEBChannelLib.a in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -96,6 +140,8 @@
 			children = (
 				2EA050191ACDE04500522E7B /* IOSChannel */,
 				2EA050331ACDE04500522E7B /* IOSChannelTests */,
+				2EA050821ACF27B000522E7B /* EBChannelLib */,
+				2EA0508F1ACF27B000522E7B /* EBChannelLibTests */,
 				2EA050181ACDE04500522E7B /* Products */,
 			);
 			sourceTree = "<group>";
@@ -105,6 +151,8 @@
 			children = (
 				2EA050171ACDE04500522E7B /* IOSChannel.app */,
 				2EA050301ACDE04500522E7B /* IOSChannelTests.xctest */,
+				2EA050811ACF27B000522E7B /* libEBChannelLib.a */,
+				2EA0508B1ACF27B000522E7B /* EBChannelLibTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -175,6 +223,31 @@
 			name = lib;
 			sourceTree = "<group>";
 		};
+		2EA050821ACF27B000522E7B /* EBChannelLib */ = {
+			isa = PBXGroup;
+			children = (
+				2EA050831ACF27B000522E7B /* EBChannelLib.h */,
+				2EA050851ACF27B000522E7B /* EBChannelLib.c */,
+			);
+			path = EBChannelLib;
+			sourceTree = "<group>";
+		};
+		2EA0508F1ACF27B000522E7B /* EBChannelLibTests */ = {
+			isa = PBXGroup;
+			children = (
+				2EA050901ACF27B000522E7B /* Supporting Files */,
+			);
+			path = EBChannelLibTests;
+			sourceTree = "<group>";
+		};
+		2EA050901ACF27B000522E7B /* Supporting Files */ = {
+			isa = PBXGroup;
+			children = (
+				2EA050911ACF27B000522E7B /* Info.plist */,
+			);
+			name = "Supporting Files";
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -213,6 +286,41 @@
 			productReference = 2EA050301ACDE04500522E7B /* IOSChannelTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
+		2EA050801ACF27B000522E7B /* EBChannelLib */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 2EA050961ACF27B000522E7B /* Build configuration list for PBXNativeTarget "EBChannelLib" */;
+			buildPhases = (
+				2EA0507D1ACF27B000522E7B /* Sources */,
+				2EA0507E1ACF27B000522E7B /* Frameworks */,
+				2EA0507F1ACF27B000522E7B /* CopyFiles */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = EBChannelLib;
+			productName = EBChannelLib;
+			productReference = 2EA050811ACF27B000522E7B /* libEBChannelLib.a */;
+			productType = "com.apple.product-type.library.static";
+		};
+		2EA0508A1ACF27B000522E7B /* EBChannelLibTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 2EA050971ACF27B000522E7B /* Build configuration list for PBXNativeTarget "EBChannelLibTests" */;
+			buildPhases = (
+				2EA050871ACF27B000522E7B /* Sources */,
+				2EA050881ACF27B000522E7B /* Frameworks */,
+				2EA050891ACF27B000522E7B /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				2EA0508E1ACF27B000522E7B /* PBXTargetDependency */,
+			);
+			name = EBChannelLibTests;
+			productName = EBChannelLibTests;
+			productReference = 2EA0508B1ACF27B000522E7B /* EBChannelLibTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -228,6 +336,12 @@
 					2EA0502F1ACDE04500522E7B = {
 						CreatedOnToolsVersion = 6.2;
 						TestTargetID = 2EA050161ACDE04500522E7B;
+					};
+					2EA050801ACF27B000522E7B = {
+						CreatedOnToolsVersion = 6.2;
+					};
+					2EA0508A1ACF27B000522E7B = {
+						CreatedOnToolsVersion = 6.2;
 					};
 				};
 			};
@@ -246,6 +360,8 @@
 			targets = (
 				2EA050161ACDE04500522E7B /* IOSChannel */,
 				2EA0502F1ACDE04500522E7B /* IOSChannelTests */,
+				2EA050801ACF27B000522E7B /* EBChannelLib */,
+				2EA0508A1ACF27B000522E7B /* EBChannelLibTests */,
 			);
 		};
 /* End PBXProject section */
@@ -268,6 +384,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		2EA050891ACF27B000522E7B /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -275,15 +398,9 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				2EA050521ACDE0B000522E7B /* eb_assert.c in Sources */,
 				2EA050231ACDE04500522E7B /* ViewController.m in Sources */,
-				2EA050541ACDE0B000522E7B /* eb_chan.c in Sources */,
-				2EA050561ACDE0B000522E7B /* eb_port.c in Sources */,
 				2EA050201ACDE04500522E7B /* AppDelegate.m in Sources */,
-				2EA0505A1ACDE0B000522E7B /* eb_time.c in Sources */,
 				2EA050501ACDE0B000522E7B /* EBChannel.m in Sources */,
-				2EA050581ACDE0B000522E7B /* eb_sys.c in Sources */,
-				2EA0505E1ACDE10B00522E7B /* testglue.c in Sources */,
 				2EA0501D1ACDE04500522E7B /* main.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -303,6 +420,26 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		2EA0507D1ACF27B000522E7B /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				2EA0509A1ACF28AF00522E7B /* eb_assert.c in Sources */,
+				2EA0509D1ACF28AF00522E7B /* eb_chan.c in Sources */,
+				2EA050A01ACF28AF00522E7B /* eb_port.c in Sources */,
+				2EA050A31ACF28AF00522E7B /* eb_sys.c in Sources */,
+				2EA050A51ACF28AF00522E7B /* eb_time.c in Sources */,
+				2EA050861ACF27B000522E7B /* EBChannelLib.c in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		2EA050871ACF27B000522E7B /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -310,6 +447,11 @@
 			isa = PBXTargetDependency;
 			target = 2EA050161ACDE04500522E7B /* IOSChannel */;
 			targetProxy = 2EA050311ACDE04500522E7B /* PBXContainerItemProxy */;
+		};
+		2EA0508E1ACF27B000522E7B /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 2EA050801ACF27B000522E7B /* EBChannelLib */;
+			targetProxy = 2EA0508D1ACF27B000522E7B /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -465,6 +607,58 @@
 			};
 			name = Release;
 		};
+		2EA050921ACF27B000522E7B /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				OTHER_LDFLAGS = "-ObjC";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+			};
+			name = Debug;
+		};
+		2EA050931ACF27B000522E7B /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				OTHER_LDFLAGS = "-ObjC";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+			};
+			name = Release;
+		};
+		2EA050941ACF27B000522E7B /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(SDKROOT)/Developer/Library/Frameworks",
+					"$(inherited)",
+				);
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				INFOPLIST_FILE = EBChannelLibTests/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @loader_path/Frameworks";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = Debug;
+		};
+		2EA050951ACF27B000522E7B /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(SDKROOT)/Developer/Library/Frameworks",
+					"$(inherited)",
+				);
+				INFOPLIST_FILE = EBChannelLibTests/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @loader_path/Frameworks";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -484,12 +678,30 @@
 				2EA0503C1ACDE04500522E7B /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
 		};
 		2EA0503D1ACDE04500522E7B /* Build configuration list for PBXNativeTarget "IOSChannelTests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				2EA0503E1ACDE04500522E7B /* Debug */,
 				2EA0503F1ACDE04500522E7B /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		2EA050961ACF27B000522E7B /* Build configuration list for PBXNativeTarget "EBChannelLib" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				2EA050921ACF27B000522E7B /* Debug */,
+				2EA050931ACF27B000522E7B /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+		};
+		2EA050971ACF27B000522E7B /* Build configuration list for PBXNativeTarget "EBChannelLibTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				2EA050941ACF27B000522E7B /* Debug */,
+				2EA050951ACF27B000522E7B /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 		};
